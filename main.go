@@ -19,22 +19,28 @@ func main() {
 }
 
 func run() error {
-	input, err := io.ReadAll(os.Stdin)
+	return print(os.Stdin, os.Stdout)
+}
+
+func print(input io.Reader, output io.Writer) error {
+	buffer, err := io.ReadAll(input)
 	if err != nil {
 		return err
 	}
 
-	result, err := pg_query.Parse(string(input))
+	result, err := pg_query.Parse(string(buffer))
 	if err != nil {
 		return err
 	}
 
 	for _, stmt := range result.Stmts {
-		output := &printer.Printer{
-			Builder: &strings.Builder{},
+		b := &strings.Builder{}
+		p := &printer.Printer{Builder: b}
+		p.Print(stmt.Stmt)
+		_, err := io.WriteString(output, b.String()+";\n\n")
+		if err != nil {
+			return err
 		}
-		output.Print(stmt.Stmt)
-		fmt.Println(output.String())
 	}
 
 	return nil
