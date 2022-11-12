@@ -378,6 +378,23 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 	case *pg_query.Node_AStar:
 		output.Builder.WriteString("*")
 
+	case *pg_query.Node_TypeCast:
+		switch n.TypeCast.Arg.Node.(type) {
+		case *pg_query.Node_AExpr:
+			output.Builder.WriteString("CAST(")
+			output.writeNode(n.TypeCast.Arg)
+			output.Builder.WriteString(" AS ")
+			output.writeTypeName(n.TypeCast.TypeName)
+			output.Builder.WriteString(")")
+		case *pg_query.Node_AConst:
+			// TODO
+			panic("TypeCast Aconst not implemented")
+		default:
+			output.writeNode(n.TypeCast.Arg)
+			output.Builder.WriteString("::")
+			output.writeTypeName(n.TypeCast.TypeName)
+		}
+
 	case nil:
 		// nothing
 
@@ -389,6 +406,142 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		// }
 	}
 }
+
+func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
+	var skipTypmods bool
+	if stmt.Setof {
+		output.Builder.WriteString("SETOF ")
+	}
+	if len(stmt.Names) == 2 && stmt.Names[0].String() == "pg_catalog" {
+		switch stmt.Names[1].String() {
+		case "bpchar":
+			output.Builder.WriteString("char")
+		case "bool":
+			output.Builder.WriteString("boolean")
+		case "int2":
+			output.Builder.WriteString("smallint")
+		case "int4":
+			output.Builder.WriteString("int")
+		case "int8":
+			output.Builder.WriteString("bigint")
+		case "float4":
+			output.Builder.WriteString("real")
+		case "float8":
+			output.Builder.WriteString("double precision")
+		case "varchar", "numeric", "real", "time", "timestamp":
+			output.Builder.WriteString(stmt.Names[1].String())
+		case "timetz", "timestamptz":
+			output.Builder.WriteString(stmt.Names[1].String())
+			if len(stmt.Typmods) > 0 {
+				output.Builder.WriteString("(")
+				output.writeCommaSeparatedList(stmt.Typmods)
+				output.Builder.WriteString(")")
+			}
+			output.Builder.WriteString("with time zone")
+			skipTypmods = true
+		case "interval":
+			if len(stmt.Typmods) == 0 {
+				output.Builder.WriteString("interval")
+			} else {
+				fields := stmt.Typmods[0].GetAConst().GetVal().GetInteger().GetIval()
+				switch fields {
+				case 1 << YEAR:
+					output.Builder.WriteString(" year")
+				case 1 << MONTH:
+					output.Builder.WriteString(" month")
+				case 1 << DAY:
+					output.Builder.WriteString(" day")
+				case 1 << HOUR:
+					output.Builder.WriteString(" hour")
+				case 1 << MINUTE:
+					output.Builder.WriteString(" minute")
+				case 1 << SECOND:
+					output.Builder.WriteString(" second")
+				case 1<<YEAR | 1<<MONTH:
+					output.Builder.WriteString(" year to month")
+				case 1<<DAY | 1<<HOUR:
+					output.Builder.WriteString(" day to hour")
+				case 1<<DAY | 1<<HOUR | 1<<MINUTE:
+					output.Builder.WriteString(" day to minute")
+				case 1<<DAY | 1<<HOUR | 1<<MINUTE | 1<<SECOND:
+					output.Builder.WriteString(" day to second")
+				case 1<<HOUR | 1<<MINUTE:
+					output.Builder.WriteString(" hour to minute")
+				case 1<<HOUR | 1<<MINUTE | 1<<SECOND:
+					output.Builder.WriteString(" hour to second")
+				case 1<<MINUTE | 1<<SECOND:
+					output.Builder.WriteString(" minute to second")
+				case 0x7FFF: // INTERVAL_FULL_RANGE
+				default:
+					panic("invalid interval fields: " + strconv.Itoa(int(fields)))
+				}
+
+				if len(stmt.Typmods) == 2 {
+					precision := stmt.Typmods[0].GetAConst().GetVal().GetInteger().GetIval()
+					if precision != 0xFFFF { // INTERVAL_FULL_PRECISION
+						output.Builder.WriteString(fmt.Sprint("(%d)", precision))
+					}
+				}
+			}
+		default:
+			output.Builder.WriteString("pg_catalog.")
+			output.Builder.WriteString(stmt.Names[1].String())
+
+		}
+	} else {
+		for i, n := range stmt.Names {
+			output.Builder.WriteString(quoteIdentifier(n.GetString_().GetStr()))
+			if i != len(stmt.Names)-1 {
+				output.Builder.WriteString(".")
+			}
+		}
+	}
+
+	if !skipTypmods && len(stmt.Typmods) > 0 {
+		output.Builder.WriteString("(")
+		output.writeCommaSeparatedList(stmt.Typmods)
+		output.Builder.WriteString(")")
+	}
+
+	for _, a := range stmt.ArrayBounds {
+		output.Builder.WriteString("[")
+		if i := a.GetInteger(); i != nil && i.GetIval() != -1 {
+			output.writeNode(a)
+		}
+		output.Builder.WriteString("]")
+	}
+
+	if stmt.PctType {
+		output.Builder.WriteString("%type")
+	}
+}
+
+// Field types for time decoding.
+//
+// Can't have more of these than there are bits in an unsigned int
+// since these are turned into bit masks during parsing and decoding.
+//
+// Furthermore, the values for YEAR, MONTH, DAY, HOUR, MINUTE, SECOND
+// must be in the range 0..14 so that the associated bitmasks can fit
+// into the left half of an INTERVAL's typmod value.  Since those bits
+// are stored in typmods, you can't change them without initdb!
+const (
+	RESERV = iota
+	MONTH
+	YEAR
+	DAY
+	JULIAN
+	TZ    /* fixed-offset timezone abbreviation */
+	DTZ   /* fixed-offset timezone abbrev, DST */
+	DYNTZ /* dynamic timezone abbreviation */
+	IGNORE_DTF
+	AMPM
+	HOUR
+	MINUTE
+	SECOND
+	MILLISECOND
+	MICROSECOND
+)
 
 func (output *Printer) writeRangeVar(stmt *pg_query.RangeVar) {
 	if stmt.Catalogname != "" {
@@ -445,6 +598,7 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 
 		if stmt.IntoClause != nil {
 			// TODO INTO
+			panic("SELECT INTO not implemented")
 		}
 
 		if len(stmt.FromClause) > 0 {

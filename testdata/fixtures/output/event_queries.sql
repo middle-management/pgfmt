@@ -40,7 +40,7 @@ SELECT
 FROM
 	event AS evt 
 WHERE
-	((evtindex)>=(lower())) AND (() OR ((evtindex)<(upper(pggenarg(range))))) AND (() OR ()) ORDER BY evtindex  ;
+	((evtindex)>=(lower(pggenarg(range)::"int8range"))) AND (() OR ((evtindex)<(upper(pggenarg(range))))) AND (() OR ()) ORDER BY evtindex  ;
 
 SELECT
 	min(objid) 
