@@ -123,9 +123,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 	case *pg_query.Node_FuncCall:
-		for _, f := range n.FuncCall.Funcname {
-			output.writeNode(f)
-		}
+		output.writeListWithSeparator(n.FuncCall.Funcname, ".")
 		output.Builder.WriteString("(")
 		if n.FuncCall.AggDistinct {
 			output.Builder.WriteString("DISTINCT ")
@@ -238,12 +236,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 		if len(n.IndexElem.Opclass) > 0 {
-			for i, o := range n.IndexElem.Opclass {
-				output.writeNode(o)
-				if i != len(n.IndexElem.Opclass)-1 {
-					output.Builder.WriteString(".")
-				}
-			}
+			output.writeListWithSeparator(n.IndexElem.Opclass, ".")
 			output.Builder.WriteString(" ")
 		}
 
@@ -603,9 +596,7 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 
 		if len(stmt.FromClause) > 0 {
 			output.Builder.WriteString("\nFROM\n\t")
-			for _, x := range stmt.FromClause {
-				output.writeNode(x)
-			}
+			output.writeListWithSeparator(stmt.FromClause, "")
 			output.Builder.WriteString(" ")
 		}
 		if stmt.WhereClause != nil {
@@ -616,12 +607,7 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 
 		if len(stmt.GroupClause) > 0 {
 			output.Builder.WriteString("\nGROUP BY\n\t")
-			for i, x := range stmt.GroupClause {
-				output.writeNode(x)
-				if i != len(stmt.GroupClause)-1 {
-					output.Builder.WriteString(", ")
-				}
-			}
+			output.writeCommaSeparatedList(stmt.GroupClause)
 			output.Builder.WriteString(" ")
 		}
 
@@ -723,10 +709,14 @@ func (output *Printer) writeAlias(a *pg_query.Alias) {
 }
 
 func (output *Printer) writeCommaSeparatedList(l []*pg_query.Node) {
+	output.writeListWithSeparator(l, ", ")
+}
+
+func (output *Printer) writeListWithSeparator(l []*pg_query.Node, separator string) {
 	for i, dn := range l {
 		output.writeNode(dn)
 		if i != len(l)-1 {
-			output.Builder.WriteString(", ")
+			output.Builder.WriteString(separator)
 		}
 	}
 }
