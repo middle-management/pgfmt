@@ -368,6 +368,57 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 	case *pg_query.Node_SelectStmt:
 		output.writeSelectStmt(n.SelectStmt)
 
+	case *pg_query.Node_InsertStmt:
+		if n.InsertStmt.WithClause != nil {
+			output.writeWithClause(n.InsertStmt.WithClause)
+		}
+
+		output.Builder.WriteString("INSERT INTO ")
+		output.writeRangeVar(n.InsertStmt.Relation)
+		output.Builder.WriteString(" ")
+
+		if len(n.InsertStmt.Cols) > 0 {
+			output.Builder.WriteString("(")
+			for i, c := range n.InsertStmt.Cols {
+				output.Builder.WriteString(c.GetResTarget().Name)
+				output.writeOptIndirection(c.GetResTarget().Indirection)
+				if i != len(n.InsertStmt.Cols)-1 {
+					output.Builder.WriteString(", ")
+				}
+			}
+			output.Builder.WriteString(") ")
+		}
+
+		switch n.InsertStmt.Override {
+		case pg_query.OverridingKind_OVERRIDING_NOT_SET:
+			// do nothing
+		case pg_query.OverridingKind_OVERRIDING_USER_VALUE:
+			output.Builder.WriteString("OVERRIDING USER VALUE ")
+		case pg_query.OverridingKind_OVERRIDING_SYSTEM_VALUE:
+			output.Builder.WriteString("OVERRIDING SYSTEM VALUE ")
+		}
+
+		if n.InsertStmt.SelectStmt != nil {
+			output.writeNode(n.InsertStmt.SelectStmt)
+			output.Builder.WriteString(" ")
+		} else {
+			output.Builder.WriteString("DEFAULT VALUES ")
+		}
+
+	// TODO if (insert_stmt->onConflictClause != NULL)
+	// {
+	// 	deparseOnConflictClause(str, insert_stmt->onConflictClause);
+	// 	appendStringInfoChar(str, ' ');
+	// }
+
+	// TODO if (list_length(insert_stmt->returningList) > 0)
+	// {
+	// 	appendStringInfoString(str, "RETURNING ");
+	// 	deparseTargetList(str, insert_stmt->returningList);
+	// }
+
+	// TODO removeTrailingSpace(str);
+
 	case *pg_query.Node_AStar:
 		output.Builder.WriteString("*")
 
@@ -710,6 +761,33 @@ func (output *Printer) writeAlias(a *pg_query.Alias) {
 
 func (output *Printer) writeCommaSeparatedList(l []*pg_query.Node) {
 	output.writeListWithSeparator(l, ", ")
+}
+
+func (output *Printer) writeOptIndirection(l []*pg_query.Node) {
+	for _, dn := range l {
+		if dn.GetString_() != nil {
+			output.Builder.WriteString(".")
+			// deparseColLabel(str, strVal(lfirst(lc)));
+		} else if dn.GetAStar() != nil {
+			output.Builder.WriteString(".*")
+		} else if dn.GetAIndices() != nil {
+			n := dn.GetAIndices()
+			output.Builder.WriteString("[")
+			if n.Lidx != nil {
+				output.writeNode(n.Lidx)
+			}
+			if n.IsSlice {
+				output.Builder.WriteString(":")
+			}
+			if n.Uidx != nil {
+				output.writeNode(n.Uidx)
+			}
+			output.Builder.WriteString("]")
+		} else {
+			panic("invalid indirection type")
+		}
+		output.writeNode(dn)
+	}
 }
 
 func (output *Printer) writeListWithSeparator(l []*pg_query.Node, separator string) {

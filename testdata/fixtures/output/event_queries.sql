@@ -24,11 +24,18 @@ SELECT
 FROM
 	i  ;
 
-;
+INSERT INTO event  (id, type, data, created_at, created_by) VALUES ON ()SELECT
+	  ;
 
 WITH 
 new_event AS (
-
+INSERT INTO event_reactor  (event_id, reactor) SELECT
+	id,
+	pggen.arg(reactor)::"text" 
+FROM
+	event AS e 
+WHERE
+	(NOT ) AND ((eindex)>=(lower(pggen.arg(range)::"int8range"))) AND (() OR ((eindex)<(upper(pggen.arg(range))))) AND (() OR ()) ORDER BY index   
 )
 SELECT
 	* 
