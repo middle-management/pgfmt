@@ -1,0 +1,1901 @@
+{
+  "version":  130008,
+  "stmts":  [
+    {
+      "stmt":  {
+        "IndexStmt":  {
+          "idxname":  "idx_event_index_unique",
+          "relation":  {
+            "relname":  "event",
+            "inh":  true,
+            "relpersistence":  "p",
+            "location":  106
+          },
+          "accessMethod":  "btree",
+          "indexParams":  [
+            {
+              "IndexElem":  {
+                "name":  "index",
+                "ordering":  "SORTBY_DEFAULT",
+                "nulls_ordering":  "SORTBY_NULLS_DEFAULT"
+              }
+            }
+          ],
+          "unique":  true,
+          "concurrent":  true,
+          "if_not_exists":  true
+        }
+      },
+      "stmt_len":  119
+    },
+    {
+      "stmt":  {
+        "IndexStmt":  {
+          "idxname":  "idx_event_index_type",
+          "relation":  {
+            "relname":  "event",
+            "inh":  true,
+            "relpersistence":  "p",
+            "location":  217
+          },
+          "accessMethod":  "btree",
+          "indexParams":  [
+            {
+              "IndexElem":  {
+                "name":  "index",
+                "ordering":  "SORTBY_ASC",
+                "nulls_ordering":  "SORTBY_NULLS_DEFAULT"
+              }
+            },
+            {
+              "IndexElem":  {
+                "name":  "type",
+                "ordering":  "SORTBY_DEFAULT",
+                "nulls_ordering":  "SORTBY_NULLS_DEFAULT"
+              }
+            }
+          ],
+          "concurrent":  true,
+          "if_not_exists":  true
+        }
+      },
+      "stmt_location":  120,
+      "stmt_len":  120
+    },
+    {
+      "stmt":  {
+        "IndexStmt":  {
+          "idxname":  "idx_event_created_at",
+          "relation":  {
+            "relname":  "event",
+            "inh":  true,
+            "relpersistence":  "p",
+            "location":  341
+          },
+          "accessMethod":  "btree",
+          "indexParams":  [
+            {
+              "IndexElem":  {
+                "name":  "created_at",
+                "ordering":  "SORTBY_ASC",
+                "nulls_ordering":  "SORTBY_NULLS_DEFAULT"
+              }
+            }
+          ],
+          "concurrent":  true,
+          "if_not_exists":  true
+        }
+      },
+      "stmt_location":  241,
+      "stmt_len":  122
+    },
+    {
+      "stmt":  {
+        "IndexStmt":  {
+          "idxname":  "idx_event_data_trgm",
+          "relation":  {
+            "relname":  "event",
+            "inh":  true,
+            "relpersistence":  "p",
+            "location":  463
+          },
+          "accessMethod":  "gin",
+          "indexParams":  [
+            {
+              "IndexElem":  {
+                "expr":  {
+                  "TypeCast":  {
+                    "arg":  {
+                      "ColumnRef":  {
+                        "fields":  [
+                          {
+                            "String":  {
+                              "str":  "data"
+                            }
+                          }
+                        ],
+                        "location":  481
+                      }
+                    },
+                    "typeName":  {
+                      "names":  [
+                        {
+                          "String":  {
+                            "str":  "text"
+                          }
+                        }
+                      ],
+                      "typemod":  -1,
+                      "location":  487
+                    },
+                    "location":  485
+                  }
+                },
+                "opclass":  [
+                  {
+                    "String":  {
+                      "str":  "ext"
+                    }
+                  },
+                  {
+                    "String":  {
+                      "str":  "gin_trgm_ops"
+                    }
+                  }
+                ],
+                "ordering":  "SORTBY_DEFAULT",
+                "nulls_ordering":  "SORTBY_NULLS_DEFAULT"
+              }
+            }
+          ],
+          "concurrent":  true,
+          "if_not_exists":  true
+        }
+      },
+      "stmt_location":  364,
+      "stmt_len":  146
+    },
+    {
+      "stmt":  {
+        "IndexStmt":  {
+          "idxname":  "idx_event_type_trgm",
+          "relation":  {
+            "relname":  "event",
+            "inh":  true,
+            "relpersistence":  "p",
+            "location":  610
+          },
+          "accessMethod":  "gin",
+          "indexParams":  [
+            {
+              "IndexElem":  {
+                "name":  "type",
+                "opclass":  [
+                  {
+                    "String":  {
+                      "str":  "ext"
+                    }
+                  },
+                  {
+                    "String":  {
+                      "str":  "gin_trgm_ops"
+                    }
+                  }
+                ],
+                "ordering":  "SORTBY_DEFAULT",
+                "nulls_ordering":  "SORTBY_NULLS_DEFAULT"
+              }
+            }
+          ],
+          "concurrent":  true,
+          "if_not_exists":  true
+        }
+      },
+      "stmt_location":  511,
+      "stmt_len":  138
+    },
+    {
+      "stmt":  {
+        "IndexStmt":  {
+          "idxname":  "idx_event_created_by_trgm",
+          "relation":  {
+            "relname":  "event",
+            "inh":  true,
+            "relpersistence":  "p",
+            "location":  760
+          },
+          "accessMethod":  "gin",
+          "indexParams":  [
+            {
+              "IndexElem":  {
+                "expr":  {
+                  "TypeCast":  {
+                    "arg":  {
+                      "ColumnRef":  {
+                        "fields":  [
+                          {
+                            "String":  {
+                              "str":  "created_by"
+                            }
+                          }
+                        ],
+                        "location":  778
+                      }
+                    },
+                    "typeName":  {
+                      "names":  [
+                        {
+                          "String":  {
+                            "str":  "text"
+                          }
+                        }
+                      ],
+                      "typemod":  -1,
+                      "location":  790
+                    },
+                    "location":  788
+                  }
+                },
+                "opclass":  [
+                  {
+                    "String":  {
+                      "str":  "ext"
+                    }
+                  },
+                  {
+                    "String":  {
+                      "str":  "gin_trgm_ops"
+                    }
+                  }
+                ],
+                "ordering":  "SORTBY_DEFAULT",
+                "nulls_ordering":  "SORTBY_NULLS_DEFAULT"
+              }
+            }
+          ],
+          "concurrent":  true,
+          "if_not_exists":  true
+        }
+      },
+      "stmt_location":  650,
+      "stmt_len":  163
+    },
+    {
+      "stmt":  {
+        "IndexStmt":  {
+          "idxname":  "idx_event_reactor_reactor",
+          "relation":  {
+            "relname":  "event_reactor",
+            "inh":  true,
+            "relpersistence":  "p",
+            "location":  919
+          },
+          "accessMethod":  "btree",
+          "indexParams":  [
+            {
+              "IndexElem":  {
+                "name":  "reactor",
+                "ordering":  "SORTBY_DEFAULT",
+                "nulls_ordering":  "SORTBY_NULLS_DEFAULT"
+              }
+            }
+          ],
+          "concurrent":  true,
+          "if_not_exists":  true
+        }
+      },
+      "stmt_location":  814,
+      "stmt_len":  128
+    },
+    {
+      "stmt":  {
+        "SelectStmt":  {
+          "targetList":  [
+            {
+              "ResTarget":  {
+                "val":  {
+                  "FuncCall":  {
+                    "funcname":  [
+                      {
+                        "String":  {
+                          "str":  "pg_advisory_xact_lock_shared"
+                        }
+                      }
+                    ],
+                    "args":  [
+                      {
+                        "CoalesceExpr":  {
+                          "args":  [
+                            {
+                              "ColumnRef":  {
+                                "fields":  [
+                                  {
+                                    "String":  {
+                                      "str":  "idx"
+                                    }
+                                  }
+                                ],
+                                "location":  1075
+                              }
+                            },
+                            {
+                              "A_Const":  {
+                                "val":  {
+                                  "Integer":  {}
+                                },
+                                "location":  1080
+                              }
+                            }
+                          ],
+                          "location":  1066
+                        }
+                      }
+                    ],
+                    "location":  1037
+                  }
+                },
+                "location":  1037
+              }
+            }
+          ],
+          "fromClause":  [
+            {
+              "RangeVar":  {
+                "relname":  "i",
+                "inh":  true,
+                "relpersistence":  "p",
+                "location":  1089
+              }
+            }
+          ],
+          "limitOption":  "LIMIT_OPTION_DEFAULT",
+          "withClause":  {
+            "ctes":  [
+              {
+                "CommonTableExpr":  {
+                  "ctename":  "i",
+                  "ctematerialized":  "CTEMaterializeDefault",
+                  "ctequery":  {
+                    "SelectStmt":  {
+                      "targetList":  [
+                        {
+                          "ResTarget":  {
+                            "name":  "idx",
+                            "val":  {
+                              "FuncCall":  {
+                                "funcname":  [
+                                  {
+                                    "String":  {
+                                      "str":  "max"
+                                    }
+                                  }
+                                ],
+                                "args":  [
+                                  {
+                                    "ColumnRef":  {
+                                      "fields":  [
+                                        {
+                                          "String":  {
+                                            "str":  "index"
+                                          }
+                                        }
+                                      ],
+                                      "location":  1007
+                                    }
+                                  }
+                                ],
+                                "location":  1003
+                              }
+                            },
+                            "location":  1003
+                          }
+                        }
+                      ],
+                      "fromClause":  [
+                        {
+                          "RangeVar":  {
+                            "relname":  "event",
+                            "inh":  true,
+                            "relpersistence":  "p",
+                            "location":  1023
+                          }
+                        }
+                      ],
+                      "limitOption":  "LIMIT_OPTION_DEFAULT",
+                      "op":  "SETOP_NONE"
+                    }
+                  },
+                  "location":  990
+                }
+              }
+            ],
+            "location":  985
+          },
+          "op":  "SETOP_NONE"
+        }
+      },
+      "stmt_location":  943,
+      "stmt_len":  147
+    },
+    {
+      "stmt":  {
+        "InsertStmt":  {
+          "relation":  {
+            "relname":  "event",
+            "inh":  true,
+            "relpersistence":  "p",
+            "location":  1132
+          },
+          "cols":  [
+            {
+              "ResTarget":  {
+                "name":  "id",
+                "location":  1143
+              }
+            },
+            {
+              "ResTarget":  {
+                "name":  "type",
+                "location":  1147
+              }
+            },
+            {
+              "ResTarget":  {
+                "name":  "data",
+                "location":  1153
+              }
+            },
+            {
+              "ResTarget":  {
+                "name":  "created_at",
+                "location":  1159
+              }
+            },
+            {
+              "ResTarget":  {
+                "name":  "created_by",
+                "location":  1171
+              }
+            }
+          ],
+          "selectStmt":  {
+            "SelectStmt":  {
+              "valuesLists":  [
+                {
+                  "List":  {
+                    "items":  [
+                      {
+                        "FuncCall":  {
+                          "funcname":  [
+                            {
+                              "String":  {
+                                "str":  "pggen"
+                              }
+                            },
+                            {
+                              "String":  {
+                                "str":  "arg"
+                              }
+                            }
+                          ],
+                          "args":  [
+                            {
+                              "A_Const":  {
+                                "val":  {
+                                  "String":  {
+                                    "str":  "id"
+                                  }
+                                },
+                                "location":  1201
+                              }
+                            }
+                          ],
+                          "location":  1191
+                        }
+                      },
+                      {
+                        "FuncCall":  {
+                          "funcname":  [
+                            {
+                              "String":  {
+                                "str":  "pggen"
+                              }
+                            },
+                            {
+                              "String":  {
+                                "str":  "arg"
+                              }
+                            }
+                          ],
+                          "args":  [
+                            {
+                              "A_Const":  {
+                                "val":  {
+                                  "String":  {
+                                    "str":  "type"
+                                  }
+                                },
+                                "location":  1226
+                              }
+                            }
+                          ],
+                          "location":  1216
+                        }
+                      },
+                      {
+                        "FuncCall":  {
+                          "funcname":  [
+                            {
+                              "String":  {
+                                "str":  "pggen"
+                              }
+                            },
+                            {
+                              "String":  {
+                                "str":  "arg"
+                              }
+                            }
+                          ],
+                          "args":  [
+                            {
+                              "A_Const":  {
+                                "val":  {
+                                  "String":  {
+                                    "str":  "data"
+                                  }
+                                },
+                                "location":  1253
+                              }
+                            }
+                          ],
+                          "location":  1243
+                        }
+                      },
+                      {
+                        "FuncCall":  {
+                          "funcname":  [
+                            {
+                              "String":  {
+                                "str":  "pggen"
+                              }
+                            },
+                            {
+                              "String":  {
+                                "str":  "arg"
+                              }
+                            }
+                          ],
+                          "args":  [
+                            {
+                              "A_Const":  {
+                                "val":  {
+                                  "String":  {
+                                    "str":  "createdAt"
+                                  }
+                                },
+                                "location":  1280
+                              }
+                            }
+                          ],
+                          "location":  1270
+                        }
+                      },
+                      {
+                        "FuncCall":  {
+                          "funcname":  [
+                            {
+                              "String":  {
+                                "str":  "pggen"
+                              }
+                            },
+                            {
+                              "String":  {
+                                "str":  "arg"
+                              }
+                            }
+                          ],
+                          "args":  [
+                            {
+                              "A_Const":  {
+                                "val":  {
+                                  "String":  {
+                                    "str":  "createdBy"
+                                  }
+                                },
+                                "location":  1312
+                              }
+                            }
+                          ],
+                          "location":  1302
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "limitOption":  "LIMIT_OPTION_DEFAULT",
+              "op":  "SETOP_NONE"
+            }
+          },
+          "override":  "OVERRIDING_NOT_SET"
+        }
+      },
+      "stmt_location":  1091,
+      "stmt_len":  234
+    },
+    {
+      "stmt":  {
+        "SelectStmt":  {
+          "targetList":  [
+            {
+              "ResTarget":  {
+                "val":  {
+                  "ColumnRef":  {
+                    "fields":  [
+                      {
+                        "A_Star":  {}
+                      }
+                    ],
+                    "location":  2030
+                  }
+                },
+                "location":  2030
+              }
+            }
+          ],
+          "fromClause":  [
+            {
+              "JoinExpr":  {
+                "jointype":  "JOIN_INNER",
+                "larg":  {
+                  "RangeVar":  {
+                    "relname":  "event",
+                    "inh":  true,
+                    "relpersistence":  "p",
+                    "alias":  {
+                      "aliasname":  "evt"
+                    },
+                    "location":  2037
+                  }
+                },
+                "rarg":  {
+                  "RangeVar":  {
+                    "relname":  "new_event",
+                    "inh":  true,
+                    "relpersistence":  "p",
+                    "location":  2066
+                  }
+                },
+                "quals":  {
+                  "A_Expr":  {
+                    "kind":  "AEXPR_OP",
+                    "name":  [
+                      {
+                        "String":  {
+                          "str":  "="
+                        }
+                      }
+                    ],
+                    "lexpr":  {
+                      "ColumnRef":  {
+                        "fields":  [
+                          {
+                            "String":  {
+                              "str":  "id"
+                            }
+                          }
+                        ],
+                        "location":  2085
+                      }
+                    },
+                    "rexpr":  {
+                      "ColumnRef":  {
+                        "fields":  [
+                          {
+                            "String":  {
+                              "str":  "event_id"
+                            }
+                          }
+                        ],
+                        "location":  2090
+                      }
+                    },
+                    "location":  2088
+                  }
+                }
+              }
+            }
+          ],
+          "sortClause":  [
+            {
+              "SortBy":  {
+                "node":  {
+                  "ColumnRef":  {
+                    "fields":  [
+                      {
+                        "String":  {
+                          "str":  "evt"
+                        }
+                      },
+                      {
+                        "String":  {
+                          "str":  "index"
+                        }
+                      }
+                    ],
+                    "location":  2109
+                  }
+                },
+                "sortby_dir":  "SORTBY_DEFAULT",
+                "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
+                "location":  -1
+              }
+            }
+          ],
+          "limitOption":  "LIMIT_OPTION_DEFAULT",
+          "withClause":  {
+            "ctes":  [
+              {
+                "CommonTableExpr":  {
+                  "ctename":  "new_event",
+                  "ctematerialized":  "CTEMaterializeDefault",
+                  "ctequery":  {
+                    "InsertStmt":  {
+                      "relation":  {
+                        "relname":  "event_reactor",
+                        "inh":  true,
+                        "relpersistence":  "p",
+                        "location":  1405
+                      },
+                      "cols":  [
+                        {
+                          "ResTarget":  {
+                            "name":  "event_id",
+                            "location":  1420
+                          }
+                        },
+                        {
+                          "ResTarget":  {
+                            "name":  "reactor",
+                            "location":  1430
+                          }
+                        }
+                      ],
+                      "selectStmt":  {
+                        "SelectStmt":  {
+                          "targetList":  [
+                            {
+                              "ResTarget":  {
+                                "val":  {
+                                  "ColumnRef":  {
+                                    "fields":  [
+                                      {
+                                        "String":  {
+                                          "str":  "id"
+                                        }
+                                      }
+                                    ],
+                                    "location":  1454
+                                  }
+                                },
+                                "location":  1454
+                              }
+                            },
+                            {
+                              "ResTarget":  {
+                                "val":  {
+                                  "TypeCast":  {
+                                    "arg":  {
+                                      "FuncCall":  {
+                                        "funcname":  [
+                                          {
+                                            "String":  {
+                                              "str":  "pggen"
+                                            }
+                                          },
+                                          {
+                                            "String":  {
+                                              "str":  "arg"
+                                            }
+                                          }
+                                        ],
+                                        "args":  [
+                                          {
+                                            "A_Const":  {
+                                              "val":  {
+                                                "String":  {
+                                                  "str":  "reactor"
+                                                }
+                                              },
+                                              "location":  1483
+                                            }
+                                          }
+                                        ],
+                                        "location":  1473
+                                      }
+                                    },
+                                    "typeName":  {
+                                      "names":  [
+                                        {
+                                          "String":  {
+                                            "str":  "text"
+                                          }
+                                        }
+                                      ],
+                                      "typemod":  -1,
+                                      "location":  1495
+                                    },
+                                    "location":  1493
+                                  }
+                                },
+                                "location":  1473
+                              }
+                            }
+                          ],
+                          "fromClause":  [
+                            {
+                              "RangeVar":  {
+                                "relname":  "event",
+                                "inh":  true,
+                                "relpersistence":  "p",
+                                "alias":  {
+                                  "aliasname":  "e"
+                                },
+                                "location":  1513
+                              }
+                            }
+                          ],
+                          "whereClause":  {
+                            "BoolExpr":  {
+                              "boolop":  "AND_EXPR",
+                              "args":  [
+                                {
+                                  "BoolExpr":  {
+                                    "boolop":  "NOT_EXPR",
+                                    "args":  [
+                                      {
+                                        "SubLink":  {
+                                          "subLinkType":  "ANY_SUBLINK",
+                                          "testexpr":  {
+                                            "ColumnRef":  {
+                                              "fields":  [
+                                                {
+                                                  "String":  {
+                                                    "str":  "e"
+                                                  }
+                                                },
+                                                {
+                                                  "String":  {
+                                                    "str":  "id"
+                                                  }
+                                                }
+                                              ],
+                                              "location":  1535
+                                            }
+                                          },
+                                          "subselect":  {
+                                            "SelectStmt":  {
+                                              "targetList":  [
+                                                {
+                                                  "ResTarget":  {
+                                                    "val":  {
+                                                      "ColumnRef":  {
+                                                        "fields":  [
+                                                          {
+                                                            "String":  {
+                                                              "str":  "event_id"
+                                                            }
+                                                          }
+                                                        ],
+                                                        "location":  1568
+                                                      }
+                                                    },
+                                                    "location":  1568
+                                                  }
+                                                }
+                                              ],
+                                              "fromClause":  [
+                                                {
+                                                  "RangeVar":  {
+                                                    "relname":  "event_reactor",
+                                                    "inh":  true,
+                                                    "relpersistence":  "p",
+                                                    "alias":  {
+                                                      "aliasname":  "r"
+                                                    },
+                                                    "location":  1594
+                                                  }
+                                                }
+                                              ],
+                                              "whereClause":  {
+                                                "A_Expr":  {
+                                                  "kind":  "AEXPR_OP",
+                                                  "name":  [
+                                                    {
+                                                      "String":  {
+                                                        "str":  "="
+                                                      }
+                                                    }
+                                                  ],
+                                                  "lexpr":  {
+                                                    "ColumnRef":  {
+                                                      "fields":  [
+                                                        {
+                                                          "String":  {
+                                                            "str":  "r"
+                                                          }
+                                                        },
+                                                        {
+                                                          "String":  {
+                                                            "str":  "reactor"
+                                                          }
+                                                        }
+                                                      ],
+                                                      "location":  1628
+                                                    }
+                                                  },
+                                                  "rexpr":  {
+                                                    "TypeCast":  {
+                                                      "arg":  {
+                                                        "FuncCall":  {
+                                                          "funcname":  [
+                                                            {
+                                                              "String":  {
+                                                                "str":  "pggen"
+                                                              }
+                                                            },
+                                                            {
+                                                              "String":  {
+                                                                "str":  "arg"
+                                                              }
+                                                            }
+                                                          ],
+                                                          "args":  [
+                                                            {
+                                                              "A_Const":  {
+                                                                "val":  {
+                                                                  "String":  {
+                                                                    "str":  "reactor"
+                                                                  }
+                                                                },
+                                                                "location":  1650
+                                                              }
+                                                            }
+                                                          ],
+                                                          "location":  1640
+                                                        }
+                                                      },
+                                                      "typeName":  {
+                                                        "names":  [
+                                                          {
+                                                            "String":  {
+                                                              "str":  "text"
+                                                            }
+                                                          }
+                                                        ],
+                                                        "typemod":  -1,
+                                                        "location":  1662
+                                                      },
+                                                      "location":  1660
+                                                    }
+                                                  },
+                                                  "location":  1638
+                                                }
+                                              },
+                                              "limitOption":  "LIMIT_OPTION_DEFAULT",
+                                              "op":  "SETOP_NONE"
+                                            }
+                                          },
+                                          "location":  1540
+                                        }
+                                      }
+                                    ],
+                                    "location":  1540
+                                  }
+                                },
+                                {
+                                  "A_Expr":  {
+                                    "kind":  "AEXPR_OP",
+                                    "name":  [
+                                      {
+                                        "String":  {
+                                          "str":  ">="
+                                        }
+                                      }
+                                    ],
+                                    "lexpr":  {
+                                      "ColumnRef":  {
+                                        "fields":  [
+                                          {
+                                            "String":  {
+                                              "str":  "e"
+                                            }
+                                          },
+                                          {
+                                            "String":  {
+                                              "str":  "index"
+                                            }
+                                          }
+                                        ],
+                                        "location":  1691
+                                      }
+                                    },
+                                    "rexpr":  {
+                                      "FuncCall":  {
+                                        "funcname":  [
+                                          {
+                                            "String":  {
+                                              "str":  "lower"
+                                            }
+                                          }
+                                        ],
+                                        "args":  [
+                                          {
+                                            "TypeCast":  {
+                                              "arg":  {
+                                                "FuncCall":  {
+                                                  "funcname":  [
+                                                    {
+                                                      "String":  {
+                                                        "str":  "pggen"
+                                                      }
+                                                    },
+                                                    {
+                                                      "String":  {
+                                                        "str":  "arg"
+                                                      }
+                                                    }
+                                                  ],
+                                                  "args":  [
+                                                    {
+                                                      "A_Const":  {
+                                                        "val":  {
+                                                          "String":  {
+                                                            "str":  "range"
+                                                          }
+                                                        },
+                                                        "location":  1718
+                                                      }
+                                                    }
+                                                  ],
+                                                  "location":  1708
+                                                }
+                                              },
+                                              "typeName":  {
+                                                "names":  [
+                                                  {
+                                                    "String":  {
+                                                      "str":  "int8range"
+                                                    }
+                                                  }
+                                                ],
+                                                "typemod":  -1,
+                                                "location":  1728
+                                              },
+                                              "location":  1726
+                                            }
+                                          }
+                                        ],
+                                        "location":  1702
+                                      }
+                                    },
+                                    "location":  1699
+                                  }
+                                },
+                                {
+                                  "BoolExpr":  {
+                                    "boolop":  "OR_EXPR",
+                                    "args":  [
+                                      {
+                                        "NullTest":  {
+                                          "arg":  {
+                                            "FuncCall":  {
+                                              "funcname":  [
+                                                {
+                                                  "String":  {
+                                                    "str":  "upper"
+                                                  }
+                                                }
+                                              ],
+                                              "args":  [
+                                                {
+                                                  "FuncCall":  {
+                                                    "funcname":  [
+                                                      {
+                                                        "String":  {
+                                                          "str":  "pggen"
+                                                        }
+                                                      },
+                                                      {
+                                                        "String":  {
+                                                          "str":  "arg"
+                                                        }
+                                                      }
+                                                    ],
+                                                    "args":  [
+                                                      {
+                                                        "A_Const":  {
+                                                          "val":  {
+                                                            "String":  {
+                                                              "str":  "range"
+                                                            }
+                                                          },
+                                                          "location":  1770
+                                                        }
+                                                      }
+                                                    ],
+                                                    "location":  1760
+                                                  }
+                                                }
+                                              ],
+                                              "location":  1754
+                                            }
+                                          },
+                                          "nulltesttype":  "IS_NULL",
+                                          "location":  1780
+                                        }
+                                      },
+                                      {
+                                        "A_Expr":  {
+                                          "kind":  "AEXPR_OP",
+                                          "name":  [
+                                            {
+                                              "String":  {
+                                                "str":  "<"
+                                              }
+                                            }
+                                          ],
+                                          "lexpr":  {
+                                            "ColumnRef":  {
+                                              "fields":  [
+                                                {
+                                                  "String":  {
+                                                    "str":  "e"
+                                                  }
+                                                },
+                                                {
+                                                  "String":  {
+                                                    "str":  "index"
+                                                  }
+                                                }
+                                              ],
+                                              "location":  1791
+                                            }
+                                          },
+                                          "rexpr":  {
+                                            "FuncCall":  {
+                                              "funcname":  [
+                                                {
+                                                  "String":  {
+                                                    "str":  "upper"
+                                                  }
+                                                }
+                                              ],
+                                              "args":  [
+                                                {
+                                                  "FuncCall":  {
+                                                    "funcname":  [
+                                                      {
+                                                        "String":  {
+                                                          "str":  "pggen"
+                                                        }
+                                                      },
+                                                      {
+                                                        "String":  {
+                                                          "str":  "arg"
+                                                        }
+                                                      }
+                                                    ],
+                                                    "args":  [
+                                                      {
+                                                        "A_Const":  {
+                                                          "val":  {
+                                                            "String":  {
+                                                              "str":  "range"
+                                                            }
+                                                          },
+                                                          "location":  1817
+                                                        }
+                                                      }
+                                                    ],
+                                                    "location":  1807
+                                                  }
+                                                }
+                                              ],
+                                              "location":  1801
+                                            }
+                                          },
+                                          "location":  1799
+                                        }
+                                      }
+                                    ],
+                                    "location":  1788
+                                  }
+                                },
+                                {
+                                  "BoolExpr":  {
+                                    "boolop":  "OR_EXPR",
+                                    "args":  [
+                                      {
+                                        "A_Expr":  {
+                                          "kind":  "AEXPR_OP_ANY",
+                                          "name":  [
+                                            {
+                                              "String":  {
+                                                "str":  "="
+                                              }
+                                            }
+                                          ],
+                                          "lexpr":  {
+                                            "ColumnRef":  {
+                                              "fields":  [
+                                                {
+                                                  "String":  {
+                                                    "str":  "e"
+                                                  }
+                                                },
+                                                {
+                                                  "String":  {
+                                                    "str":  "type"
+                                                  }
+                                                }
+                                              ],
+                                              "location":  1843
+                                            }
+                                          },
+                                          "rexpr":  {
+                                            "FuncCall":  {
+                                              "funcname":  [
+                                                {
+                                                  "String":  {
+                                                    "str":  "pggen"
+                                                  }
+                                                },
+                                                {
+                                                  "String":  {
+                                                    "str":  "arg"
+                                                  }
+                                                }
+                                              ],
+                                              "args":  [
+                                                {
+                                                  "A_Const":  {
+                                                    "val":  {
+                                                      "String":  {
+                                                        "str":  "types"
+                                                      }
+                                                    },
+                                                    "location":  1867
+                                                  }
+                                                }
+                                              ],
+                                              "location":  1857
+                                            }
+                                          },
+                                          "location":  1850
+                                        }
+                                      },
+                                      {
+                                        "NullTest":  {
+                                          "arg":  {
+                                            "FuncCall":  {
+                                              "funcname":  [
+                                                {
+                                                  "String":  {
+                                                    "str":  "pggen"
+                                                  }
+                                                },
+                                                {
+                                                  "String":  {
+                                                    "str":  "arg"
+                                                  }
+                                                }
+                                              ],
+                                              "args":  [
+                                                {
+                                                  "A_Const":  {
+                                                    "val":  {
+                                                      "String":  {
+                                                        "str":  "types"
+                                                      }
+                                                    },
+                                                    "location":  1890
+                                                  }
+                                                }
+                                              ],
+                                              "location":  1880
+                                            }
+                                          },
+                                          "nulltesttype":  "IS_NULL",
+                                          "location":  1899
+                                        }
+                                      }
+                                    ],
+                                    "location":  1877
+                                  }
+                                }
+                              ],
+                              "location":  1687
+                            }
+                          },
+                          "sortClause":  [
+                            {
+                              "SortBy":  {
+                                "node":  {
+                                  "ColumnRef":  {
+                                    "fields":  [
+                                      {
+                                        "String":  {
+                                          "str":  "index"
+                                        }
+                                      }
+                                    ],
+                                    "location":  1925
+                                  }
+                                },
+                                "sortby_dir":  "SORTBY_DEFAULT",
+                                "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
+                                "location":  -1
+                              }
+                            }
+                          ],
+                          "limitOption":  "LIMIT_OPTION_DEFAULT",
+                          "op":  "SETOP_NONE"
+                        }
+                      },
+                      "onConflictClause":  {
+                        "action":  "ONCONFLICT_NOTHING",
+                        "infer":  {
+                          "indexElems":  [
+                            {
+                              "IndexElem":  {
+                                "name":  "event_id",
+                                "ordering":  "SORTBY_DEFAULT",
+                                "nulls_ordering":  "SORTBY_NULLS_DEFAULT"
+                              }
+                            },
+                            {
+                              "IndexElem":  {
+                                "name":  "reactor",
+                                "ordering":  "SORTBY_DEFAULT",
+                                "nulls_ordering":  "SORTBY_NULLS_DEFAULT"
+                              }
+                            }
+                          ],
+                          "location":  1951
+                        },
+                        "location":  1939
+                      },
+                      "returningList":  [
+                        {
+                          "ResTarget":  {
+                            "val":  {
+                              "ColumnRef":  {
+                                "fields":  [
+                                  {
+                                    "String":  {
+                                      "str":  "event_id"
+                                    }
+                                  }
+                                ],
+                                "location":  2012
+                              }
+                            },
+                            "location":  2012
+                          }
+                        }
+                      ],
+                      "override":  "OVERRIDING_NOT_SET"
+                    }
+                  },
+                  "location":  1366
+                }
+              }
+            ],
+            "location":  1361
+          },
+          "op":  "SETOP_NONE"
+        }
+      },
+      "stmt_location":  1326,
+      "stmt_len":  792
+    },
+    {
+      "stmt":  {
+        "SelectStmt":  {
+          "targetList":  [
+            {
+              "ResTarget":  {
+                "val":  {
+                  "ColumnRef":  {
+                    "fields":  [
+                      {
+                        "A_Star":  {}
+                      }
+                    ],
+                    "location":  2155
+                  }
+                },
+                "location":  2155
+              }
+            }
+          ],
+          "fromClause":  [
+            {
+              "RangeVar":  {
+                "relname":  "event",
+                "inh":  true,
+                "relpersistence":  "p",
+                "alias":  {
+                  "aliasname":  "evt"
+                },
+                "location":  2162
+              }
+            }
+          ],
+          "whereClause":  {
+            "BoolExpr":  {
+              "boolop":  "AND_EXPR",
+              "args":  [
+                {
+                  "A_Expr":  {
+                    "kind":  "AEXPR_OP",
+                    "name":  [
+                      {
+                        "String":  {
+                          "str":  ">="
+                        }
+                      }
+                    ],
+                    "lexpr":  {
+                      "ColumnRef":  {
+                        "fields":  [
+                          {
+                            "String":  {
+                              "str":  "evt"
+                            }
+                          },
+                          {
+                            "String":  {
+                              "str":  "index"
+                            }
+                          }
+                        ],
+                        "location":  2178
+                      }
+                    },
+                    "rexpr":  {
+                      "FuncCall":  {
+                        "funcname":  [
+                          {
+                            "String":  {
+                              "str":  "lower"
+                            }
+                          }
+                        ],
+                        "args":  [
+                          {
+                            "TypeCast":  {
+                              "arg":  {
+                                "FuncCall":  {
+                                  "funcname":  [
+                                    {
+                                      "String":  {
+                                        "str":  "pggen"
+                                      }
+                                    },
+                                    {
+                                      "String":  {
+                                        "str":  "arg"
+                                      }
+                                    }
+                                  ],
+                                  "args":  [
+                                    {
+                                      "A_Const":  {
+                                        "val":  {
+                                          "String":  {
+                                            "str":  "range"
+                                          }
+                                        },
+                                        "location":  2207
+                                      }
+                                    }
+                                  ],
+                                  "location":  2197
+                                }
+                              },
+                              "typeName":  {
+                                "names":  [
+                                  {
+                                    "String":  {
+                                      "str":  "int8range"
+                                    }
+                                  }
+                                ],
+                                "typemod":  -1,
+                                "location":  2217
+                              },
+                              "location":  2215
+                            }
+                          }
+                        ],
+                        "location":  2191
+                      }
+                    },
+                    "location":  2188
+                  }
+                },
+                {
+                  "BoolExpr":  {
+                    "boolop":  "OR_EXPR",
+                    "args":  [
+                      {
+                        "NullTest":  {
+                          "arg":  {
+                            "FuncCall":  {
+                              "funcname":  [
+                                {
+                                  "String":  {
+                                    "str":  "upper"
+                                  }
+                                }
+                              ],
+                              "args":  [
+                                {
+                                  "FuncCall":  {
+                                    "funcname":  [
+                                      {
+                                        "String":  {
+                                          "str":  "pggen"
+                                        }
+                                      },
+                                      {
+                                        "String":  {
+                                          "str":  "arg"
+                                        }
+                                      }
+                                    ],
+                                    "args":  [
+                                      {
+                                        "A_Const":  {
+                                          "val":  {
+                                            "String":  {
+                                              "str":  "range"
+                                            }
+                                          },
+                                          "location":  2251
+                                        }
+                                      }
+                                    ],
+                                    "location":  2241
+                                  }
+                                }
+                              ],
+                              "location":  2235
+                            }
+                          },
+                          "nulltesttype":  "IS_NULL",
+                          "location":  2261
+                        }
+                      },
+                      {
+                        "A_Expr":  {
+                          "kind":  "AEXPR_OP",
+                          "name":  [
+                            {
+                              "String":  {
+                                "str":  "<"
+                              }
+                            }
+                          ],
+                          "lexpr":  {
+                            "ColumnRef":  {
+                              "fields":  [
+                                {
+                                  "String":  {
+                                    "str":  "evt"
+                                  }
+                                },
+                                {
+                                  "String":  {
+                                    "str":  "index"
+                                  }
+                                }
+                              ],
+                              "location":  2272
+                            }
+                          },
+                          "rexpr":  {
+                            "FuncCall":  {
+                              "funcname":  [
+                                {
+                                  "String":  {
+                                    "str":  "upper"
+                                  }
+                                }
+                              ],
+                              "args":  [
+                                {
+                                  "FuncCall":  {
+                                    "funcname":  [
+                                      {
+                                        "String":  {
+                                          "str":  "pggen"
+                                        }
+                                      },
+                                      {
+                                        "String":  {
+                                          "str":  "arg"
+                                        }
+                                      }
+                                    ],
+                                    "args":  [
+                                      {
+                                        "A_Const":  {
+                                          "val":  {
+                                            "String":  {
+                                              "str":  "range"
+                                            }
+                                          },
+                                          "location":  2300
+                                        }
+                                      }
+                                    ],
+                                    "location":  2290
+                                  }
+                                }
+                              ],
+                              "location":  2284
+                            }
+                          },
+                          "location":  2282
+                        }
+                      }
+                    ],
+                    "location":  2269
+                  }
+                },
+                {
+                  "BoolExpr":  {
+                    "boolop":  "OR_EXPR",
+                    "args":  [
+                      {
+                        "A_Expr":  {
+                          "kind":  "AEXPR_OP_ANY",
+                          "name":  [
+                            {
+                              "String":  {
+                                "str":  "="
+                              }
+                            }
+                          ],
+                          "lexpr":  {
+                            "ColumnRef":  {
+                              "fields":  [
+                                {
+                                  "String":  {
+                                    "str":  "evt"
+                                  }
+                                },
+                                {
+                                  "String":  {
+                                    "str":  "type"
+                                  }
+                                }
+                              ],
+                              "location":  2318
+                            }
+                          },
+                          "rexpr":  {
+                            "FuncCall":  {
+                              "funcname":  [
+                                {
+                                  "String":  {
+                                    "str":  "pggen"
+                                  }
+                                },
+                                {
+                                  "String":  {
+                                    "str":  "arg"
+                                  }
+                                }
+                              ],
+                              "args":  [
+                                {
+                                  "A_Const":  {
+                                    "val":  {
+                                      "String":  {
+                                        "str":  "types"
+                                      }
+                                    },
+                                    "location":  2344
+                                  }
+                                }
+                              ],
+                              "location":  2334
+                            }
+                          },
+                          "location":  2327
+                        }
+                      },
+                      {
+                        "NullTest":  {
+                          "arg":  {
+                            "FuncCall":  {
+                              "funcname":  [
+                                {
+                                  "String":  {
+                                    "str":  "pggen"
+                                  }
+                                },
+                                {
+                                  "String":  {
+                                    "str":  "arg"
+                                  }
+                                }
+                              ],
+                              "args":  [
+                                {
+                                  "A_Const":  {
+                                    "val":  {
+                                      "String":  {
+                                        "str":  "types"
+                                      }
+                                    },
+                                    "location":  2371
+                                  }
+                                }
+                              ],
+                              "location":  2361
+                            }
+                          },
+                          "nulltesttype":  "IS_NULL",
+                          "location":  2380
+                        }
+                      }
+                    ],
+                    "location":  2358
+                  }
+                }
+              ],
+              "location":  2230
+            }
+          },
+          "sortClause":  [
+            {
+              "SortBy":  {
+                "node":  {
+                  "ColumnRef":  {
+                    "fields":  [
+                      {
+                        "String":  {
+                          "str":  "evt"
+                        }
+                      },
+                      {
+                        "String":  {
+                          "str":  "index"
+                        }
+                      }
+                    ],
+                    "location":  2398
+                  }
+                },
+                "sortby_dir":  "SORTBY_DEFAULT",
+                "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
+                "location":  -1
+              }
+            }
+          ],
+          "limitOption":  "LIMIT_OPTION_DEFAULT",
+          "op":  "SETOP_NONE"
+        }
+      },
+      "stmt_location":  2119,
+      "stmt_len":  288
+    },
+    {
+      "stmt":  {
+        "SelectStmt":  {
+          "targetList":  [
+            {
+              "ResTarget":  {
+                "val":  {
+                  "FuncCall":  {
+                    "funcname":  [
+                      {
+                        "String":  {
+                          "str":  "min"
+                        }
+                      }
+                    ],
+                    "args":  [
+                      {
+                        "ColumnRef":  {
+                          "fields":  [
+                            {
+                              "String":  {
+                                "str":  "objid"
+                              }
+                            }
+                          ],
+                          "location":  2466
+                        }
+                      }
+                    ],
+                    "location":  2462
+                  }
+                },
+                "location":  2462
+              }
+            }
+          ],
+          "fromClause":  [
+            {
+              "RangeVar":  {
+                "relname":  "pg_locks",
+                "inh":  true,
+                "relpersistence":  "p",
+                "location":  2478
+              }
+            }
+          ],
+          "whereClause":  {
+            "A_Expr":  {
+              "kind":  "AEXPR_OP",
+              "name":  [
+                {
+                  "String":  {
+                    "str":  "="
+                  }
+                }
+              ],
+              "lexpr":  {
+                "ColumnRef":  {
+                  "fields":  [
+                    {
+                      "String":  {
+                        "str":  "locktype"
+                      }
+                    }
+                  ],
+                  "location":  2493
+                }
+              },
+              "rexpr":  {
+                "A_Const":  {
+                  "val":  {
+                    "String":  {
+                      "str":  "advisory"
+                    }
+                  },
+                  "location":  2504
+                }
+              },
+              "location":  2502
+            }
+          },
+          "groupClause":  [
+            {
+              "ColumnRef":  {
+                "fields":  [
+                  {
+                    "String":  {
+                      "str":  "locktype"
+                    }
+                  }
+                ],
+                "location":  2524
+              }
+            }
+          ],
+          "limitOption":  "LIMIT_OPTION_DEFAULT",
+          "op":  "SETOP_NONE"
+        }
+      },
+      "stmt_location":  2408,
+      "stmt_len":  124
+    }
+  ]
+}

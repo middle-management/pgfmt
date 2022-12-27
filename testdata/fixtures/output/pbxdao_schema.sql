@@ -46,7 +46,7 @@
 
 ;
 
-CREATE UNIQUE INDEX ON p_pbx_user  USING btree (msisdn , organisation_id ) ;
+CREATE UNIQUE INDEX ON p_pbx_user  USING btree (msisdn , organisation_id ) deleted_at IS NULL;
 
 ;
 

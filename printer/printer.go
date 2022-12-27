@@ -32,17 +32,6 @@ func (output *Printer) Print(node *pg_query.Node) {
 	output.writeNode(node)
 }
 
-func (output *Printer) writeWithClause(node *pg_query.WithClause) {
-	output.Builder.WriteString("WITH ")
-	if node.Recursive {
-		output.Builder.WriteString("RECURSIVE ")
-	}
-	output.Builder.WriteString("\n")
-	for _, lc := range node.Ctes {
-		output.writeNode(lc)
-	}
-}
-
 type nodeContext int
 
 const (
@@ -82,6 +71,46 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString(n.NamedArgExpr.Name)
 		output.Builder.WriteString(" := ")
 		output.writeNode(n.NamedArgExpr.Arg)
+	case *pg_query.Node_List:
+		output.writeListWithSeparator(n.List.Items, ", ")
+	case *pg_query.Node_SubLink:
+		switch n.SubLink.SubLinkType {
+		case pg_query.SubLinkType_EXISTS_SUBLINK:
+			output.Builder.WriteString("EXISTS (")
+			output.writeNode(n.SubLink.Subselect)
+			output.Builder.WriteString(")")
+		case pg_query.SubLinkType_ALL_SUBLINK:
+			output.writeNode(n.SubLink.Testexpr)
+			output.Builder.WriteString(" ")
+			output.writeSubqueryOp(n.SubLink.OperName)
+			output.writeNode(n.SubLink.Subselect)
+			output.Builder.WriteString(")")
+		case pg_query.SubLinkType_ANY_SUBLINK:
+		case pg_query.SubLinkType_ARRAY_SUBLINK:
+			output.Builder.WriteString("ARRAY(")
+			output.writeNode(n.SubLink.Subselect)
+			output.Builder.WriteString(")")
+		case pg_query.SubLinkType_EXPR_SUBLINK:
+			output.Builder.WriteString("(")
+			output.writeNode(n.SubLink.Subselect)
+			output.Builder.WriteString(")")
+		case pg_query.SubLinkType_ROWCOMPARE_SUBLINK:
+			fallthrough
+		case pg_query.SubLinkType_MULTIEXPR_SUBLINK:
+			fallthrough
+		case pg_query.SubLinkType_CTE_SUBLINK:
+			fallthrough
+		default:
+			panic("unexpected sublink type: " + n.SubLink.SubLinkType.String())
+		}
+	case *pg_query.Node_NullTest:
+		output.writeNode(n.NullTest.Arg)
+		switch n.NullTest.Nulltesttype {
+		case pg_query.NullTestType_IS_NOT_NULL:
+			output.Builder.WriteString(" IS NOT NULL")
+		case pg_query.NullTestType_IS_NULL:
+			output.Builder.WriteString(" IS NULL")
+		}
 	case *pg_query.Node_Integer:
 		output.Builder.WriteString(strconv.Itoa(int(n.Integer.Ival)))
 	case *pg_query.Node_ParamRef:
@@ -767,7 +796,7 @@ func (output *Printer) writeOptIndirection(l []*pg_query.Node) {
 	for _, dn := range l {
 		if dn.GetString_() != nil {
 			output.Builder.WriteString(".")
-			// deparseColLabel(str, strVal(lfirst(lc)));
+			output.Builder.WriteString(quoteIdentifier(dn.GetString_().GetStr()))
 		} else if dn.GetAStar() != nil {
 			output.Builder.WriteString(".*")
 		} else if dn.GetAIndices() != nil {
@@ -788,6 +817,45 @@ func (output *Printer) writeOptIndirection(l []*pg_query.Node) {
 		}
 		output.writeNode(dn)
 	}
+}
+
+func (output *Printer) writeSubqueryOp(l []*pg_query.Node) {
+	if len(l) == 1 && l[0].String() == "~~" {
+		output.Builder.WriteString("LIKE")
+	} else if len(l) == 1 && l[0].String() == "!~~" {
+		output.Builder.WriteString("NOT LIKE")
+	} else if len(l) == 1 && l[0].String() == "~~*" {
+		output.Builder.WriteString("ILIKE")
+	} else if len(l) == 1 && l[0].String() == "!~~*" {
+		output.Builder.WriteString("NOT ILIKE")
+	} else if len(l) == 1 && isOp(l[0].String()) {
+		output.Builder.WriteString(l[0].String())
+	} else {
+		output.Builder.WriteString("OPERATOR(")
+		output.writeAnyOperator(l)
+		output.Builder.WriteString(")")
+	}
+}
+
+func (output *Printer) writeAnyOperator(l []*pg_query.Node) {
+	if len(l) == 2 {
+		output.Builder.WriteString(quoteIdentifier(l[0].String()))
+		output.Builder.WriteString(".")
+		output.Builder.WriteString(l[1].String())
+	} else if len(l) == 1 {
+		output.Builder.WriteString(l[0].String())
+	} else {
+		panic("unexpected operator")
+	}
+}
+
+func (output *Printer) writeWithClause(node *pg_query.WithClause) {
+	output.Builder.WriteString("WITH ")
+	if node.Recursive {
+		output.Builder.WriteString("RECURSIVE ")
+	}
+	output.Builder.WriteString("\n")
+	output.writeListWithSeparator(node.Ctes, ", ")
 }
 
 func (output *Printer) writeListWithSeparator(l []*pg_query.Node, separator string) {
