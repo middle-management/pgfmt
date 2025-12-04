@@ -1,5 +1,5 @@
 SELECT
-	y AS s,
+	'y' AS s,
 	count(*) AS count,
 	winner,
 	(counter)*((60)*(5)) AS counter 

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/middle-management/pgfmt/printer"
-	pg_query "github.com/pganalyze/pg_query_go/v2"
+	pg_query "github.com/pganalyze/pg_query_go/v5"
 )
 
 func main() {

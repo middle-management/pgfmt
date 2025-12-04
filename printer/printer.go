@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	pg_query "github.com/pganalyze/pg_query_go/v2"
+	pg_query "github.com/pganalyze/pg_query_go/v5"
 )
 
 func isOp(s string) bool {
@@ -118,7 +118,28 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString(strconv.Itoa(int(n.ParamRef.Number)))
 
 	case *pg_query.Node_AConst:
-		output.writeNode(n.AConst.Val)
+		switch v := n.AConst.Val.(type) {
+		case *pg_query.A_Const_Ival:
+			output.writeNode(&pg_query.Node{Node: &pg_query.Node_Integer{Integer: v.Ival}})
+		case *pg_query.A_Const_Fval:
+			output.Builder.WriteString(v.Fval.Fval)
+		case *pg_query.A_Const_Boolval:
+			if v.Boolval.Boolval {
+				output.Builder.WriteString("true")
+			} else {
+				output.Builder.WriteString("false")
+			}
+		case *pg_query.A_Const_Sval:
+			output.Builder.WriteString("'")
+			output.Builder.WriteString(strings.ReplaceAll(v.Sval.Sval, "'", "''"))
+			output.Builder.WriteString("'")
+		case *pg_query.A_Const_Bsval:
+			output.Builder.WriteString(v.Bsval.Bsval)
+		case nil:
+			if n.AConst.Isnull {
+				output.Builder.WriteString("NULL")
+			}
+		}
 	case *pg_query.Node_AExpr:
 
 		switch n.AExpr.Kind {
@@ -139,7 +160,6 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.A_Expr_Kind_AEXPR_DISTINCT:
 		case pg_query.A_Expr_Kind_AEXPR_NOT_DISTINCT:
 		case pg_query.A_Expr_Kind_AEXPR_NULLIF:
-		case pg_query.A_Expr_Kind_AEXPR_OF:
 		case pg_query.A_Expr_Kind_AEXPR_IN:
 		case pg_query.A_Expr_Kind_AEXPR_LIKE:
 		case pg_query.A_Expr_Kind_AEXPR_ILIKE:
@@ -148,7 +168,6 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.A_Expr_Kind_AEXPR_NOT_BETWEEN:
 		case pg_query.A_Expr_Kind_AEXPR_BETWEEN_SYM:
 		case pg_query.A_Expr_Kind_AEXPR_NOT_BETWEEN_SYM:
-		case pg_query.A_Expr_Kind_AEXPR_PAREN:
 		}
 
 	case *pg_query.Node_FuncCall:
@@ -194,7 +213,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 	case *pg_query.Node_String_:
-		output.Builder.WriteString(n.String_.Str)
+		output.Builder.WriteString(n.String_.Sval)
 
 	case *pg_query.Node_ColumnRef:
 		for _, f := range n.ColumnRef.Fields {
@@ -516,7 +535,7 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 			if len(stmt.Typmods) == 0 {
 				output.Builder.WriteString("interval")
 			} else {
-				fields := stmt.Typmods[0].GetAConst().GetVal().GetInteger().GetIval()
+				fields := stmt.Typmods[0].GetAConst().GetIval().GetIval()
 				switch fields {
 				case 1 << YEAR:
 					output.Builder.WriteString(" year")
@@ -550,9 +569,9 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 				}
 
 				if len(stmt.Typmods) == 2 {
-					precision := stmt.Typmods[0].GetAConst().GetVal().GetInteger().GetIval()
+					precision := stmt.Typmods[0].GetAConst().GetIval().GetIval()
 					if precision != 0xFFFF { // INTERVAL_FULL_PRECISION
-						output.Builder.WriteString(fmt.Sprint("(%d)", precision))
+						output.Builder.WriteString(fmt.Sprintf("(%d)", precision))
 					}
 				}
 			}
@@ -563,7 +582,7 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 		}
 	} else {
 		for i, n := range stmt.Names {
-			output.Builder.WriteString(quoteIdentifier(n.GetString_().GetStr()))
+			output.Builder.WriteString(quoteIdentifier(n.GetString_().GetSval()))
 			if i != len(stmt.Names)-1 {
 				output.Builder.WriteString(".")
 			}
@@ -741,7 +760,7 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 			output.Builder.WriteString("FETCH FIRST ")
 		}
 
-		if nullish := stmt.LimitCount.GetAConst().GetVal().GetNull(); nullish != nil {
+		if stmt.LimitCount.GetAConst().GetIsnull() {
 			output.Builder.WriteString("ALL")
 		} else {
 			output.writeNode(stmt.LimitCount)
@@ -796,7 +815,7 @@ func (output *Printer) writeOptIndirection(l []*pg_query.Node) {
 	for _, dn := range l {
 		if dn.GetString_() != nil {
 			output.Builder.WriteString(".")
-			output.Builder.WriteString(quoteIdentifier(dn.GetString_().GetStr()))
+			output.Builder.WriteString(quoteIdentifier(dn.GetString_().GetSval()))
 		} else if dn.GetAStar() != nil {
 			output.Builder.WriteString(".*")
 		} else if dn.GetAIndices() != nil {
