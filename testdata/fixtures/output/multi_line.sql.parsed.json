@@ -1,373 +1,367 @@
 {
-  "version":  130008,
-  "stmts":  [
+  "version": 160001,
+  "stmts": [
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "name":  "count",
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "name": "count",
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "str":  "count"
+                        "String": {
+                          "sval": "count"
                         }
                       }
                     ],
-                    "agg_star":  true,
-                    "location":  8
+                    "agg_star": true,
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 8
                   }
                 },
-                "location":  8
+                "location": 8
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "str":  "winner"
+                        "String": {
+                          "sval": "winner"
                         }
                       }
                     ],
-                    "location":  27
+                    "location": 27
                   }
                 },
-                "location":  27
+                "location": 27
               }
             },
             {
-              "ResTarget":  {
-                "name":  "counter",
-                "val":  {
-                  "A_Expr":  {
-                    "kind":  "AEXPR_OP",
-                    "name":  [
+              "ResTarget": {
+                "name": "counter",
+                "val": {
+                  "A_Expr": {
+                    "kind": "AEXPR_OP",
+                    "name": [
                       {
-                        "String":  {
-                          "str":  "*"
+                        "String": {
+                          "sval": "*"
                         }
                       }
                     ],
-                    "lexpr":  {
-                      "ColumnRef":  {
-                        "fields":  [
+                    "lexpr": {
+                      "ColumnRef": {
+                        "fields": [
                           {
-                            "String":  {
-                              "str":  "counter"
+                            "String": {
+                              "sval": "counter"
                             }
                           }
                         ],
-                        "location":  35
+                        "location": 35
                       }
                     },
-                    "rexpr":  {
-                      "A_Expr":  {
-                        "kind":  "AEXPR_OP",
-                        "name":  [
+                    "rexpr": {
+                      "A_Expr": {
+                        "kind": "AEXPR_OP",
+                        "name": [
                           {
-                            "String":  {
-                              "str":  "*"
+                            "String": {
+                              "sval": "*"
                             }
                           }
                         ],
-                        "lexpr":  {
-                          "A_Const":  {
-                            "val":  {
-                              "Integer":  {
-                                "ival":  60
-                              }
+                        "lexpr": {
+                          "A_Const": {
+                            "ival": {
+                              "ival": 60
                             },
-                            "location":  46
+                            "location": 46
                           }
                         },
-                        "rexpr":  {
-                          "A_Const":  {
-                            "val":  {
-                              "Integer":  {
-                                "ival":  5
-                              }
+                        "rexpr": {
+                          "A_Const": {
+                            "ival": {
+                              "ival": 5
                             },
-                            "location":  51
+                            "location": 51
                           }
                         },
-                        "location":  49
+                        "location": 49
                       }
                     },
-                    "location":  43
+                    "location": 43
                   }
                 },
-                "location":  35
+                "location": 35
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeSubselect":  {
-                "subquery":  {
-                  "SelectStmt":  {
-                    "targetList":  [
+              "RangeSubselect": {
+                "subquery": {
+                  "SelectStmt": {
+                    "targetList": [
                       {
-                        "ResTarget":  {
-                          "val":  {
-                            "ColumnRef":  {
-                              "fields":  [
+                        "ResTarget": {
+                          "val": {
+                            "ColumnRef": {
+                              "fields": [
                                 {
-                                  "String":  {
-                                    "str":  "winner"
+                                  "String": {
+                                    "sval": "winner"
                                   }
                                 }
                               ],
-                              "location":  85
+                              "location": 85
                             }
                           },
-                          "location":  85
+                          "location": 85
                         }
                       },
                       {
-                        "ResTarget":  {
-                          "name":  "counter",
-                          "val":  {
-                            "FuncCall":  {
-                              "funcname":  [
+                        "ResTarget": {
+                          "name": "counter",
+                          "val": {
+                            "FuncCall": {
+                              "funcname": [
                                 {
-                                  "String":  {
-                                    "str":  "round"
+                                  "String": {
+                                    "sval": "round"
                                   }
                                 }
                               ],
-                              "args":  [
+                              "args": [
                                 {
-                                  "A_Expr":  {
-                                    "kind":  "AEXPR_OP",
-                                    "name":  [
+                                  "A_Expr": {
+                                    "kind": "AEXPR_OP",
+                                    "name": [
                                       {
-                                        "String":  {
-                                          "str":  "/"
+                                        "String": {
+                                          "sval": "/"
                                         }
                                       }
                                     ],
-                                    "lexpr":  {
-                                      "ColumnRef":  {
-                                        "fields":  [
+                                    "lexpr": {
+                                      "ColumnRef": {
+                                        "fields": [
                                           {
-                                            "String":  {
-                                              "str":  "length"
+                                            "String": {
+                                              "sval": "length"
                                             }
                                           }
                                         ],
-                                        "location":  99
+                                        "location": 99
                                       }
                                     },
-                                    "rexpr":  {
-                                      "A_Expr":  {
-                                        "kind":  "AEXPR_OP",
-                                        "name":  [
+                                    "rexpr": {
+                                      "A_Expr": {
+                                        "kind": "AEXPR_OP",
+                                        "name": [
                                           {
-                                            "String":  {
-                                              "str":  "*"
+                                            "String": {
+                                              "sval": "*"
                                             }
                                           }
                                         ],
-                                        "lexpr":  {
-                                          "A_Const":  {
-                                            "val":  {
-                                              "Integer":  {
-                                                "ival":  60
-                                              }
+                                        "lexpr": {
+                                          "A_Const": {
+                                            "ival": {
+                                              "ival": 60
                                             },
-                                            "location":  109
+                                            "location": 109
                                           }
                                         },
-                                        "rexpr":  {
-                                          "A_Const":  {
-                                            "val":  {
-                                              "Integer":  {
-                                                "ival":  5
-                                              }
+                                        "rexpr": {
+                                          "A_Const": {
+                                            "ival": {
+                                              "ival": 5
                                             },
-                                            "location":  114
+                                            "location": 114
                                           }
                                         },
-                                        "location":  112
+                                        "location": 112
                                       }
                                     },
-                                    "location":  106
+                                    "location": 106
                                   }
                                 }
                               ],
-                              "location":  93
+                              "funcformat": "COERCE_EXPLICIT_CALL",
+                              "location": 93
                             }
                           },
-                          "location":  93
+                          "location": 93
                         }
                       }
                     ],
-                    "fromClause":  [
+                    "fromClause": [
                       {
-                        "RangeVar":  {
-                          "relname":  "players",
-                          "inh":  true,
-                          "relpersistence":  "p",
-                          "location":  139
+                        "RangeVar": {
+                          "relname": "players",
+                          "inh": true,
+                          "relpersistence": "p",
+                          "location": 139
                         }
                       }
                     ],
-                    "whereClause":  {
-                      "BoolExpr":  {
-                        "boolop":  "AND_EXPR",
-                        "args":  [
+                    "whereClause": {
+                      "BoolExpr": {
+                        "boolop": "AND_EXPR",
+                        "args": [
                           {
-                            "A_Expr":  {
-                              "kind":  "AEXPR_OP",
-                              "name":  [
+                            "A_Expr": {
+                              "kind": "AEXPR_OP",
+                              "name": [
                                 {
-                                  "String":  {
-                                    "str":  "="
+                                  "String": {
+                                    "sval": "="
                                   }
                                 }
                               ],
-                              "lexpr":  {
-                                "ColumnRef":  {
-                                  "fields":  [
+                              "lexpr": {
+                                "ColumnRef": {
+                                  "fields": [
                                     {
-                                      "String":  {
-                                        "str":  "build"
+                                      "String": {
+                                        "sval": "build"
                                       }
                                     }
                                   ],
-                                  "location":  158
+                                  "location": 158
                                 }
                               },
-                              "rexpr":  {
-                                "ParamRef":  {
-                                  "number":  1,
-                                  "location":  166
+                              "rexpr": {
+                                "ParamRef": {
+                                  "number": 1,
+                                  "location": 166
                                 }
                               },
-                              "location":  164
+                              "location": 164
                             }
                           },
                           {
-                            "BoolExpr":  {
-                              "boolop":  "OR_EXPR",
-                              "args":  [
+                            "BoolExpr": {
+                              "boolop": "OR_EXPR",
+                              "args": [
                                 {
-                                  "A_Expr":  {
-                                    "kind":  "AEXPR_OP",
-                                    "name":  [
+                                  "A_Expr": {
+                                    "kind": "AEXPR_OP",
+                                    "name": [
                                       {
-                                        "String":  {
-                                          "str":  "="
+                                        "String": {
+                                          "sval": "="
                                         }
                                       }
                                     ],
-                                    "lexpr":  {
-                                      "ColumnRef":  {
-                                        "fields":  [
+                                    "lexpr": {
+                                      "ColumnRef": {
+                                        "fields": [
                                           {
-                                            "String":  {
-                                              "str":  "hero"
+                                            "String": {
+                                              "sval": "hero"
                                             }
                                           }
                                         ],
-                                        "location":  174
+                                        "location": 174
                                       }
                                     },
-                                    "rexpr":  {
-                                      "ParamRef":  {
-                                        "number":  2,
-                                        "location":  181
+                                    "rexpr": {
+                                      "ParamRef": {
+                                        "number": 2,
+                                        "location": 181
                                       }
                                     },
-                                    "location":  179
+                                    "location": 179
                                   }
                                 },
                                 {
-                                  "A_Expr":  {
-                                    "kind":  "AEXPR_OP",
-                                    "name":  [
+                                  "A_Expr": {
+                                    "kind": "AEXPR_OP",
+                                    "name": [
                                       {
-                                        "String":  {
-                                          "str":  "="
+                                        "String": {
+                                          "sval": "="
                                         }
                                       }
                                     ],
-                                    "lexpr":  {
-                                      "ColumnRef":  {
-                                        "fields":  [
+                                    "lexpr": {
+                                      "ColumnRef": {
+                                        "fields": [
                                           {
-                                            "String":  {
-                                              "str":  "region"
+                                            "String": {
+                                              "sval": "region"
                                             }
                                           }
                                         ],
-                                        "location":  187
+                                        "location": 187
                                       }
                                     },
-                                    "rexpr":  {
-                                      "ParamRef":  {
-                                        "number":  3,
-                                        "location":  196
+                                    "rexpr": {
+                                      "ParamRef": {
+                                        "number": 3,
+                                        "location": 196
                                       }
                                     },
-                                    "location":  194
+                                    "location": 194
                                   }
                                 }
                               ],
-                              "location":  184
+                              "location": 184
                             }
                           }
                         ],
-                        "location":  169
+                        "location": 169
                       }
                     },
-                    "limitOption":  "LIMIT_OPTION_DEFAULT",
-                    "op":  "SETOP_NONE"
+                    "limitOption": "LIMIT_OPTION_DEFAULT",
+                    "op": "SETOP_NONE"
                   }
                 },
-                "alias":  {
-                  "aliasname":  "s"
+                "alias": {
+                  "aliasname": "s"
                 }
               }
             }
           ],
-          "groupClause":  [
+          "groupClause": [
             {
-              "ColumnRef":  {
-                "fields":  [
+              "ColumnRef": {
+                "fields": [
                   {
-                    "String":  {
-                      "str":  "winner"
+                    "String": {
+                      "sval": "winner"
                     }
                   }
                 ],
-                "location":  220
+                "location": 220
               }
             },
             {
-              "ColumnRef":  {
-                "fields":  [
+              "ColumnRef": {
+                "fields": [
                   {
-                    "String":  {
-                      "str":  "counter"
+                    "String": {
+                      "sval": "counter"
                     }
                   }
                 ],
-                "location":  228
+                "location": 228
               }
             }
           ],
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "op":  "SETOP_NONE"
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_len":  235
+      "stmt_len": 235
     }
   ]
 }
