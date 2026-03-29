@@ -1,0 +1,525 @@
+{
+  "version":  170000,
+  "stmts":  [
+    {
+      "stmt":  {
+        "CreateFunctionStmt":  {
+          "funcname":  [
+            {
+              "String":  {
+                "sval":  "get_user_label"
+              }
+            }
+          ],
+          "parameters":  [
+            {
+              "FunctionParameter":  {
+                "name":  "p_id",
+                "argType":  {
+                  "names":  [
+                    {
+                      "String":  {
+                        "sval":  "pg_catalog"
+                      }
+                    },
+                    {
+                      "String":  {
+                        "sval":  "int4"
+                      }
+                    }
+                  ],
+                  "typemod":  -1,
+                  "location":  80
+                },
+                "mode":  "FUNC_PARAM_DEFAULT"
+              }
+            }
+          ],
+          "returnType":  {
+            "names":  [
+              {
+                "String":  {
+                  "sval":  "text"
+                }
+              }
+            ],
+            "typemod":  -1,
+            "location":  97
+          },
+          "options":  [
+            {
+              "DefElem":  {
+                "defname":  "as",
+                "arg":  {
+                  "List":  {
+                    "items":  [
+                      {
+                        "String":  {
+                          "sval":  "\nDECLARE\n  result text;\nBEGIN\n  IF p_id > 0 THEN\n    SELECT name INTO result FROM users WHERE id = p_id;\n  ELSIF p_id = 0 THEN\n    result := 'zero';\n  ELSE\n    result := 'negative';\n  END IF;\n  RETURN result;\nEND;\n"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  102
+              }
+            },
+            {
+              "DefElem":  {
+                "defname":  "language",
+                "arg":  {
+                  "String":  {
+                    "sval":  "plpgsql"
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  324
+              }
+            }
+          ]
+        }
+      },
+      "stmt_len":  340
+    },
+    {
+      "stmt":  {
+        "CreateFunctionStmt":  {
+          "funcname":  [
+            {
+              "String":  {
+                "sval":  "loop_demo"
+              }
+            }
+          ],
+          "returnType":  {
+            "names":  [
+              {
+                "String":  {
+                  "sval":  "void"
+                }
+              }
+            ],
+            "typemod":  -1,
+            "location":  402
+          },
+          "options":  [
+            {
+              "DefElem":  {
+                "defname":  "as",
+                "arg":  {
+                  "List":  {
+                    "items":  [
+                      {
+                        "String":  {
+                          "sval":  "\nDECLARE\n  counter integer := 0;\n  v integer := 1;\nBEGIN\n  FOR i IN 1..10 LOOP\n    counter := counter + 1;\n  END LOOP;\n\n  WHILE counter > 0 LOOP\n    counter := counter - 1;\n  END LOOP;\n\n  LOOP\n    EXIT WHEN v > 10;\n    CONTINUE WHEN v = 5;\n    v := v + 1;\n  END LOOP;\nEND;\n"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  407
+              }
+            },
+            {
+              "DefElem":  {
+                "defname":  "language",
+                "arg":  {
+                  "String":  {
+                    "sval":  "plpgsql"
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  688
+              }
+            }
+          ]
+        }
+      },
+      "stmt_location":  341,
+      "stmt_len":  363
+    },
+    {
+      "stmt":  {
+        "CreateFunctionStmt":  {
+          "replace":  true,
+          "funcname":  [
+            {
+              "String":  {
+                "sval":  "safe_divide"
+              }
+            }
+          ],
+          "parameters":  [
+            {
+              "FunctionParameter":  {
+                "name":  "a",
+                "argType":  {
+                  "names":  [
+                    {
+                      "String":  {
+                        "sval":  "pg_catalog"
+                      }
+                    },
+                    {
+                      "String":  {
+                        "sval":  "int4"
+                      }
+                    }
+                  ],
+                  "typemod":  -1,
+                  "location":  784
+                },
+                "mode":  "FUNC_PARAM_DEFAULT"
+              }
+            },
+            {
+              "FunctionParameter":  {
+                "name":  "b",
+                "argType":  {
+                  "names":  [
+                    {
+                      "String":  {
+                        "sval":  "pg_catalog"
+                      }
+                    },
+                    {
+                      "String":  {
+                        "sval":  "int4"
+                      }
+                    }
+                  ],
+                  "typemod":  -1,
+                  "location":  795
+                },
+                "mode":  "FUNC_PARAM_DEFAULT"
+              }
+            }
+          ],
+          "returnType":  {
+            "names":  [
+              {
+                "String":  {
+                  "sval":  "pg_catalog"
+                }
+              },
+              {
+                "String":  {
+                  "sval":  "numeric"
+                }
+              }
+            ],
+            "typemod":  -1,
+            "location":  812
+          },
+          "options":  [
+            {
+              "DefElem":  {
+                "defname":  "as",
+                "arg":  {
+                  "List":  {
+                    "items":  [
+                      {
+                        "String":  {
+                          "sval":  "\nDECLARE\n  result numeric;\nBEGIN\n  result := a::numeric / b::numeric;\n  RETURN result;\nEXCEPTION\n  WHEN division_by_zero THEN\n    RETURN NULL;\n  WHEN others THEN\n    RAISE;\nEND;\n"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  820
+              }
+            },
+            {
+              "DefElem":  {
+                "defname":  "language",
+                "arg":  {
+                  "String":  {
+                    "sval":  "plpgsql"
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  1006
+              }
+            },
+            {
+              "DefElem":  {
+                "defname":  "strict",
+                "arg":  {
+                  "Boolean":  {
+                    "boolval":  true
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  1023
+              }
+            }
+          ]
+        }
+      },
+      "stmt_location":  705,
+      "stmt_len":  324
+    },
+    {
+      "stmt":  {
+        "CreateFunctionStmt":  {
+          "funcname":  [
+            {
+              "String":  {
+                "sval":  "kitchen_sink"
+              }
+            }
+          ],
+          "parameters":  [
+            {
+              "FunctionParameter":  {
+                "name":  "p_mode",
+                "argType":  {
+                  "names":  [
+                    {
+                      "String":  {
+                        "sval":  "pg_catalog"
+                      }
+                    },
+                    {
+                      "String":  {
+                        "sval":  "int4"
+                      }
+                    }
+                  ],
+                  "typemod":  -1,
+                  "location":  1108
+                },
+                "mode":  "FUNC_PARAM_DEFAULT"
+              }
+            }
+          ],
+          "returnType":  {
+            "names":  [
+              {
+                "String":  {
+                  "sval":  "void"
+                }
+              }
+            ],
+            "typemod":  -1,
+            "location":  1125
+          },
+          "options":  [
+            {
+              "DefElem":  {
+                "defname":  "as",
+                "arg":  {
+                  "List":  {
+                    "items":  [
+                      {
+                        "String":  {
+                          "sval":  "\nDECLARE\n  v integer := 0;\nBEGIN\n  PERFORM pg_notify('channel', 'hello');\n\n  EXECUTE 'SELECT 1';\n  EXECUTE 'SELECT $1' USING 42;\n\n  CASE p_mode\n    WHEN 1 THEN\n      RAISE NOTICE 'mode one';\n    WHEN 2 THEN\n      RAISE NOTICE 'mode two';\n    ELSE\n      RAISE NOTICE 'other mode';\n  END CASE;\n\n  CASE\n    WHEN v > 0 THEN\n      RAISE LOG 'positive';\n    ELSE\n      RAISE DEBUG 'non-positive';\n  END CASE;\nEND;\n"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  1130
+              }
+            },
+            {
+              "DefElem":  {
+                "defname":  "language",
+                "arg":  {
+                  "String":  {
+                    "sval":  "plpgsql"
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  1546
+              }
+            }
+          ]
+        }
+      },
+      "stmt_location":  1030,
+      "stmt_len":  532
+    },
+    {
+      "stmt":  {
+        "CreateFunctionStmt":  {
+          "funcname":  [
+            {
+              "String":  {
+                "sval":  "iter_demo"
+              }
+            }
+          ],
+          "returnType":  {
+            "names":  [
+              {
+                "String":  {
+                  "sval":  "void"
+                }
+              }
+            ],
+            "typemod":  -1,
+            "location":  1640
+          },
+          "options":  [
+            {
+              "DefElem":  {
+                "defname":  "as",
+                "arg":  {
+                  "List":  {
+                    "items":  [
+                      {
+                        "String":  {
+                          "sval":  "\nDECLARE\n  r record;\n  arr integer[] := ARRAY[1,2,3];\n  v integer;\nBEGIN\n  FOR r IN SELECT id, name FROM users LOOP\n    RAISE NOTICE '% %', r.id, r.name;\n  END LOOP;\n\n  FOREACH v IN ARRAY arr LOOP\n    RAISE NOTICE 'val=%', v;\n  END LOOP;\nEND;\n"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  1645
+              }
+            },
+            {
+              "DefElem":  {
+                "defname":  "language",
+                "arg":  {
+                  "String":  {
+                    "sval":  "plpgsql"
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  1896
+              }
+            }
+          ]
+        }
+      },
+      "stmt_location":  1563,
+      "stmt_len":  349
+    },
+    {
+      "stmt":  {
+        "CreateFunctionStmt":  {
+          "is_procedure":  true,
+          "funcname":  [
+            {
+              "String":  {
+                "sval":  "refresh_cache"
+              }
+            }
+          ],
+          "options":  [
+            {
+              "DefElem":  {
+                "defname":  "as",
+                "arg":  {
+                  "List":  {
+                    "items":  [
+                      {
+                        "String":  {
+                          "sval":  "\nBEGIN\n  PERFORM pg_notify('cache', 'refresh');\nEND;\n"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  1976
+              }
+            },
+            {
+              "DefElem":  {
+                "defname":  "language",
+                "arg":  {
+                  "String":  {
+                    "sval":  "plpgsql"
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  2037
+              }
+            }
+          ]
+        }
+      },
+      "stmt_location":  1913,
+      "stmt_len":  140
+    },
+    {
+      "stmt":  {
+        "CreateFunctionStmt":  {
+          "funcname":  [
+            {
+              "String":  {
+                "sval":  "get_active_users"
+              }
+            }
+          ],
+          "returnType":  {
+            "names":  [
+              {
+                "String":  {
+                  "sval":  "record"
+                }
+              }
+            ],
+            "setof":  true,
+            "typemod":  -1,
+            "location":  2135
+          },
+          "options":  [
+            {
+              "DefElem":  {
+                "defname":  "as",
+                "arg":  {
+                  "List":  {
+                    "items":  [
+                      {
+                        "String":  {
+                          "sval":  "\nBEGIN\n  RETURN QUERY SELECT id, name FROM users WHERE active = true;\nEND;\n"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  2142
+              }
+            },
+            {
+              "DefElem":  {
+                "defname":  "language",
+                "arg":  {
+                  "String":  {
+                    "sval":  "plpgsql"
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  2225
+              }
+            },
+            {
+              "DefElem":  {
+                "defname":  "volatility",
+                "arg":  {
+                  "String":  {
+                    "sval":  "stable"
+                  }
+                },
+                "defaction":  "DEFELEM_UNSPEC",
+                "location":  2242
+              }
+            }
+          ]
+        }
+      },
+      "stmt_location":  2054,
+      "stmt_len":  194
+    }
+  ]
+}

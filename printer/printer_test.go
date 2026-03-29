@@ -311,3 +311,98 @@ func TestNoPanics(t *testing.T) {
 		})
 	}
 }
+
+func TestPLpgSQLSimpleFunction(t *testing.T) {
+	got := format(t, `CREATE FUNCTION greet(name text) RETURNS text AS $$
+DECLARE result text;
+BEGIN result := 'Hello, ' || name; RETURN result; END;
+$$ LANGUAGE plpgsql;`)
+	if !strings.Contains(got, "DECLARE") {
+		t.Errorf("expected DECLARE, got: %s", got)
+	}
+	if !strings.Contains(got, "RETURN result;") {
+		t.Errorf("expected RETURN result, got: %s", got)
+	}
+	if !strings.Contains(got, "result := 'Hello, ' || name;") {
+		t.Errorf("expected assignment, got: %s", got)
+	}
+}
+
+func TestPLpgSQLIfElse(t *testing.T) {
+	got := format(t, `CREATE FUNCTION test_if(x integer) RETURNS text AS $$
+BEGIN
+  IF x > 0 THEN RETURN 'pos';
+  ELSIF x = 0 THEN RETURN 'zero';
+  ELSE RETURN 'neg';
+  END IF;
+END;
+$$ LANGUAGE plpgsql;`)
+	if !strings.Contains(got, "IF x > 0 THEN") {
+		t.Errorf("expected IF, got: %s", got)
+	}
+	if !strings.Contains(got, "ELSIF x = 0 THEN") {
+		t.Errorf("expected ELSIF, got: %s", got)
+	}
+	if !strings.Contains(got, "ELSE") {
+		t.Errorf("expected ELSE, got: %s", got)
+	}
+	if !strings.Contains(got, "END IF;") {
+		t.Errorf("expected END IF, got: %s", got)
+	}
+}
+
+func TestPLpgSQLForLoop(t *testing.T) {
+	got := format(t, `CREATE FUNCTION test_loop() RETURNS void AS $$
+DECLARE i integer;
+BEGIN
+  FOR i IN 1..10 LOOP
+    RAISE NOTICE '%', i;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;`)
+	if !strings.Contains(got, "FOR i IN 1..10 LOOP") {
+		t.Errorf("expected FOR loop, got: %s", got)
+	}
+	if !strings.Contains(got, "END LOOP;") {
+		t.Errorf("expected END LOOP, got: %s", got)
+	}
+}
+
+func TestPLpgSQLException(t *testing.T) {
+	got := format(t, `CREATE FUNCTION test_exc() RETURNS void AS $$
+BEGIN
+  RAISE EXCEPTION 'fail';
+EXCEPTION
+  WHEN others THEN
+    RAISE NOTICE 'caught';
+END;
+$$ LANGUAGE plpgsql;`)
+	if !strings.Contains(got, "EXCEPTION") {
+		t.Errorf("expected EXCEPTION, got: %s", got)
+	}
+	if !strings.Contains(got, "WHEN others THEN") {
+		t.Errorf("expected WHEN others, got: %s", got)
+	}
+}
+
+func TestPLpgSQLPerform(t *testing.T) {
+	got := format(t, `CREATE FUNCTION test_perf() RETURNS void AS $$
+BEGIN
+  PERFORM pg_notify('chan', 'msg');
+END;
+$$ LANGUAGE plpgsql;`)
+	if !strings.Contains(got, "PERFORM") || !strings.Contains(got, "pg_notify") {
+		t.Errorf("expected PERFORM with pg_notify, got: %s", got)
+	}
+}
+
+func TestPLpgSQLFallbackOnParseError(t *testing.T) {
+	// Non-plpgsql language should still emit raw body
+	got := format(t, `CREATE FUNCTION test_py() RETURNS void AS $$
+import sys
+print("hello")
+$$ LANGUAGE plpython3u;`)
+	if !strings.Contains(got, "import sys") {
+		t.Errorf("expected raw body, got: %s", got)
+	}
+}
