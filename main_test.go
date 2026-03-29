@@ -3,12 +3,28 @@ package main
 import (
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"google.golang.org/protobuf/encoding/protojson"
 )
+
+// normalizeDeparseForCompare normalizes deparsed SQL for semantic comparison:
+// - Strips $$ ... $$ function bodies (our formatter intentionally reformats them)
+// - Strips LANGUAGE and function option clauses that may be reordered
+// - Collapses whitespace
+var dollarBodyRe = regexp.MustCompile(`\$\$[\s\S]*?\$\$`)
+var funcOptionsRe = regexp.MustCompile(`\s+(LANGUAGE \w+|VOLATILE|STABLE|IMMUTABLE|STRICT|CALLED ON NULL INPUT|SECURITY DEFINER|SECURITY INVOKER|PARALLEL \w+)`)
+var multiSpaceRe = regexp.MustCompile(`\s+`)
+
+func normalizeDeparseForCompare(s string) string {
+	s = dollarBodyRe.ReplaceAllString(s, "")
+	s = funcOptionsRe.ReplaceAllString(s, "")
+	s = multiSpaceRe.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
+}
 
 func TestPrintFixtures(t *testing.T) {
 	fixtures, err := os.ReadDir("testdata/fixtures")
@@ -74,7 +90,7 @@ func TestPrintFixtures(t *testing.T) {
 			// This catches cases where the formatter silently drops clauses.
 			outputTree, err := pg_query.Parse(got)
 			if err != nil {
-				t.Logf("formatted output failed to parse for %s: %v", e.Name(), err)
+				t.Errorf("formatted output failed to parse for %s: %v", e.Name(), err)
 			} else if len(tree.Stmts) != len(outputTree.Stmts) {
 				t.Errorf("statement count mismatch for %s: input has %d, output has %d", e.Name(), len(tree.Stmts), len(outputTree.Stmts))
 			} else {
@@ -86,8 +102,8 @@ func TestPrintFixtures(t *testing.T) {
 					if err1 != nil || err2 != nil {
 						continue // skip statements that can't be deparsed
 					}
-					if inputCanonical != outputCanonical {
-						t.Logf("semantic mismatch for %s statement %d:\n--- input deparsed ---\n%s\n--- output deparsed ---\n%s", e.Name(), idx+1, inputCanonical, outputCanonical)
+					if normalizeDeparseForCompare(inputCanonical) != normalizeDeparseForCompare(outputCanonical) {
+						t.Errorf("semantic mismatch for %s statement %d:\n--- input deparsed ---\n%s\n--- output deparsed ---\n%s", e.Name(), idx+1, inputCanonical, outputCanonical)
 					}
 				}
 			}

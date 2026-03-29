@@ -4,11 +4,11 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_index_type ON event USING btre
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_created_at ON event USING btree (created_at ASC);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_data_trgm ON event USING gin (data::"text" ext.gin_trgm_ops);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_data_trgm ON event USING gin ((data::text) ext.gin_trgm_ops);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_type_trgm ON event USING gin (type ext.gin_trgm_ops);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_created_by_trgm ON event USING gin (created_by::"text" ext.gin_trgm_ops);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_created_by_trgm ON event USING gin ((created_by::text) ext.gin_trgm_ops);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_reactor_reactor ON event_reactor USING btree (reactor);
 
@@ -34,7 +34,7 @@ new_event AS (
 		event_reactor (event_id, reactor)
 	SELECT
 		id,
-		pggen.arg('reactor')::"text"
+		pggen.arg('reactor')::text
 	FROM
 		event AS e
 	WHERE
@@ -44,9 +44,9 @@ new_event AS (
 			FROM
 				event_reactor AS r
 			WHERE
-				r.reactor = pggen.arg('reactor')::"text"
+				r.reactor = pggen.arg('reactor')::text
 		))
-		AND (e.index >= lower(pggen.arg('range')::"int8range"))
+		AND (e.index >= lower(pggen.arg('range')::int8range))
 		AND (
 			upper(pggen.arg('range')) IS NULL
 			OR (e.index < upper(pggen.arg('range')))
@@ -74,7 +74,7 @@ SELECT
 FROM
 	event AS evt
 WHERE
-	(evt.index >= lower(pggen.arg('range')::"int8range"))
+	(evt.index >= lower(pggen.arg('range')::int8range))
 	AND (
 		upper(pggen.arg('range')) IS NULL
 		OR (evt.index < upper(pggen.arg('range')))

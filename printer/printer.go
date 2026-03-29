@@ -435,7 +435,6 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			switch n.IndexElem.Expr.GetNode().(type) {
 			case *pg_query.Node_FuncCall,
 				*pg_query.Node_SqlvalueFunction,
-				*pg_query.Node_TypeCast,
 				*pg_query.Node_CoalesceExpr,
 				*pg_query.Node_MinMaxExpr,
 				*pg_query.Node_XmlExpr,
@@ -799,7 +798,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 	case *pg_query.Node_ColumnDef:
-		output.Builder.WriteString(n.ColumnDef.Colname)
+		output.Builder.WriteString(quoteIdentifier(n.ColumnDef.Colname))
 		output.Builder.WriteString(" ")
 		output.writeTypeName(n.ColumnDef.TypeName)
 		for _, c := range n.ColumnDef.Constraints {
@@ -857,6 +856,14 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.writeCommaSeparatedList(n.Constraint.PkAttrs)
 				output.Builder.WriteString(")")
 			}
+			switch n.Constraint.FkMatchtype {
+			case "f":
+				output.Builder.WriteString(" MATCH FULL")
+			case "p":
+				output.Builder.WriteString(" MATCH PARTIAL")
+			}
+			output.writeFkAction("ON DELETE", n.Constraint.FkDelAction, n.Constraint.FkDelSetCols)
+			output.writeFkAction("ON UPDATE", n.Constraint.FkUpdAction, nil)
 		default:
 			fmt.Fprintf(os.Stderr, "unsupported constraint type: %s\n", n.Constraint.Contype.String())
 		}
@@ -1249,6 +1256,38 @@ func (output *Printer) writeOnConflictClause(clause *pg_query.OnConflictClause) 
 		if clause.WhereClause != nil {
 			output.Builder.WriteString(" WHERE ")
 			output.writeNode(clause.WhereClause)
+		}
+	}
+}
+
+func (output *Printer) writeFkAction(prefix string, action string, setCols []*pg_query.Node) {
+	switch action {
+	case "a", "": // NO ACTION is default, omit
+	case "r":
+		output.Builder.WriteString(" ")
+		output.Builder.WriteString(prefix)
+		output.Builder.WriteString(" RESTRICT")
+	case "c":
+		output.Builder.WriteString(" ")
+		output.Builder.WriteString(prefix)
+		output.Builder.WriteString(" CASCADE")
+	case "n":
+		output.Builder.WriteString(" ")
+		output.Builder.WriteString(prefix)
+		output.Builder.WriteString(" SET NULL")
+		if len(setCols) > 0 {
+			output.Builder.WriteString(" (")
+			output.writeCommaSeparatedList(setCols)
+			output.Builder.WriteString(")")
+		}
+	case "d":
+		output.Builder.WriteString(" ")
+		output.Builder.WriteString(prefix)
+		output.Builder.WriteString(" SET DEFAULT")
+		if len(setCols) > 0 {
+			output.Builder.WriteString(" (")
+			output.writeCommaSeparatedList(setCols)
+			output.Builder.WriteString(")")
 		}
 	}
 }
@@ -1863,5 +1902,25 @@ func quoteIdentifier(name string) string {
 	if end > -1 {
 		name = name[:end]
 	}
-	return `"` + strings.Replace(name, `"`, `""`, -1) + `"`
+	// Only quote if necessary: reserved keywords, uppercase, or special characters
+	needsQuoting := isReservedKeyword(name)
+	if !needsQuoting {
+		for _, c := range name {
+			if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+				needsQuoting = true
+				break
+			}
+		}
+	}
+	if !needsQuoting && len(name) > 0 {
+		// Must start with letter or underscore
+		c := name[0]
+		if !((c >= 'a' && c <= 'z') || c == '_') {
+			needsQuoting = true
+		}
+	}
+	if needsQuoting {
+		return `"` + strings.Replace(name, `"`, `""`, -1) + `"`
+	}
+	return name
 }
