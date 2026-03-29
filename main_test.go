@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	pg_query "github.com/pganalyze/pg_query_go/v5"
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
