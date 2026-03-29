@@ -83,9 +83,34 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeNode(n.SubLink.Testexpr)
 			output.Builder.WriteString(" ")
 			output.writeSubqueryOp(n.SubLink.OperName)
+			output.Builder.WriteString(" ALL (")
 			output.writeNode(n.SubLink.Subselect)
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_ANY_SUBLINK:
+			output.writeNode(n.SubLink.Testexpr)
+			output.Builder.WriteString(" ")
+			if len(n.SubLink.OperName) > 0 {
+				output.writeSubqueryOp(n.SubLink.OperName)
+				output.Builder.WriteString(" ANY (")
+			} else {
+				output.Builder.WriteString("IN (")
+			}
+			output.writeNode(n.SubLink.Subselect)
+			output.Builder.WriteString(")")
+		case pg_query.SubLinkType_ROWCOMPARE_SUBLINK:
+			output.writeNode(n.SubLink.Testexpr)
+			output.Builder.WriteString(" ")
+			output.writeSubqueryOp(n.SubLink.OperName)
+			output.Builder.WriteString(" (")
+			output.writeNode(n.SubLink.Subselect)
+			output.Builder.WriteString(")")
+		case pg_query.SubLinkType_MULTIEXPR_SUBLINK:
+			output.writeNode(n.SubLink.Testexpr)
+			output.Builder.WriteString(" ")
+			output.writeSubqueryOp(n.SubLink.OperName)
+			output.Builder.WriteString(" (")
+			output.writeNode(n.SubLink.Subselect)
+			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_ARRAY_SUBLINK:
 			output.Builder.WriteString("ARRAY(")
 			output.writeNode(n.SubLink.Subselect)
@@ -94,14 +119,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("(")
 			output.writeNode(n.SubLink.Subselect)
 			output.Builder.WriteString(")")
-		case pg_query.SubLinkType_ROWCOMPARE_SUBLINK:
-			fallthrough
-		case pg_query.SubLinkType_MULTIEXPR_SUBLINK:
-			fallthrough
 		case pg_query.SubLinkType_CTE_SUBLINK:
-			fallthrough
+			output.Builder.WriteString("/* UNSUPPORTED: CTE sublink */")
 		default:
-			panic("unexpected sublink type: " + n.SubLink.SubLinkType.String())
+			fmt.Fprintf(os.Stderr, "unsupported sublink type: %s\n", n.SubLink.SubLinkType.String())
 		}
 	case *pg_query.Node_NullTest:
 		output.writeNode(n.NullTest.Arg)
@@ -145,29 +166,112 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		switch n.AExpr.Kind {
 		case pg_query.A_Expr_Kind_AEXPR_OP:
 			if n.AExpr.Lexpr != nil {
-				output.Builder.WriteString("(")
-				output.writeNode(n.AExpr.Lexpr)
-				output.Builder.WriteString(")")
+				output.writeExprWithParensIfNeeded(n.AExpr.Lexpr)
+				output.Builder.WriteString(" ")
 			}
 			output.writeQualOp(n.AExpr.Name)
 			if n.AExpr.Rexpr != nil {
-				output.Builder.WriteString("(")
-				output.writeNode(n.AExpr.Rexpr)
-				output.Builder.WriteString(")")
+				output.Builder.WriteString(" ")
+				output.writeExprWithParensIfNeeded(n.AExpr.Rexpr)
 			}
 		case pg_query.A_Expr_Kind_AEXPR_OP_ANY:
+			output.writeNode(n.AExpr.Lexpr)
+			output.Builder.WriteString(" ")
+			output.writeQualOp(n.AExpr.Name)
+			output.Builder.WriteString(" ANY (")
+			output.writeNode(n.AExpr.Rexpr)
+			output.Builder.WriteString(")")
 		case pg_query.A_Expr_Kind_AEXPR_OP_ALL:
+			output.writeNode(n.AExpr.Lexpr)
+			output.Builder.WriteString(" ")
+			output.writeQualOp(n.AExpr.Name)
+			output.Builder.WriteString(" ALL (")
+			output.writeNode(n.AExpr.Rexpr)
+			output.Builder.WriteString(")")
 		case pg_query.A_Expr_Kind_AEXPR_DISTINCT:
+			output.writeNode(n.AExpr.Lexpr)
+			output.Builder.WriteString(" IS DISTINCT FROM ")
+			output.writeNode(n.AExpr.Rexpr)
 		case pg_query.A_Expr_Kind_AEXPR_NOT_DISTINCT:
+			output.writeNode(n.AExpr.Lexpr)
+			output.Builder.WriteString(" IS NOT DISTINCT FROM ")
+			output.writeNode(n.AExpr.Rexpr)
 		case pg_query.A_Expr_Kind_AEXPR_NULLIF:
+			output.Builder.WriteString("NULLIF(")
+			output.writeNode(n.AExpr.Lexpr)
+			output.Builder.WriteString(", ")
+			output.writeNode(n.AExpr.Rexpr)
+			output.Builder.WriteString(")")
 		case pg_query.A_Expr_Kind_AEXPR_IN:
+			output.writeNode(n.AExpr.Lexpr)
+			output.Builder.WriteString(" ")
+			if len(n.AExpr.Name) > 0 && n.AExpr.Name[0].GetString_().GetSval() == "<>" {
+				output.Builder.WriteString("NOT IN (")
+			} else {
+				output.Builder.WriteString("IN (")
+			}
+			if l := n.AExpr.Rexpr.GetList(); l != nil {
+				output.writeCommaSeparatedList(l.Items)
+			} else {
+				output.writeNode(n.AExpr.Rexpr)
+			}
+			output.Builder.WriteString(")")
 		case pg_query.A_Expr_Kind_AEXPR_LIKE:
+			output.writeNode(n.AExpr.Lexpr)
+			if len(n.AExpr.Name) > 0 && n.AExpr.Name[0].GetString_().GetSval() == "!~~" {
+				output.Builder.WriteString(" NOT LIKE ")
+			} else {
+				output.Builder.WriteString(" LIKE ")
+			}
+			output.writeNode(n.AExpr.Rexpr)
 		case pg_query.A_Expr_Kind_AEXPR_ILIKE:
+			output.writeNode(n.AExpr.Lexpr)
+			if len(n.AExpr.Name) > 0 && n.AExpr.Name[0].GetString_().GetSval() == "!~~*" {
+				output.Builder.WriteString(" NOT ILIKE ")
+			} else {
+				output.Builder.WriteString(" ILIKE ")
+			}
+			output.writeNode(n.AExpr.Rexpr)
 		case pg_query.A_Expr_Kind_AEXPR_SIMILAR:
+			output.writeNode(n.AExpr.Lexpr)
+			if len(n.AExpr.Name) > 0 && n.AExpr.Name[0].GetString_().GetSval() == "!~" {
+				output.Builder.WriteString(" NOT SIMILAR TO ")
+			} else {
+				output.Builder.WriteString(" SIMILAR TO ")
+			}
+			output.writeNode(n.AExpr.Rexpr)
 		case pg_query.A_Expr_Kind_AEXPR_BETWEEN:
+			output.writeNode(n.AExpr.Lexpr)
+			output.Builder.WriteString(" BETWEEN ")
+			if l := n.AExpr.Rexpr.GetList(); l != nil && len(l.Items) == 2 {
+				output.writeNode(l.Items[0])
+				output.Builder.WriteString(" AND ")
+				output.writeNode(l.Items[1])
+			}
 		case pg_query.A_Expr_Kind_AEXPR_NOT_BETWEEN:
+			output.writeNode(n.AExpr.Lexpr)
+			output.Builder.WriteString(" NOT BETWEEN ")
+			if l := n.AExpr.Rexpr.GetList(); l != nil && len(l.Items) == 2 {
+				output.writeNode(l.Items[0])
+				output.Builder.WriteString(" AND ")
+				output.writeNode(l.Items[1])
+			}
 		case pg_query.A_Expr_Kind_AEXPR_BETWEEN_SYM:
+			output.writeNode(n.AExpr.Lexpr)
+			output.Builder.WriteString(" BETWEEN SYMMETRIC ")
+			if l := n.AExpr.Rexpr.GetList(); l != nil && len(l.Items) == 2 {
+				output.writeNode(l.Items[0])
+				output.Builder.WriteString(" AND ")
+				output.writeNode(l.Items[1])
+			}
 		case pg_query.A_Expr_Kind_AEXPR_NOT_BETWEEN_SYM:
+			output.writeNode(n.AExpr.Lexpr)
+			output.Builder.WriteString(" NOT BETWEEN SYMMETRIC ")
+			if l := n.AExpr.Rexpr.GetList(); l != nil && len(l.Items) == 2 {
+				output.writeNode(l.Items[0])
+				output.Builder.WriteString(" AND ")
+				output.writeNode(l.Items[1])
+			}
 		}
 
 	case *pg_query.Node_FuncCall:
@@ -216,7 +320,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString(n.String_.Sval)
 
 	case *pg_query.Node_ColumnRef:
-		for _, f := range n.ColumnRef.Fields {
+		for i, f := range n.ColumnRef.Fields {
+			if i > 0 {
+				output.Builder.WriteString(".")
+			}
 			output.writeNode(f)
 		}
 
@@ -272,7 +379,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.Builder.WriteString(") ")
 			}
 		} else {
-			panic("invalid index elem")
+			fmt.Fprintf(os.Stderr, "invalid index elem\n")
 		}
 
 		if len(n.IndexElem.Collation) > 0 {
@@ -294,7 +401,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.SortByDir_SORTBY_DESC:
 			output.Builder.WriteString("DESC ")
 		case pg_query.SortByDir_SORTBY_USING:
-			panic("not allowed in CREATE INDEX")
+			fmt.Fprintf(os.Stderr, "SORTBY_USING not allowed in CREATE INDEX\n")
 		case pg_query.SortByDir_SORTBY_DEFAULT:
 		}
 		switch n.IndexElem.NullsOrdering {
@@ -376,6 +483,43 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeAlias(n.RangeSubselect.Alias)
 		}
 
+	case *pg_query.Node_JoinExpr:
+		output.writeNode(n.JoinExpr.Larg)
+		switch n.JoinExpr.Jointype {
+		case pg_query.JoinType_JOIN_INNER:
+			if n.JoinExpr.IsNatural {
+				output.Builder.WriteString(" NATURAL JOIN ")
+			} else if n.JoinExpr.Quals != nil {
+				output.Builder.WriteString("\n\tJOIN ")
+			} else {
+				output.Builder.WriteString("\n\tCROSS JOIN ")
+			}
+		case pg_query.JoinType_JOIN_LEFT:
+			output.Builder.WriteString("\n\tLEFT JOIN ")
+		case pg_query.JoinType_JOIN_FULL:
+			output.Builder.WriteString("\n\tFULL JOIN ")
+		case pg_query.JoinType_JOIN_RIGHT:
+			output.Builder.WriteString("\n\tRIGHT JOIN ")
+		default:
+			output.Builder.WriteString("\n\tJOIN ")
+		}
+		output.writeNode(n.JoinExpr.Rarg)
+		if n.JoinExpr.Quals != nil {
+			output.Builder.WriteString("ON ")
+			output.writeNode(n.JoinExpr.Quals)
+			output.Builder.WriteString(" ")
+		}
+		if len(n.JoinExpr.UsingClause) > 0 {
+			output.Builder.WriteString("USING (")
+			output.writeCommaSeparatedList(n.JoinExpr.UsingClause)
+			output.Builder.WriteString(") ")
+		}
+		if n.JoinExpr.Alias != nil {
+			output.Builder.WriteString("AS ")
+			output.writeAlias(n.JoinExpr.Alias)
+			output.Builder.WriteString(" ")
+		}
+
 	case *pg_query.Node_ResTarget:
 		output.writeNode(n.ResTarget.Val)
 		if n.ResTarget.Name != "" {
@@ -453,19 +597,16 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("DEFAULT VALUES ")
 		}
 
-	// TODO if (insert_stmt->onConflictClause != NULL)
-	// {
-	// 	deparseOnConflictClause(str, insert_stmt->onConflictClause);
-	// 	appendStringInfoChar(str, ' ');
-	// }
+		if n.InsertStmt.OnConflictClause != nil {
+			output.writeOnConflictClause(n.InsertStmt.OnConflictClause)
+			output.Builder.WriteString(" ")
+		}
 
-	// TODO if (list_length(insert_stmt->returningList) > 0)
-	// {
-	// 	appendStringInfoString(str, "RETURNING ");
-	// 	deparseTargetList(str, insert_stmt->returningList);
-	// }
-
-	// TODO removeTrailingSpace(str);
+		if len(n.InsertStmt.ReturningList) > 0 {
+			output.Builder.WriteString("RETURNING ")
+			output.writeCommaSeparatedList(n.InsertStmt.ReturningList)
+			output.Builder.WriteString(" ")
+		}
 
 	case *pg_query.Node_AStar:
 		output.Builder.WriteString("*")
@@ -479,23 +620,366 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeTypeName(n.TypeCast.TypeName)
 			output.Builder.WriteString(")")
 		case *pg_query.Node_AConst:
-			// TODO
-			panic("TypeCast Aconst not implemented")
+			output.writeNode(n.TypeCast.Arg)
+			output.Builder.WriteString("::")
+			output.writeTypeName(n.TypeCast.TypeName)
 		default:
 			output.writeNode(n.TypeCast.Arg)
 			output.Builder.WriteString("::")
 			output.writeTypeName(n.TypeCast.TypeName)
 		}
 
+	case *pg_query.Node_UpdateStmt:
+		if n.UpdateStmt.WithClause != nil {
+			output.writeWithClause(n.UpdateStmt.WithClause)
+		}
+		output.Builder.WriteString("UPDATE ")
+		output.writeRangeVar(n.UpdateStmt.Relation)
+		output.Builder.WriteString("\nSET\n\t")
+		for i, t := range n.UpdateStmt.TargetList {
+			rt := t.GetResTarget()
+			output.Builder.WriteString(rt.Name)
+			output.writeOptIndirection(rt.Indirection)
+			output.Builder.WriteString(" = ")
+			output.writeNode(rt.Val)
+			if i != len(n.UpdateStmt.TargetList)-1 {
+				output.Builder.WriteString(",\n\t")
+			}
+		}
+		if len(n.UpdateStmt.FromClause) > 0 {
+			output.Builder.WriteString("\nFROM\n\t")
+			output.writeCommaSeparatedList(n.UpdateStmt.FromClause)
+		}
+		if n.UpdateStmt.WhereClause != nil {
+			output.Builder.WriteString("\nWHERE\n\t")
+			output.writeNode(n.UpdateStmt.WhereClause)
+		}
+		if len(n.UpdateStmt.ReturningList) > 0 {
+			output.Builder.WriteString("\nRETURNING\n\t")
+			output.writeCommaSeparatedList(n.UpdateStmt.ReturningList)
+		}
+
+	case *pg_query.Node_DeleteStmt:
+		if n.DeleteStmt.WithClause != nil {
+			output.writeWithClause(n.DeleteStmt.WithClause)
+		}
+		output.Builder.WriteString("DELETE FROM ")
+		output.writeRangeVar(n.DeleteStmt.Relation)
+		if len(n.DeleteStmt.UsingClause) > 0 {
+			output.Builder.WriteString("\nUSING\n\t")
+			output.writeCommaSeparatedList(n.DeleteStmt.UsingClause)
+		}
+		if n.DeleteStmt.WhereClause != nil {
+			output.Builder.WriteString("\nWHERE\n\t")
+			output.writeNode(n.DeleteStmt.WhereClause)
+		}
+		if len(n.DeleteStmt.ReturningList) > 0 {
+			output.Builder.WriteString("\nRETURNING\n\t")
+			output.writeCommaSeparatedList(n.DeleteStmt.ReturningList)
+		}
+
+	case *pg_query.Node_CreateStmt:
+		output.Builder.WriteString("CREATE ")
+		if n.CreateStmt.Relation.Relpersistence == "t" {
+			output.Builder.WriteString("TEMPORARY ")
+		} else if n.CreateStmt.Relation.Relpersistence == "u" {
+			output.Builder.WriteString("UNLOGGED ")
+		}
+		output.Builder.WriteString("TABLE ")
+		if n.CreateStmt.IfNotExists {
+			output.Builder.WriteString("IF NOT EXISTS ")
+		}
+		output.writeRangeVar(n.CreateStmt.Relation)
+		output.Builder.WriteString("(\n")
+		for i, elt := range n.CreateStmt.TableElts {
+			output.Builder.WriteString("\t")
+			output.writeNode(elt)
+			if i != len(n.CreateStmt.TableElts)-1 {
+				output.Builder.WriteString(",")
+			}
+			output.Builder.WriteString("\n")
+		}
+		output.Builder.WriteString(")")
+		if len(n.CreateStmt.InhRelations) > 0 {
+			output.Builder.WriteString(" INHERITS (")
+			output.writeCommaSeparatedList(n.CreateStmt.InhRelations)
+			output.Builder.WriteString(")")
+		}
+
+	case *pg_query.Node_ColumnDef:
+		output.Builder.WriteString(n.ColumnDef.Colname)
+		output.Builder.WriteString(" ")
+		output.writeTypeName(n.ColumnDef.TypeName)
+		for _, c := range n.ColumnDef.Constraints {
+			output.Builder.WriteString(" ")
+			output.writeNode(c)
+		}
+
+	case *pg_query.Node_Constraint:
+		switch n.Constraint.Contype {
+		case pg_query.ConstrType_CONSTR_NULL:
+			output.Builder.WriteString("NULL")
+		case pg_query.ConstrType_CONSTR_NOTNULL:
+			output.Builder.WriteString("NOT NULL")
+		case pg_query.ConstrType_CONSTR_DEFAULT:
+			output.Builder.WriteString("DEFAULT ")
+			output.writeNode(n.Constraint.RawExpr)
+		case pg_query.ConstrType_CONSTR_CHECK:
+			output.Builder.WriteString("CHECK (")
+			output.writeNode(n.Constraint.RawExpr)
+			output.Builder.WriteString(")")
+		case pg_query.ConstrType_CONSTR_PRIMARY:
+			if n.Constraint.Conname != "" {
+				output.Builder.WriteString("CONSTRAINT ")
+				output.Builder.WriteString(n.Constraint.Conname)
+				output.Builder.WriteString(" ")
+			}
+			output.Builder.WriteString("PRIMARY KEY")
+			if len(n.Constraint.Keys) > 0 {
+				output.Builder.WriteString(" (")
+				output.writeCommaSeparatedList(n.Constraint.Keys)
+				output.Builder.WriteString(")")
+			}
+		case pg_query.ConstrType_CONSTR_UNIQUE:
+			if n.Constraint.Conname != "" {
+				output.Builder.WriteString("CONSTRAINT ")
+				output.Builder.WriteString(n.Constraint.Conname)
+				output.Builder.WriteString(" ")
+			}
+			output.Builder.WriteString("UNIQUE")
+			if len(n.Constraint.Keys) > 0 {
+				output.Builder.WriteString(" (")
+				output.writeCommaSeparatedList(n.Constraint.Keys)
+				output.Builder.WriteString(")")
+			}
+		case pg_query.ConstrType_CONSTR_FOREIGN:
+			if n.Constraint.Conname != "" {
+				output.Builder.WriteString("CONSTRAINT ")
+				output.Builder.WriteString(n.Constraint.Conname)
+				output.Builder.WriteString(" ")
+			}
+			output.Builder.WriteString("REFERENCES ")
+			output.writeRangeVar(n.Constraint.Pktable)
+			if len(n.Constraint.PkAttrs) > 0 {
+				output.Builder.WriteString("(")
+				output.writeCommaSeparatedList(n.Constraint.PkAttrs)
+				output.Builder.WriteString(")")
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "unsupported constraint type: %s\n", n.Constraint.Contype.String())
+		}
+
+	case *pg_query.Node_AlterTableStmt:
+		output.Builder.WriteString("ALTER TABLE ")
+		if n.AlterTableStmt.MissingOk {
+			output.Builder.WriteString("IF EXISTS ")
+		}
+		output.writeRangeVar(n.AlterTableStmt.Relation)
+		for i, cmd := range n.AlterTableStmt.Cmds {
+			if i > 0 {
+				output.Builder.WriteString(",")
+			}
+			output.Builder.WriteString("\n\t")
+			output.writeNode(cmd)
+		}
+
+	case *pg_query.Node_AlterTableCmd:
+		switch n.AlterTableCmd.Subtype {
+		case pg_query.AlterTableType_AT_AddColumn:
+			output.Builder.WriteString("ADD COLUMN ")
+			if n.AlterTableCmd.MissingOk {
+				output.Builder.WriteString("IF NOT EXISTS ")
+			}
+			output.writeNode(n.AlterTableCmd.Def)
+		case pg_query.AlterTableType_AT_DropColumn:
+			output.Builder.WriteString("DROP COLUMN ")
+			if n.AlterTableCmd.MissingOk {
+				output.Builder.WriteString("IF EXISTS ")
+			}
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_AlterColumnType:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(" TYPE ")
+			if def := n.AlterTableCmd.Def; def != nil {
+				if cd := def.GetColumnDef(); cd != nil {
+					output.writeTypeName(cd.TypeName)
+				}
+			}
+		case pg_query.AlterTableType_AT_ColumnDefault:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+			if n.AlterTableCmd.Def != nil {
+				output.Builder.WriteString(" SET DEFAULT ")
+				output.writeNode(n.AlterTableCmd.Def)
+			} else {
+				output.Builder.WriteString(" DROP DEFAULT")
+			}
+		case pg_query.AlterTableType_AT_SetNotNull:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(" SET NOT NULL")
+		case pg_query.AlterTableType_AT_DropNotNull:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(" DROP NOT NULL")
+		case pg_query.AlterTableType_AT_AddConstraint:
+			output.Builder.WriteString("ADD ")
+			output.writeNode(n.AlterTableCmd.Def)
+		case pg_query.AlterTableType_AT_DropConstraint:
+			output.Builder.WriteString("DROP CONSTRAINT ")
+			if n.AlterTableCmd.MissingOk {
+				output.Builder.WriteString("IF EXISTS ")
+			}
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_AddIndex:
+			output.Builder.WriteString("ADD INDEX ")
+			output.writeNode(n.AlterTableCmd.Def)
+		case pg_query.AlterTableType_AT_ChangeOwner:
+			output.Builder.WriteString("OWNER TO ")
+			output.writeNode(n.AlterTableCmd.Def)
+		default:
+			fmt.Fprintf(os.Stderr, "unsupported alter table cmd: %s\n", n.AlterTableCmd.Subtype.String())
+		}
+
+	case *pg_query.Node_DropStmt:
+		output.Builder.WriteString("DROP ")
+		switch n.DropStmt.RemoveType {
+		case pg_query.ObjectType_OBJECT_TABLE:
+			output.Builder.WriteString("TABLE ")
+		case pg_query.ObjectType_OBJECT_INDEX:
+			output.Builder.WriteString("INDEX ")
+		case pg_query.ObjectType_OBJECT_SEQUENCE:
+			output.Builder.WriteString("SEQUENCE ")
+		case pg_query.ObjectType_OBJECT_VIEW:
+			output.Builder.WriteString("VIEW ")
+		case pg_query.ObjectType_OBJECT_MATVIEW:
+			output.Builder.WriteString("MATERIALIZED VIEW ")
+		case pg_query.ObjectType_OBJECT_TYPE:
+			output.Builder.WriteString("TYPE ")
+		case pg_query.ObjectType_OBJECT_SCHEMA:
+			output.Builder.WriteString("SCHEMA ")
+		case pg_query.ObjectType_OBJECT_FUNCTION:
+			output.Builder.WriteString("FUNCTION ")
+		case pg_query.ObjectType_OBJECT_PROCEDURE:
+			output.Builder.WriteString("PROCEDURE ")
+		case pg_query.ObjectType_OBJECT_TRIGGER:
+			output.Builder.WriteString("TRIGGER ")
+		case pg_query.ObjectType_OBJECT_EXTENSION:
+			output.Builder.WriteString("EXTENSION ")
+		case pg_query.ObjectType_OBJECT_DOMAIN:
+			output.Builder.WriteString("DOMAIN ")
+		default:
+			fmt.Fprintf(os.Stderr, "unsupported drop type: %s\n", n.DropStmt.RemoveType.String())
+		}
+		if n.DropStmt.MissingOk {
+			output.Builder.WriteString("IF EXISTS ")
+		}
+		for i, obj := range n.DropStmt.Objects {
+			if l := obj.GetList(); l != nil {
+				output.writeListWithSeparator(l.Items, ".")
+			} else {
+				output.writeNode(obj)
+			}
+			if i != len(n.DropStmt.Objects)-1 {
+				output.Builder.WriteString(", ")
+			}
+		}
+		switch n.DropStmt.Behavior {
+		case pg_query.DropBehavior_DROP_CASCADE:
+			output.Builder.WriteString(" CASCADE")
+		case pg_query.DropBehavior_DROP_RESTRICT:
+			// default, no need to print
+		}
+
+	case *pg_query.Node_TransactionStmt:
+		switch n.TransactionStmt.Kind {
+		case pg_query.TransactionStmtKind_TRANS_STMT_BEGIN:
+			output.Builder.WriteString("BEGIN")
+		case pg_query.TransactionStmtKind_TRANS_STMT_COMMIT:
+			output.Builder.WriteString("COMMIT")
+		case pg_query.TransactionStmtKind_TRANS_STMT_ROLLBACK:
+			output.Builder.WriteString("ROLLBACK")
+		case pg_query.TransactionStmtKind_TRANS_STMT_SAVEPOINT:
+			output.Builder.WriteString("SAVEPOINT ")
+			for _, opt := range n.TransactionStmt.Options {
+				if s := opt.GetDefElem(); s != nil && s.Defname == "savepoint_name" {
+					output.Builder.WriteString(s.Arg.GetString_().GetSval())
+				}
+			}
+		case pg_query.TransactionStmtKind_TRANS_STMT_RELEASE:
+			output.Builder.WriteString("RELEASE SAVEPOINT ")
+			for _, opt := range n.TransactionStmt.Options {
+				if s := opt.GetDefElem(); s != nil && s.Defname == "savepoint_name" {
+					output.Builder.WriteString(s.Arg.GetString_().GetSval())
+				}
+			}
+		case pg_query.TransactionStmtKind_TRANS_STMT_ROLLBACK_TO:
+			output.Builder.WriteString("ROLLBACK TO SAVEPOINT ")
+			for _, opt := range n.TransactionStmt.Options {
+				if s := opt.GetDefElem(); s != nil && s.Defname == "savepoint_name" {
+					output.Builder.WriteString(s.Arg.GetString_().GetSval())
+				}
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "unsupported transaction kind: %s\n", n.TransactionStmt.Kind.String())
+		}
+
+	case *pg_query.Node_DefElem:
+		output.Builder.WriteString(n.DefElem.Defname)
+		if n.DefElem.Arg != nil {
+			output.Builder.WriteString(" = ")
+			output.writeNode(n.DefElem.Arg)
+		}
+
 	case nil:
 		// nothing
 
 	default:
-		// if l, ok := node.GetNode()..(interface{ GetLocation() int32 }); ok {
-		// 	fmt.Fprintf(os.Stderr, "unexpected node (at %d): %T\n", l.GetLocation(), n)
-		// } else {
 		fmt.Fprintf(os.Stderr, "unexpected node: %T\n", n)
-		// }
+	}
+}
+
+func (output *Printer) writeExprWithParensIfNeeded(node *pg_query.Node) {
+	switch node.GetNode().(type) {
+	case *pg_query.Node_AExpr, *pg_query.Node_BoolExpr:
+		output.Builder.WriteString("(")
+		output.writeNode(node)
+		output.Builder.WriteString(")")
+	default:
+		output.writeNode(node)
+	}
+}
+
+func (output *Printer) writeOnConflictClause(clause *pg_query.OnConflictClause) {
+	output.Builder.WriteString("ON CONFLICT ")
+	if clause.Infer != nil {
+		if len(clause.Infer.IndexElems) > 0 {
+			output.Builder.WriteString("(")
+			output.writeCommaSeparatedList(clause.Infer.IndexElems)
+			output.Builder.WriteString(") ")
+		}
+		if clause.Infer.Conname != "" {
+			output.Builder.WriteString("ON CONSTRAINT ")
+			output.Builder.WriteString(clause.Infer.Conname)
+			output.Builder.WriteString(" ")
+		}
+		if clause.Infer.WhereClause != nil {
+			output.Builder.WriteString("WHERE ")
+			output.writeNode(clause.Infer.WhereClause)
+			output.Builder.WriteString(" ")
+		}
+	}
+	switch clause.Action {
+	case pg_query.OnConflictAction_ONCONFLICT_NOTHING:
+		output.Builder.WriteString("DO NOTHING")
+	case pg_query.OnConflictAction_ONCONFLICT_UPDATE:
+		output.Builder.WriteString("DO UPDATE SET ")
+		output.writeCommaSeparatedList(clause.TargetList)
+		if clause.WhereClause != nil {
+			output.Builder.WriteString(" WHERE ")
+			output.writeNode(clause.WhereClause)
+		}
 	}
 }
 
@@ -565,7 +1049,7 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 					output.Builder.WriteString(" minute to second")
 				case 0x7FFF: // INTERVAL_FULL_RANGE
 				default:
-					panic("invalid interval fields: " + strconv.Itoa(int(fields)))
+					fmt.Fprintf(os.Stderr, "invalid interval fields: %d\n", fields)
 				}
 
 				if len(stmt.Typmods) == 2 {
@@ -661,26 +1145,32 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 	case pg_query.SetOperation_SETOP_NONE:
 		if stmt.ValuesLists != nil {
 			output.Builder.WriteString("VALUES ")
-			if len(stmt.ValuesLists) > 0 {
-				output.Builder.WriteString("ON (")
-				output.writeCommaSeparatedList(stmt.ValuesLists)
+			for i, v := range stmt.ValuesLists {
+				output.Builder.WriteString("(")
+				if l := v.GetList(); l != nil {
+					output.writeCommaSeparatedList(l.Items)
+				} else {
+					output.writeNode(v)
+				}
 				output.Builder.WriteString(")")
-			}
-		}
-
-		output.Builder.WriteString("SELECT\n\t")
-		for i, t := range stmt.TargetList {
-			if stmt.DistinctClause != nil {
-				output.Builder.WriteString("DISTINCT ")
-				if len(stmt.DistinctClause) > 0 {
-					output.Builder.WriteString("ON (")
-					for _, dn := range stmt.DistinctClause {
-						output.writeNode(dn)
-					}
-					output.Builder.WriteString(")")
+				if i != len(stmt.ValuesLists)-1 {
+					output.Builder.WriteString(", ")
 				}
 			}
+			return
+		}
 
+		output.Builder.WriteString("SELECT ")
+		if stmt.DistinctClause != nil {
+			output.Builder.WriteString("DISTINCT ")
+			if len(stmt.DistinctClause) > 0 {
+				output.Builder.WriteString("ON (")
+				output.writeCommaSeparatedList(stmt.DistinctClause)
+				output.Builder.WriteString(") ")
+			}
+		}
+		output.Builder.WriteString("\n\t")
+		for i, t := range stmt.TargetList {
 			output.writeNode(t)
 			if i != len(stmt.TargetList)-1 {
 				output.Builder.WriteString(",\n\t")
@@ -689,13 +1179,15 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 		output.Builder.WriteString(" ")
 
 		if stmt.IntoClause != nil {
-			// TODO INTO
-			panic("SELECT INTO not implemented")
+			output.Builder.WriteString("\nINTO ")
+			if stmt.IntoClause.Rel != nil {
+				output.writeRangeVar(stmt.IntoClause.Rel)
+			}
 		}
 
 		if len(stmt.FromClause) > 0 {
 			output.Builder.WriteString("\nFROM\n\t")
-			output.writeListWithSeparator(stmt.FromClause, "")
+			output.writeListWithSeparator(stmt.FromClause, ", ")
 			output.Builder.WriteString(" ")
 		}
 		if stmt.WhereClause != nil {
@@ -734,7 +1226,7 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 		case pg_query.SetOperation_SETOP_EXCEPT:
 			output.Builder.WriteString(" EXCEPT ")
 		default:
-			panic("op")
+			fmt.Fprintf(os.Stderr, "unexpected set operation\n")
 		}
 
 		if stmt.All {
@@ -832,7 +1324,7 @@ func (output *Printer) writeOptIndirection(l []*pg_query.Node) {
 			}
 			output.Builder.WriteString("]")
 		} else {
-			panic("invalid indirection type")
+			fmt.Fprintf(os.Stderr, "invalid indirection type\n")
 		}
 		output.writeNode(dn)
 	}
@@ -864,7 +1356,7 @@ func (output *Printer) writeAnyOperator(l []*pg_query.Node) {
 	} else if len(l) == 1 {
 		output.Builder.WriteString(l[0].String())
 	} else {
-		panic("unexpected operator")
+		fmt.Fprintf(os.Stderr, "unexpected operator\n")
 	}
 }
 
