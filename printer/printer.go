@@ -1086,6 +1086,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.Builder.WriteString("\nAS $$")
 				output.formatSQLBody(asBody, 1)
 				output.Builder.WriteString("\n$$")
+			} else if strings.EqualFold(lang, "plpgsql") {
+				output.Builder.WriteString("\nAS $$")
+				output.formatPLpgSQLBody(asBody, 0)
+				output.Builder.WriteString("\n$$")
 			} else {
 				output.Builder.WriteString("\nAS $$\n")
 				output.Builder.WriteString(asBody)
