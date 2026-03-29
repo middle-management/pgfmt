@@ -1,1594 +1,1594 @@
 {
-  "version":  170000,
-  "stmts":  [
+  "version": 170007,
+  "stmts": [
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "name":  "names",
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "name": "names",
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "string_agg"
+                        "String": {
+                          "sval": "string_agg"
                         }
                       }
                     ],
-                    "args":  [
+                    "args": [
                       {
-                        "ColumnRef":  {
-                          "fields":  [
+                        "ColumnRef": {
+                          "fields": [
                             {
-                              "String":  {
-                                "sval":  "name"
+                              "String": {
+                                "sval": "name"
                               }
                             }
                           ],
-                          "location":  40
+                          "location": 40
                         }
                       },
                       {
-                        "A_Const":  {
-                          "sval":  {
-                            "sval":  ", "
+                        "A_Const": {
+                          "sval": {
+                            "sval": ", "
                           },
-                          "location":  46
+                          "location": 46
                         }
                       }
                     ],
-                    "agg_order":  [
+                    "agg_order": [
                       {
-                        "SortBy":  {
-                          "node":  {
-                            "ColumnRef":  {
-                              "fields":  [
+                        "SortBy": {
+                          "node": {
+                            "ColumnRef": {
+                              "fields": [
                                 {
-                                  "String":  {
-                                    "sval":  "name"
+                                  "String": {
+                                    "sval": "name"
                                   }
                                 }
                               ],
-                              "location":  60
+                              "location": 60
                             }
                           },
-                          "sortby_dir":  "SORTBY_ASC",
-                          "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
-                          "location":  -1
+                          "sortby_dir": "SORTBY_ASC",
+                          "sortby_nulls": "SORTBY_NULLS_DEFAULT",
+                          "location": -1
                         }
                       }
                     ],
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  29
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 29
                   }
                 },
-                "location":  29
+                "location": 29
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "users",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  84
+              "RangeVar": {
+                "relname": "users",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 84
               }
             }
           ],
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "op":  "SETOP_NONE"
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_len":  89
+      "stmt_len": 89
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "name":  "active_count",
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "name": "active_count",
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "count"
+                        "String": {
+                          "sval": "count"
                         }
                       }
                     ],
-                    "agg_filter":  {
-                      "A_Expr":  {
-                        "kind":  "AEXPR_OP",
-                        "name":  [
+                    "agg_filter": {
+                      "A_Expr": {
+                        "kind": "AEXPR_OP",
+                        "name": [
                           {
-                            "String":  {
-                              "sval":  "="
+                            "String": {
+                              "sval": "="
                             }
                           }
                         ],
-                        "lexpr":  {
-                          "ColumnRef":  {
-                            "fields":  [
+                        "lexpr": {
+                          "ColumnRef": {
+                            "fields": [
                               {
-                                "String":  {
-                                  "sval":  "status"
+                                "String": {
+                                  "sval": "status"
                                 }
                               }
                             ],
-                            "location":  142
+                            "location": 142
                           }
                         },
-                        "rexpr":  {
-                          "A_Const":  {
-                            "sval":  {
-                              "sval":  "active"
+                        "rexpr": {
+                          "A_Const": {
+                            "sval": {
+                              "sval": "active"
                             },
-                            "location":  151
+                            "location": 151
                           }
                         },
-                        "location":  149
+                        "location": 149
                       }
                     },
-                    "agg_star":  true,
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  119
+                    "agg_star": true,
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 119
                   }
                 },
-                "location":  119
+                "location": 119
               }
             },
             {
-              "ResTarget":  {
-                "name":  "inactive_count",
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "name": "inactive_count",
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "count"
+                        "String": {
+                          "sval": "count"
                         }
                       }
                     ],
-                    "agg_filter":  {
-                      "A_Expr":  {
-                        "kind":  "AEXPR_OP",
-                        "name":  [
+                    "agg_filter": {
+                      "A_Expr": {
+                        "kind": "AEXPR_OP",
+                        "name": [
                           {
-                            "String":  {
-                              "sval":  "="
+                            "String": {
+                              "sval": "="
                             }
                           }
                         ],
-                        "lexpr":  {
-                          "ColumnRef":  {
-                            "fields":  [
+                        "lexpr": {
+                          "ColumnRef": {
+                            "fields": [
                               {
-                                "String":  {
-                                  "sval":  "status"
+                                "String": {
+                                  "sval": "status"
                                 }
                               }
                             ],
-                            "location":  201
+                            "location": 201
                           }
                         },
-                        "rexpr":  {
-                          "A_Const":  {
-                            "sval":  {
-                              "sval":  "inactive"
+                        "rexpr": {
+                          "A_Const": {
+                            "sval": {
+                              "sval": "inactive"
                             },
-                            "location":  210
+                            "location": 210
                           }
                         },
-                        "location":  208
+                        "location": 208
                       }
                     },
-                    "agg_star":  true,
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  178
+                    "agg_star": true,
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 178
                   }
                 },
-                "location":  178
+                "location": 178
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "users",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  245
+              "RangeVar": {
+                "relname": "users",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 245
               }
             }
           ],
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "op":  "SETOP_NONE"
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  90,
-      "stmt_len":  160
+      "stmt_location": 90,
+      "stmt_len": 160
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "department"
+                        "String": {
+                          "sval": "department"
                         }
                       }
                     ],
-                    "location":  300
+                    "location": 300
                   }
                 },
-                "location":  300
+                "location": 300
               }
             },
             {
-              "ResTarget":  {
-                "name":  "median_salary",
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "name": "median_salary",
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "percentile_cont"
+                        "String": {
+                          "sval": "percentile_cont"
                         }
                       }
                     ],
-                    "args":  [
+                    "args": [
                       {
-                        "A_Const":  {
-                          "fval":  {
-                            "fval":  "0.5"
+                        "A_Const": {
+                          "fval": {
+                            "fval": "0.5"
                           },
-                          "location":  328
+                          "location": 328
                         }
                       }
                     ],
-                    "agg_order":  [
+                    "agg_order": [
                       {
-                        "SortBy":  {
-                          "node":  {
-                            "ColumnRef":  {
-                              "fields":  [
+                        "SortBy": {
+                          "node": {
+                            "ColumnRef": {
+                              "fields": [
                                 {
-                                  "String":  {
-                                    "sval":  "salary"
+                                  "String": {
+                                    "sval": "salary"
                                   }
                                 }
                               ],
-                              "location":  356
+                              "location": 356
                             }
                           },
-                          "sortby_dir":  "SORTBY_DESC",
-                          "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
-                          "location":  -1
+                          "sortby_dir": "SORTBY_DESC",
+                          "sortby_nulls": "SORTBY_NULLS_DEFAULT",
+                          "location": -1
                         }
                       }
                     ],
-                    "agg_within_group":  true,
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  312
+                    "agg_within_group": true,
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 312
                   }
                 },
-                "location":  312
+                "location": 312
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "employees",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  391
+              "RangeVar": {
+                "relname": "employees",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 391
               }
             }
           ],
-          "groupClause":  [
+          "groupClause": [
             {
-              "ColumnRef":  {
-                "fields":  [
+              "ColumnRef": {
+                "fields": [
                   {
-                    "String":  {
-                      "sval":  "department"
+                    "String": {
+                      "sval": "department"
                     }
                   }
                 ],
-                "location":  410
+                "location": 410
               }
             }
           ],
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "op":  "SETOP_NONE"
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  251,
-      "stmt_len":  169
+      "stmt_location": 251,
+      "stmt_len": 169
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "id"
+                        "String": {
+                          "sval": "id"
                         }
                       }
                     ],
-                    "location":  459
+                    "location": 459
                   }
                 },
-                "location":  459
+                "location": 459
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "name"
+                        "String": {
+                          "sval": "name"
                         }
                       }
                     ],
-                    "location":  463
+                    "location": 463
                   }
                 },
-                "location":  463
+                "location": 463
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "salary"
+                        "String": {
+                          "sval": "salary"
                         }
                       }
                     ],
-                    "location":  469
+                    "location": 469
                   }
                 },
-                "location":  469
+                "location": 469
               }
             },
             {
-              "ResTarget":  {
-                "name":  "dept_rank",
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "name": "dept_rank",
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "rank"
+                        "String": {
+                          "sval": "rank"
                         }
                       }
                     ],
-                    "over":  {
-                      "partitionClause":  [
+                    "over": {
+                      "partitionClause": [
                         {
-                          "ColumnRef":  {
-                            "fields":  [
+                          "ColumnRef": {
+                            "fields": [
                               {
-                                "String":  {
-                                  "sval":  "department"
+                                "String": {
+                                  "sval": "department"
                                 }
                               }
                             ],
-                            "location":  503
+                            "location": 503
                           }
                         }
                       ],
-                      "orderClause":  [
+                      "orderClause": [
                         {
-                          "SortBy":  {
-                            "node":  {
-                              "ColumnRef":  {
-                                "fields":  [
+                          "SortBy": {
+                            "node": {
+                              "ColumnRef": {
+                                "fields": [
                                   {
-                                    "String":  {
-                                      "sval":  "salary"
+                                    "String": {
+                                      "sval": "salary"
                                     }
                                   }
                                 ],
-                                "location":  523
+                                "location": 523
                               }
                             },
-                            "sortby_dir":  "SORTBY_DESC",
-                            "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
-                            "location":  -1
+                            "sortby_dir": "SORTBY_DESC",
+                            "sortby_nulls": "SORTBY_NULLS_DEFAULT",
+                            "location": -1
                           }
                         }
                       ],
-                      "frameOptions":  1058,
-                      "location":  489
+                      "frameOptions": 1058,
+                      "location": 489
                     },
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  477
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 477
                   }
                 },
-                "location":  477
+                "location": 477
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "employees",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  554
+              "RangeVar": {
+                "relname": "employees",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 554
               }
             }
           ],
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "op":  "SETOP_NONE"
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  421,
-      "stmt_len":  142
+      "stmt_location": 421,
+      "stmt_len": 142
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "id"
+                        "String": {
+                          "sval": "id"
                         }
                       }
                     ],
-                    "location":  599
+                    "location": 599
                   }
                 },
-                "location":  599
+                "location": 599
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "sum"
+                        "String": {
+                          "sval": "sum"
                         }
                       }
                     ],
-                    "args":  [
+                    "args": [
                       {
-                        "ColumnRef":  {
-                          "fields":  [
+                        "ColumnRef": {
+                          "fields": [
                             {
-                              "String":  {
-                                "sval":  "amount"
+                              "String": {
+                                "sval": "amount"
                               }
                             }
                           ],
-                          "location":  607
+                          "location": 607
                         }
                       }
                     ],
-                    "over":  {
-                      "name":  "w",
-                      "frameOptions":  1058,
-                      "location":  620
+                    "over": {
+                      "name": "w",
+                      "frameOptions": 1058,
+                      "location": 620
                     },
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  603
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 603
                   }
                 },
-                "location":  603
+                "location": 603
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "avg"
+                        "String": {
+                          "sval": "avg"
                         }
                       }
                     ],
-                    "args":  [
+                    "args": [
                       {
-                        "ColumnRef":  {
-                          "fields":  [
+                        "ColumnRef": {
+                          "fields": [
                             {
-                              "String":  {
-                                "sval":  "amount"
+                              "String": {
+                                "sval": "amount"
                               }
                             }
                           ],
-                          "location":  627
+                          "location": 627
                         }
                       }
                     ],
-                    "over":  {
-                      "name":  "w",
-                      "frameOptions":  1058,
-                      "location":  640
+                    "over": {
+                      "name": "w",
+                      "frameOptions": 1058,
+                      "location": 640
                     },
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  623
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 623
                   }
                 },
-                "location":  623
+                "location": 623
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "orders",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  647
+              "RangeVar": {
+                "relname": "orders",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 647
               }
             }
           ],
-          "windowClause":  [
+          "windowClause": [
             {
-              "WindowDef":  {
-                "name":  "w",
-                "partitionClause":  [
+              "WindowDef": {
+                "name": "w",
+                "partitionClause": [
                   {
-                    "ColumnRef":  {
-                      "fields":  [
+                    "ColumnRef": {
+                      "fields": [
                         {
-                          "String":  {
-                            "sval":  "customer_id"
+                          "String": {
+                            "sval": "customer_id"
                           }
                         }
                       ],
-                      "location":  680
+                      "location": 680
                     }
                   }
                 ],
-                "orderClause":  [
+                "orderClause": [
                   {
-                    "SortBy":  {
-                      "node":  {
-                        "ColumnRef":  {
-                          "fields":  [
+                    "SortBy": {
+                      "node": {
+                        "ColumnRef": {
+                          "fields": [
                             {
-                              "String":  {
-                                "sval":  "created_at"
+                              "String": {
+                                "sval": "created_at"
                               }
                             }
                           ],
-                          "location":  701
+                          "location": 701
                         }
                       },
-                      "sortby_dir":  "SORTBY_DEFAULT",
-                      "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
-                      "location":  -1
+                      "sortby_dir": "SORTBY_DEFAULT",
+                      "sortby_nulls": "SORTBY_NULLS_DEFAULT",
+                      "location": -1
                     }
                   }
                 ],
-                "frameOptions":  1058,
-                "location":  666
+                "frameOptions": 1058,
+                "location": 666
               }
             }
           ],
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "op":  "SETOP_NONE"
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  564,
-      "stmt_len":  148
+      "stmt_location": 564,
+      "stmt_len": 148
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "id"
+                        "String": {
+                          "sval": "id"
                         }
                       }
                     ],
-                    "location":  765
+                    "location": 765
                   }
                 },
-                "location":  765
+                "location": 765
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "amount"
+                        "String": {
+                          "sval": "amount"
                         }
                       }
                     ],
-                    "location":  769
+                    "location": 769
                   }
                 },
-                "location":  769
+                "location": 769
               }
             },
             {
-              "ResTarget":  {
-                "name":  "rolling_sum",
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "name": "rolling_sum",
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "sum"
+                        "String": {
+                          "sval": "sum"
                         }
                       }
                     ],
-                    "args":  [
+                    "args": [
                       {
-                        "ColumnRef":  {
-                          "fields":  [
+                        "ColumnRef": {
+                          "fields": [
                             {
-                              "String":  {
-                                "sval":  "amount"
+                              "String": {
+                                "sval": "amount"
                               }
                             }
                           ],
-                          "location":  781
+                          "location": 781
                         }
                       }
                     ],
-                    "over":  {
-                      "orderClause":  [
+                    "over": {
+                      "orderClause": [
                         {
-                          "SortBy":  {
-                            "node":  {
-                              "ColumnRef":  {
-                                "fields":  [
+                          "SortBy": {
+                            "node": {
+                              "ColumnRef": {
+                                "fields": [
                                   {
-                                    "String":  {
-                                      "sval":  "id"
+                                    "String": {
+                                      "sval": "id"
                                     }
                                   }
                                 ],
-                                "location":  804
+                                "location": 804
                               }
                             },
-                            "sortby_dir":  "SORTBY_DEFAULT",
-                            "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
-                            "location":  -1
+                            "sortby_dir": "SORTBY_DEFAULT",
+                            "sortby_nulls": "SORTBY_NULLS_DEFAULT",
+                            "location": -1
                           }
                         }
                       ],
-                      "frameOptions":  3093,
-                      "startOffset":  {
-                        "A_Const":  {
-                          "ival":  {
-                            "ival":  2
+                      "frameOptions": 3093,
+                      "startOffset": {
+                        "A_Const": {
+                          "ival": {
+                            "ival": 2
                           },
-                          "location":  820
+                          "location": 820
                         }
                       },
-                      "location":  794
+                      "location": 794
                     },
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  777
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 777
                   }
                 },
-                "location":  777
+                "location": 777
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "orders",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  869
+              "RangeVar": {
+                "relname": "orders",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 869
               }
             }
           ],
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "op":  "SETOP_NONE"
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  713,
-      "stmt_len":  162
+      "stmt_location": 713,
+      "stmt_len": 162
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "id"
+                        "String": {
+                          "sval": "id"
                         }
                       }
                     ],
-                    "location":  918
+                    "location": 918
                   }
                 },
-                "location":  918
+                "location": 918
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "ts"
+                        "String": {
+                          "sval": "ts"
                         }
                       }
                     ],
-                    "location":  922
+                    "location": 922
                   }
                 },
-                "location":  922
+                "location": 922
               }
             },
             {
-              "ResTarget":  {
-                "name":  "running_count",
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "name": "running_count",
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "count"
+                        "String": {
+                          "sval": "count"
                         }
                       }
                     ],
-                    "over":  {
-                      "orderClause":  [
+                    "over": {
+                      "orderClause": [
                         {
-                          "SortBy":  {
-                            "node":  {
-                              "ColumnRef":  {
-                                "fields":  [
+                          "SortBy": {
+                            "node": {
+                              "ColumnRef": {
+                                "fields": [
                                   {
-                                    "String":  {
-                                      "sval":  "ts"
+                                    "String": {
+                                      "sval": "ts"
                                     }
                                   }
                                 ],
-                                "location":  950
+                                "location": 950
                               }
                             },
-                            "sortby_dir":  "SORTBY_DEFAULT",
-                            "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
-                            "location":  -1
+                            "sortby_dir": "SORTBY_DEFAULT",
+                            "sortby_nulls": "SORTBY_NULLS_DEFAULT",
+                            "location": -1
                           }
                         }
                       ],
-                      "frameOptions":  132147,
-                      "location":  940
+                      "frameOptions": 132147,
+                      "location": 940
                     },
-                    "agg_star":  true,
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  926
+                    "agg_star": true,
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 926
                   }
                 },
-                "location":  926
+                "location": 926
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "events",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  1039
+              "RangeVar": {
+                "relname": "events",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 1039
               }
             }
           ],
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "op":  "SETOP_NONE"
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  876,
-      "stmt_len":  169
+      "stmt_location": 876,
+      "stmt_len": 169
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "x"
+                        "String": {
+                          "sval": "x"
                         }
                       }
                     ],
-                    "location":  1076
+                    "location": 1076
                   }
                 },
-                "location":  1076
+                "location": 1076
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "count"
+                        "String": {
+                          "sval": "count"
                         }
                       }
                     ],
-                    "agg_star":  true,
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  1079
+                    "agg_star": true,
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 1079
                   }
                 },
-                "location":  1079
+                "location": 1079
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "t",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  1093
+              "RangeVar": {
+                "relname": "t",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 1093
               }
             }
           ],
-          "groupClause":  [
+          "groupClause": [
             {
-              "ColumnRef":  {
-                "fields":  [
+              "ColumnRef": {
+                "fields": [
                   {
-                    "String":  {
-                      "sval":  "x"
+                    "String": {
+                      "sval": "x"
                     }
                   }
                 ],
-                "location":  1113
+                "location": 1113
               }
             }
           ],
-          "groupDistinct":  true,
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "op":  "SETOP_NONE"
+          "groupDistinct": true,
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  1046,
-      "stmt_len":  68
+      "stmt_location": 1046,
+      "stmt_len": 68
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "id"
+                        "String": {
+                          "sval": "id"
                         }
                       }
                     ],
-                    "location":  1138
+                    "location": 1138
                   }
                 },
-                "location":  1138
+                "location": 1138
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "name"
+                        "String": {
+                          "sval": "name"
                         }
                       }
                     ],
-                    "location":  1142
+                    "location": 1142
                   }
                 },
-                "location":  1142
+                "location": 1142
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "users",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  1152
+              "RangeVar": {
+                "relname": "users",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 1152
               }
             }
           ],
-          "whereClause":  {
-            "A_Expr":  {
-              "kind":  "AEXPR_OP",
-              "name":  [
+          "whereClause": {
+            "A_Expr": {
+              "kind": "AEXPR_OP",
+              "name": [
                 {
-                  "String":  {
-                    "sval":  "="
+                  "String": {
+                    "sval": "="
                   }
                 }
               ],
-              "lexpr":  {
-                "ColumnRef":  {
-                  "fields":  [
+              "lexpr": {
+                "ColumnRef": {
+                  "fields": [
                     {
-                      "String":  {
-                        "sval":  "id"
+                      "String": {
+                        "sval": "id"
                       }
                     }
                   ],
-                  "location":  1164
+                  "location": 1164
                 }
               },
-              "rexpr":  {
-                "ParamRef":  {
-                  "number":  1,
-                  "location":  1169
+              "rexpr": {
+                "ParamRef": {
+                  "number": 1,
+                  "location": 1169
                 }
               },
-              "location":  1167
+              "location": 1167
             }
           },
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "lockingClause":  [
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "lockingClause": [
             {
-              "LockingClause":  {
-                "strength":  "LCS_FORUPDATE",
-                "waitPolicy":  "LockWaitBlock"
+              "LockingClause": {
+                "strength": "LCS_FORUPDATE",
+                "waitPolicy": "LockWaitBlock"
               }
             }
           ],
-          "op":  "SETOP_NONE"
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  1115,
-      "stmt_len":  67
+      "stmt_location": 1115,
+      "stmt_len": 67
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "u"
+                        "String": {
+                          "sval": "u"
                         }
                       },
                       {
-                        "String":  {
-                          "sval":  "id"
+                        "String": {
+                          "sval": "id"
                         }
                       }
                     ],
-                    "location":  1227
+                    "location": 1227
                   }
                 },
-                "location":  1227
+                "location": 1227
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "u"
+                        "String": {
+                          "sval": "u"
                         }
                       },
                       {
-                        "String":  {
-                          "sval":  "name"
+                        "String": {
+                          "sval": "name"
                         }
                       }
                     ],
-                    "location":  1233
+                    "location": 1233
                   }
                 },
-                "location":  1233
+                "location": 1233
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "JoinExpr":  {
-                "jointype":  "JOIN_INNER",
-                "larg":  {
-                  "RangeVar":  {
-                    "relname":  "users",
-                    "inh":  true,
-                    "relpersistence":  "p",
-                    "alias":  {
-                      "aliasname":  "u"
+              "JoinExpr": {
+                "jointype": "JOIN_INNER",
+                "larg": {
+                  "RangeVar": {
+                    "relname": "users",
+                    "inh": true,
+                    "relpersistence": "p",
+                    "alias": {
+                      "aliasname": "u"
                     },
-                    "location":  1245
+                    "location": 1245
                   }
                 },
-                "rarg":  {
-                  "RangeVar":  {
-                    "relname":  "accounts",
-                    "inh":  true,
-                    "relpersistence":  "p",
-                    "alias":  {
-                      "aliasname":  "a"
+                "rarg": {
+                  "RangeVar": {
+                    "relname": "accounts",
+                    "inh": true,
+                    "relpersistence": "p",
+                    "alias": {
+                      "aliasname": "a"
                     },
-                    "location":  1258
+                    "location": 1258
                   }
                 },
-                "quals":  {
-                  "A_Expr":  {
-                    "kind":  "AEXPR_OP",
-                    "name":  [
+                "quals": {
+                  "A_Expr": {
+                    "kind": "AEXPR_OP",
+                    "name": [
                       {
-                        "String":  {
-                          "sval":  "="
+                        "String": {
+                          "sval": "="
                         }
                       }
                     ],
-                    "lexpr":  {
-                      "ColumnRef":  {
-                        "fields":  [
+                    "lexpr": {
+                      "ColumnRef": {
+                        "fields": [
                           {
-                            "String":  {
-                              "sval":  "u"
+                            "String": {
+                              "sval": "u"
                             }
                           },
                           {
-                            "String":  {
-                              "sval":  "id"
+                            "String": {
+                              "sval": "id"
                             }
                           }
                         ],
-                        "location":  1272
+                        "location": 1272
                       }
                     },
-                    "rexpr":  {
-                      "ColumnRef":  {
-                        "fields":  [
+                    "rexpr": {
+                      "ColumnRef": {
+                        "fields": [
                           {
-                            "String":  {
-                              "sval":  "a"
+                            "String": {
+                              "sval": "a"
                             }
                           },
                           {
-                            "String":  {
-                              "sval":  "user_id"
+                            "String": {
+                              "sval": "user_id"
                             }
                           }
                         ],
-                        "location":  1279
+                        "location": 1279
                       }
                     },
-                    "location":  1277
+                    "location": 1277
                   }
                 }
               }
             }
           ],
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "lockingClause":  [
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "lockingClause": [
             {
-              "LockingClause":  {
-                "lockedRels":  [
+              "LockingClause": {
+                "lockedRels": [
                   {
-                    "RangeVar":  {
-                      "relname":  "u",
-                      "inh":  true,
-                      "relpersistence":  "p",
-                      "location":  1302
+                    "RangeVar": {
+                      "relname": "u",
+                      "inh": true,
+                      "relpersistence": "p",
+                      "location": 1302
                     }
                   }
                 ],
-                "strength":  "LCS_FORSHARE",
-                "waitPolicy":  "LockWaitError"
+                "strength": "LCS_FORSHARE",
+                "waitPolicy": "LockWaitError"
               }
             }
           ],
-          "op":  "SETOP_NONE"
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  1183,
-      "stmt_len":  127
+      "stmt_location": 1183,
+      "stmt_len": 127
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "id"
+                        "String": {
+                          "sval": "id"
                         }
                       }
                     ],
-                    "location":  1362
+                    "location": 1362
                   }
                 },
-                "location":  1362
+                "location": 1362
               }
             },
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "payload"
+                        "String": {
+                          "sval": "payload"
                         }
                       }
                     ],
-                    "location":  1366
+                    "location": 1366
                   }
                 },
-                "location":  1366
+                "location": 1366
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "job_queue",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  1379
+              "RangeVar": {
+                "relname": "job_queue",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 1379
               }
             }
           ],
-          "whereClause":  {
-            "A_Expr":  {
-              "kind":  "AEXPR_OP",
-              "name":  [
+          "whereClause": {
+            "A_Expr": {
+              "kind": "AEXPR_OP",
+              "name": [
                 {
-                  "String":  {
-                    "sval":  "="
+                  "String": {
+                    "sval": "="
                   }
                 }
               ],
-              "lexpr":  {
-                "ColumnRef":  {
-                  "fields":  [
+              "lexpr": {
+                "ColumnRef": {
+                  "fields": [
                     {
-                      "String":  {
-                        "sval":  "status"
+                      "String": {
+                        "sval": "status"
                       }
                     }
                   ],
-                  "location":  1395
+                  "location": 1395
                 }
               },
-              "rexpr":  {
-                "A_Const":  {
-                  "sval":  {
-                    "sval":  "pending"
+              "rexpr": {
+                "A_Const": {
+                  "sval": {
+                    "sval": "pending"
                   },
-                  "location":  1404
+                  "location": 1404
                 }
               },
-              "location":  1402
+              "location": 1402
             }
           },
-          "sortClause":  [
+          "sortClause": [
             {
-              "SortBy":  {
-                "node":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "SortBy": {
+                "node": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "created_at"
+                        "String": {
+                          "sval": "created_at"
                         }
                       }
                     ],
-                    "location":  1423
+                    "location": 1423
                   }
                 },
-                "sortby_dir":  "SORTBY_DEFAULT",
-                "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
-                "location":  -1
+                "sortby_dir": "SORTBY_DEFAULT",
+                "sortby_nulls": "SORTBY_NULLS_DEFAULT",
+                "location": -1
               }
             }
           ],
-          "limitCount":  {
-            "A_Const":  {
-              "ival":  {
-                "ival":  1
+          "limitCount": {
+            "A_Const": {
+              "ival": {
+                "ival": 1
               },
-              "location":  1440
+              "location": 1440
             }
           },
-          "limitOption":  "LIMIT_OPTION_COUNT",
-          "lockingClause":  [
+          "limitOption": "LIMIT_OPTION_COUNT",
+          "lockingClause": [
             {
-              "LockingClause":  {
-                "strength":  "LCS_FORUPDATE",
-                "waitPolicy":  "LockWaitSkip"
+              "LockingClause": {
+                "strength": "LCS_FORUPDATE",
+                "waitPolicy": "LockWaitSkip"
               }
             }
           ],
-          "op":  "SETOP_NONE"
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  1311,
-      "stmt_len":  153
+      "stmt_location": 1311,
+      "stmt_len": 153
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "id"
+                        "String": {
+                          "sval": "id"
                         }
                       }
                     ],
-                    "location":  1491
+                    "location": 1491
                   }
                 },
-                "location":  1491
+                "location": 1491
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "parent_table",
-                "inh":  true,
-                "relpersistence":  "p",
-                "location":  1499
+              "RangeVar": {
+                "relname": "parent_table",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 1499
               }
             }
           ],
-          "whereClause":  {
-            "A_Expr":  {
-              "kind":  "AEXPR_OP",
-              "name":  [
+          "whereClause": {
+            "A_Expr": {
+              "kind": "AEXPR_OP",
+              "name": [
                 {
-                  "String":  {
-                    "sval":  "="
+                  "String": {
+                    "sval": "="
                   }
                 }
               ],
-              "lexpr":  {
-                "ColumnRef":  {
-                  "fields":  [
+              "lexpr": {
+                "ColumnRef": {
+                  "fields": [
                     {
-                      "String":  {
-                        "sval":  "id"
+                      "String": {
+                        "sval": "id"
                       }
                     }
                   ],
-                  "location":  1518
+                  "location": 1518
                 }
               },
-              "rexpr":  {
-                "ParamRef":  {
-                  "number":  1,
-                  "location":  1523
+              "rexpr": {
+                "ParamRef": {
+                  "number": 1,
+                  "location": 1523
                 }
               },
-              "location":  1521
+              "location": 1521
             }
           },
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "lockingClause":  [
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "lockingClause": [
             {
-              "LockingClause":  {
-                "strength":  "LCS_FORKEYSHARE",
-                "waitPolicy":  "LockWaitBlock"
+              "LockingClause": {
+                "strength": "LCS_FORKEYSHARE",
+                "waitPolicy": "LockWaitBlock"
               }
             }
           ],
-          "op":  "SETOP_NONE"
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  1465,
-      "stmt_len":  74
+      "stmt_location": 1465,
+      "stmt_len": 74
     },
     {
-      "stmt":  {
-        "SelectStmt":  {
-          "targetList":  [
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
             {
-              "ResTarget":  {
-                "val":  {
-                  "ColumnRef":  {
-                    "fields":  [
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
                       {
-                        "String":  {
-                          "sval":  "department"
+                        "String": {
+                          "sval": "department"
                         }
                       }
                     ],
-                    "location":  1611
+                    "location": 1611
                   }
                 },
-                "location":  1611
+                "location": 1611
               }
             },
             {
-              "ResTarget":  {
-                "name":  "active_employees",
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "name": "active_employees",
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "json_agg"
+                        "String": {
+                          "sval": "json_agg"
                         }
                       }
                     ],
-                    "args":  [
+                    "args": [
                       {
-                        "FuncCall":  {
-                          "funcname":  [
+                        "FuncCall": {
+                          "funcname": [
                             {
-                              "String":  {
-                                "sval":  "row_to_json"
+                              "String": {
+                                "sval": "row_to_json"
                               }
                             }
                           ],
-                          "args":  [
+                          "args": [
                             {
-                              "ColumnRef":  {
-                                "fields":  [
+                              "ColumnRef": {
+                                "fields": [
                                   {
-                                    "String":  {
-                                      "sval":  "e"
+                                    "String": {
+                                      "sval": "e"
                                     }
                                   }
                                 ],
-                                "location":  1644
+                                "location": 1644
                               }
                             }
                           ],
-                          "funcformat":  "COERCE_EXPLICIT_CALL",
-                          "location":  1632
+                          "funcformat": "COERCE_EXPLICIT_CALL",
+                          "location": 1632
                         }
                       }
                     ],
-                    "agg_order":  [
+                    "agg_order": [
                       {
-                        "SortBy":  {
-                          "node":  {
-                            "ColumnRef":  {
-                              "fields":  [
+                        "SortBy": {
+                          "node": {
+                            "ColumnRef": {
+                              "fields": [
                                 {
-                                  "String":  {
-                                    "sval":  "e"
+                                  "String": {
+                                    "sval": "e"
                                   }
                                 },
                                 {
-                                  "String":  {
-                                    "sval":  "name"
+                                  "String": {
+                                    "sval": "name"
                                   }
                                 }
                               ],
-                              "location":  1656
+                              "location": 1656
                             }
                           },
-                          "sortby_dir":  "SORTBY_DEFAULT",
-                          "sortby_nulls":  "SORTBY_NULLS_DEFAULT",
-                          "location":  -1
+                          "sortby_dir": "SORTBY_DEFAULT",
+                          "sortby_nulls": "SORTBY_NULLS_DEFAULT",
+                          "location": -1
                         }
                       }
                     ],
-                    "agg_filter":  {
-                      "A_Expr":  {
-                        "kind":  "AEXPR_OP",
-                        "name":  [
+                    "agg_filter": {
+                      "A_Expr": {
+                        "kind": "AEXPR_OP",
+                        "name": [
                           {
-                            "String":  {
-                              "sval":  "="
+                            "String": {
+                              "sval": "="
                             }
                           }
                         ],
-                        "lexpr":  {
-                          "ColumnRef":  {
-                            "fields":  [
+                        "lexpr": {
+                          "ColumnRef": {
+                            "fields": [
                               {
-                                "String":  {
-                                  "sval":  "e"
+                                "String": {
+                                  "sval": "e"
                                 }
                               },
                               {
-                                "String":  {
-                                  "sval":  "active"
+                                "String": {
+                                  "sval": "active"
                                 }
                               }
                             ],
-                            "location":  1678
+                            "location": 1678
                           }
                         },
-                        "rexpr":  {
-                          "A_Const":  {
-                            "boolval":  {
-                              "boolval":  true
+                        "rexpr": {
+                          "A_Const": {
+                            "boolval": {
+                              "boolval": true
                             },
-                            "location":  1689
+                            "location": 1689
                           }
                         },
-                        "location":  1687
+                        "location": 1687
                       }
                     },
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  1623
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 1623
                   }
                 },
-                "location":  1623
+                "location": 1623
               }
             },
             {
-              "ResTarget":  {
-                "name":  "dept_total",
-                "val":  {
-                  "FuncCall":  {
-                    "funcname":  [
+              "ResTarget": {
+                "name": "dept_total",
+                "val": {
+                  "FuncCall": {
+                    "funcname": [
                       {
-                        "String":  {
-                          "sval":  "sum"
+                        "String": {
+                          "sval": "sum"
                         }
                       }
                     ],
-                    "args":  [
+                    "args": [
                       {
-                        "ColumnRef":  {
-                          "fields":  [
+                        "ColumnRef": {
+                          "fields": [
                             {
-                              "String":  {
-                                "sval":  "e"
+                              "String": {
+                                "sval": "e"
                               }
                             },
                             {
-                              "String":  {
-                                "sval":  "salary"
+                              "String": {
+                                "sval": "salary"
                               }
                             }
                           ],
-                          "location":  1720
+                          "location": 1720
                         }
                       }
                     ],
-                    "over":  {
-                      "partitionClause":  [
+                    "over": {
+                      "partitionClause": [
                         {
-                          "ColumnRef":  {
-                            "fields":  [
+                          "ColumnRef": {
+                            "fields": [
                               {
-                                "String":  {
-                                  "sval":  "department"
+                                "String": {
+                                  "sval": "department"
                                 }
                               }
                             ],
-                            "location":  1749
+                            "location": 1749
                           }
                         }
                       ],
-                      "frameOptions":  1058,
-                      "location":  1735
+                      "frameOptions": 1058,
+                      "location": 1735
                     },
-                    "funcformat":  "COERCE_EXPLICIT_CALL",
-                    "location":  1716
+                    "funcformat": "COERCE_EXPLICIT_CALL",
+                    "location": 1716
                   }
                 },
-                "location":  1716
+                "location": 1716
               }
             }
           ],
-          "fromClause":  [
+          "fromClause": [
             {
-              "RangeVar":  {
-                "relname":  "employees",
-                "inh":  true,
-                "relpersistence":  "p",
-                "alias":  {
-                  "aliasname":  "e"
+              "RangeVar": {
+                "relname": "employees",
+                "inh": true,
+                "relpersistence": "p",
+                "alias": {
+                  "aliasname": "e"
                 },
-                "location":  1780
+                "location": 1780
               }
             }
           ],
-          "groupClause":  [
+          "groupClause": [
             {
-              "ColumnRef":  {
-                "fields":  [
+              "ColumnRef": {
+                "fields": [
                   {
-                    "String":  {
-                      "sval":  "department"
+                    "String": {
+                      "sval": "department"
                     }
                   }
                 ],
-                "location":  1801
+                "location": 1801
               }
             },
             {
-              "ColumnRef":  {
-                "fields":  [
+              "ColumnRef": {
+                "fields": [
                   {
-                    "String":  {
-                      "sval":  "e"
+                    "String": {
+                      "sval": "e"
                     }
                   },
                   {
-                    "String":  {
-                      "sval":  "salary"
+                    "String": {
+                      "sval": "salary"
                     }
                   }
                 ],
-                "location":  1813
+                "location": 1813
               }
             }
           ],
-          "limitOption":  "LIMIT_OPTION_DEFAULT",
-          "op":  "SETOP_NONE"
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
         }
       },
-      "stmt_location":  1540,
-      "stmt_len":  281
+      "stmt_location": 1540,
+      "stmt_len": 281
     }
   ]
 }
