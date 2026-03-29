@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"strings"
@@ -69,6 +70,95 @@ func TestPrintFixtures(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestSchemaPreservation verifies that formatting SQL does not change its
+// semantic meaning by comparing the parse trees of the original and formatted
+// SQL (with source locations stripped).
+func TestSchemaPreservation(t *testing.T) {
+	fixtures, err := os.ReadDir("testdata/fixtures")
+	noError(t, err)
+
+	for _, e := range fixtures {
+		if e.IsDir() {
+			continue
+		}
+		t.Run(e.Name(), func(t *testing.T) {
+			raw, err := os.ReadFile("testdata/fixtures/" + e.Name())
+			noError(t, err)
+
+			original := string(raw)
+
+			// Parse original SQL
+			origTree, err := pg_query.Parse(original)
+			noError(t, err)
+
+			// Format the SQL
+			o := &strings.Builder{}
+			err = print(strings.NewReader(original), o)
+			noError(t, err)
+			formatted := o.String()
+
+			// Parse formatted SQL
+			fmtTree, err := pg_query.Parse(formatted)
+			if err != nil {
+				t.Fatalf("formatted SQL failed to parse: %v\nformatted output:\n%s", err, formatted)
+			}
+
+			// Serialize both trees to JSON and strip locations for comparison
+			origJSON := treeToNormalizedJSON(t, origTree)
+			fmtJSON := treeToNormalizedJSON(t, fmtTree)
+
+			if origJSON != fmtJSON {
+				t.Errorf("parse tree changed after formatting %s\n--- original tree ---\n%s\n--- formatted tree ---\n%s", e.Name(), origJSON, fmtJSON)
+			}
+		})
+	}
+}
+
+// treeToNormalizedJSON serializes a parse tree to JSON and strips location
+// fields so that only semantic content is compared.
+func treeToNormalizedJSON(t *testing.T, tree *pg_query.ParseResult) string {
+	t.Helper()
+
+	b, err := protojson.MarshalOptions{Indent: "  "}.Marshal(tree)
+	if err != nil {
+		t.Fatalf("failed to marshal parse tree: %v", err)
+	}
+
+	var data any
+	if err := json.Unmarshal(b, &data); err != nil {
+		t.Fatalf("failed to unmarshal JSON: %v", err)
+	}
+
+	stripLocations(data)
+
+	out, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to re-marshal JSON: %v", err)
+	}
+	return string(out)
+}
+
+// stripLocations recursively removes "location", "stmt_location", and
+// "stmt_len" fields from a JSON structure, since these are source positions
+// that change with formatting.
+func stripLocations(v any) {
+	switch val := v.(type) {
+	case map[string]any:
+		delete(val, "location")
+		delete(val, "stmtLocation")
+		delete(val, "stmtLen")
+		delete(val, "stmt_location")
+		delete(val, "stmt_len")
+		for _, child := range val {
+			stripLocations(child)
+		}
+	case []any:
+		for _, item := range val {
+			stripLocations(item)
+		}
 	}
 }
 
