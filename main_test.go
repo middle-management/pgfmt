@@ -16,7 +16,7 @@ import (
 // - Strips LANGUAGE and function option clauses that may be reordered
 // - Collapses whitespace
 var dollarBodyRe = regexp.MustCompile(`\$\$[\s\S]*?\$\$`)
-var funcOptionsRe = regexp.MustCompile(`\s+(LANGUAGE \w+|VOLATILE|STABLE|IMMUTABLE|STRICT|CALLED ON NULL INPUT|SECURITY DEFINER|SECURITY INVOKER|PARALLEL \w+)`)
+var funcOptionsRe = regexp.MustCompile(`\s+(LANGUAGE \w+|VOLATILE|STABLE|IMMUTABLE|STRICT|CALLED ON NULL INPUT|RETURNS NULL ON NULL INPUT|SECURITY DEFINER|SECURITY INVOKER|PARALLEL \w+)`)
 var multiSpaceRe = regexp.MustCompile(`\s+`)
 
 func normalizeDeparseForCompare(s string) string {

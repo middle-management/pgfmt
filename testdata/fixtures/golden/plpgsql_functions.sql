@@ -1,5 +1,5 @@
-CREATE FUNCTION get_user_label(p_id "pg_catalog"."int4")
-RETURNS "text"
+CREATE FUNCTION get_user_label(p_id pg_catalog.int4)
+RETURNS text
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -17,7 +17,7 @@ END
 $$;
 
 CREATE FUNCTION loop_demo()
-RETURNS "void"
+RETURNS void
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -39,8 +39,8 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION safe_divide(a "pg_catalog"."int4", b "pg_catalog"."int4")
-RETURNS "pg_catalog"."numeric"
+CREATE OR REPLACE FUNCTION safe_divide(a pg_catalog.int4, b pg_catalog.int4)
+RETURNS pg_catalog.numeric
 LANGUAGE plpgsql
 STRICT
 AS $$
@@ -57,8 +57,8 @@ EXCEPTION
 END
 $$;
 
-CREATE FUNCTION kitchen_sink(p_mode "pg_catalog"."int4")
-RETURNS "void"
+CREATE FUNCTION kitchen_sink(p_mode pg_catalog.int4)
+RETURNS void
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -86,7 +86,7 @@ END
 $$;
 
 CREATE FUNCTION iter_demo()
-RETURNS "void"
+RETURNS void
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -114,7 +114,7 @@ END
 $$;
 
 CREATE FUNCTION get_active_users()
-RETURNS SETOF "record"
+RETURNS SETOF record
 LANGUAGE plpgsql
 STABLE
 AS $$

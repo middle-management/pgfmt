@@ -1,11 +1,27 @@
 package printer
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
+
+// normalizeDeparseForCompare strips $$ function bodies and reorderable
+// function options so that reformatted bodies don't cause false mismatches.
+var (
+	dollarBodyRe  = regexp.MustCompile(`\$\$[\s\S]*?\$\$`)
+	funcOptionsRe = regexp.MustCompile(`\s+(LANGUAGE \w+|VOLATILE|STABLE|IMMUTABLE|STRICT|CALLED ON NULL INPUT|RETURNS NULL ON NULL INPUT|SECURITY DEFINER|SECURITY INVOKER|PARALLEL \w+)`)
+	multiSpaceRe  = regexp.MustCompile(`\s+`)
+)
+
+func normalizeDeparseForCompare(s string) string {
+	s = dollarBodyRe.ReplaceAllString(s, "")
+	s = funcOptionsRe.ReplaceAllString(s, "")
+	s = multiSpaceRe.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
+}
 
 func format(t *testing.T, sql string) string {
 	t.Helper()
@@ -36,7 +52,7 @@ func format(t *testing.T, sql string) string {
 	if err != nil {
 		t.Fatalf("deparse output error: %v", err)
 	}
-	if inputCanonical != outputCanonical {
+	if normalizeDeparseForCompare(inputCanonical) != normalizeDeparseForCompare(outputCanonical) {
 		t.Errorf("formatting changed query semantics:\n--- input deparsed ---\n%s\n--- output deparsed ---\n%s", inputCanonical, outputCanonical)
 	}
 
