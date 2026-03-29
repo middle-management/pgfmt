@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	pg_query "github.com/pganalyze/pg_query_go/v5"
@@ -49,11 +50,24 @@ func TestPrintFixtures(t *testing.T) {
 			_, err = i.Seek(0, 0)
 			noError(t, err)
 
-			o, err := os.Create("testdata/fixtures/output/" + e.Name())
-			noError(t, err)
-
+			o := &strings.Builder{}
 			err = print(i, o)
 			noError(t, err)
+
+			got := o.String()
+
+			// Write actual output for debugging
+			err = os.WriteFile("testdata/fixtures/output/"+e.Name(), []byte(got), 0o777)
+			noError(t, err)
+
+			// Compare against golden file if it exists
+			goldenPath := "testdata/fixtures/golden/" + e.Name()
+			golden, err := os.ReadFile(goldenPath)
+			if err == nil {
+				if string(golden) != got {
+					t.Errorf("output mismatch for %s\n--- golden ---\n%s\n--- got ---\n%s", e.Name(), string(golden), got)
+				}
+			}
 		})
 	}
 }
