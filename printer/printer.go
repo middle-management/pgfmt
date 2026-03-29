@@ -527,6 +527,29 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeAlias(n.RangeSubselect.Alias)
 		}
 
+	case *pg_query.Node_RangeFunction:
+		if n.RangeFunction.Lateral {
+			output.Builder.WriteString("LATERAL ")
+		}
+		// Functions is a list of lists; each inner list is [funcexpr, coldeflist]
+		for i, fn := range n.RangeFunction.Functions {
+			if l := fn.GetList(); l != nil && len(l.Items) > 0 {
+				output.writeNode(l.Items[0])
+			} else {
+				output.writeNode(fn)
+			}
+			if i != len(n.RangeFunction.Functions)-1 {
+				output.Builder.WriteString(", ")
+			}
+		}
+		if n.RangeFunction.Ordinality {
+			output.Builder.WriteString(" WITH ORDINALITY")
+		}
+		if n.RangeFunction.Alias != nil {
+			output.Builder.WriteString(" ")
+			output.writeAlias(n.RangeFunction.Alias)
+		}
+
 	case *pg_query.Node_JoinExpr:
 		output.writeNode(n.JoinExpr.Larg)
 		switch n.JoinExpr.Jointype {
@@ -1007,53 +1030,70 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.Builder.WriteString("\nRETURNS TABLE (")
 				for i, p := range tableParams {
 					fp := p.GetFunctionParameter()
+					output.Builder.WriteString("\n\t")
 					output.Builder.WriteString(fp.Name)
 					output.Builder.WriteString(" ")
 					output.writeTypeName(fp.ArgType)
 					if i != len(tableParams)-1 {
-						output.Builder.WriteString(", ")
+						output.Builder.WriteString(",")
 					}
 				}
-				output.Builder.WriteString(")")
+				output.Builder.WriteString("\n)")
 			} else {
 				output.Builder.WriteString("\nRETURNS ")
 				output.writeTypeName(n.CreateFunctionStmt.ReturnType)
 			}
 		}
+		// Collect options by name for ordered output
+		var lang, asBody string
+		var otherOpts []string
 		for _, opt := range n.CreateFunctionStmt.Options {
 			de := opt.GetDefElem()
 			if de == nil {
 				continue
 			}
 			switch de.Defname {
+			case "language":
+				lang = de.Arg.GetString_().GetSval()
 			case "as":
 				if l := de.Arg.GetList(); l != nil && len(l.Items) > 0 {
-					output.Builder.WriteString("\nAS ")
-					output.writeNode(l.Items[0])
+					asBody = l.Items[0].GetString_().GetSval()
 				}
-			case "language":
-				output.Builder.WriteString("\nLANGUAGE ")
-				output.Builder.WriteString(de.Arg.GetString_().GetSval())
 			case "volatility":
-				output.Builder.WriteString("\n")
-				output.Builder.WriteString(strings.ToUpper(de.Arg.GetString_().GetSval()))
+				otherOpts = append(otherOpts, strings.ToUpper(de.Arg.GetString_().GetSval()))
 			case "strict":
 				if de.Arg.GetBoolean().GetBoolval() {
-					output.Builder.WriteString("\nSTRICT")
+					otherOpts = append(otherOpts, "STRICT")
 				} else {
-					output.Builder.WriteString("\nCALLED ON NULL INPUT")
+					otherOpts = append(otherOpts, "CALLED ON NULL INPUT")
 				}
 			case "security":
 				if de.Arg.GetBoolean().GetBoolval() {
-					output.Builder.WriteString("\nSECURITY DEFINER")
+					otherOpts = append(otherOpts, "SECURITY DEFINER")
 				} else {
-					output.Builder.WriteString("\nSECURITY INVOKER")
+					otherOpts = append(otherOpts, "SECURITY INVOKER")
 				}
 			case "parallel":
-				output.Builder.WriteString("\nPARALLEL ")
-				output.Builder.WriteString(strings.ToUpper(de.Arg.GetString_().GetSval()))
-			case "set":
-				// SET configuration options - skip for now
+				otherOpts = append(otherOpts, "PARALLEL "+strings.ToUpper(de.Arg.GetString_().GetSval()))
+			}
+		}
+		if lang != "" {
+			output.Builder.WriteString("\nLANGUAGE ")
+			output.Builder.WriteString(lang)
+		}
+		for _, o := range otherOpts {
+			output.Builder.WriteString("\n")
+			output.Builder.WriteString(o)
+		}
+		if asBody != "" {
+			if strings.EqualFold(lang, "sql") {
+				output.Builder.WriteString("\nAS $$\n")
+				output.formatSQLBody(asBody)
+				output.Builder.WriteString("\n$$")
+			} else {
+				output.Builder.WriteString("\nAS $$\n")
+				output.Builder.WriteString(asBody)
+				output.Builder.WriteString("\n$$")
 			}
 		}
 		if n.CreateFunctionStmt.SqlBody != nil {
@@ -1477,6 +1517,24 @@ func (output *Printer) writeAlias(a *pg_query.Alias) {
 			output.writeNode(c)
 		}
 		output.Builder.WriteString(")")
+	}
+}
+
+func (output *Printer) formatSQLBody(body string) {
+	result, err := pg_query.Parse(body)
+	if err != nil {
+		// If we can't parse it, emit raw
+		output.Builder.WriteString(body)
+		return
+	}
+	for i, stmt := range result.Stmts {
+		b := &strings.Builder{}
+		p := &Printer{Builder: b}
+		p.Print(stmt.Stmt)
+		output.Builder.WriteString(b.String())
+		if i != len(result.Stmts)-1 {
+			output.Builder.WriteString(";\n")
+		}
 	}
 }
 
