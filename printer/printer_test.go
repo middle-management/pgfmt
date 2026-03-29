@@ -190,6 +190,79 @@ func TestAlterTable(t *testing.T) {
 	}
 }
 
+func TestAggOrderBy(t *testing.T) {
+	got := format(t, "SELECT string_agg(x, ',' ORDER BY y) FROM t")
+	if !strings.Contains(got, "ORDER BY y") {
+		t.Errorf("expected ORDER BY in aggregate, got: %s", got)
+	}
+}
+
+func TestAggFilter(t *testing.T) {
+	got := format(t, "SELECT count(*) FILTER (WHERE x > 5) FROM t")
+	if !strings.Contains(got, "FILTER (WHERE") {
+		t.Errorf("expected FILTER clause, got: %s", got)
+	}
+}
+
+func TestAggWithinGroup(t *testing.T) {
+	got := format(t, "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY x) FROM t")
+	if !strings.Contains(got, "WITHIN GROUP (ORDER BY x)") {
+		t.Errorf("expected WITHIN GROUP, got: %s", got)
+	}
+}
+
+func TestWindowFunction(t *testing.T) {
+	got := format(t, "SELECT count(*) OVER (PARTITION BY x ORDER BY y) FROM t")
+	if !strings.Contains(got, "OVER (PARTITION BY x ORDER BY y)") {
+		t.Errorf("expected OVER clause, got: %s", got)
+	}
+}
+
+func TestWindowFunctionNamedRef(t *testing.T) {
+	got := format(t, "SELECT sum(x) OVER w FROM t WINDOW w AS (PARTITION BY y)")
+	if !strings.Contains(got, "OVER w") {
+		t.Errorf("expected OVER w, got: %s", got)
+	}
+	if !strings.Contains(got, "WINDOW") {
+		t.Errorf("expected WINDOW clause, got: %s", got)
+	}
+}
+
+func TestWindowFrameClause(t *testing.T) {
+	got := format(t, "SELECT row_number() OVER (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t")
+	if !strings.Contains(got, "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW") {
+		t.Errorf("expected frame clause, got: %s", got)
+	}
+}
+
+func TestGroupByDistinct(t *testing.T) {
+	got := format(t, "SELECT x FROM t GROUP BY DISTINCT x")
+	if !strings.Contains(got, "GROUP BY DISTINCT") {
+		t.Errorf("expected GROUP BY DISTINCT, got: %s", got)
+	}
+}
+
+func TestForUpdate(t *testing.T) {
+	got := format(t, "SELECT * FROM t FOR UPDATE")
+	if !strings.Contains(got, "FOR UPDATE") {
+		t.Errorf("expected FOR UPDATE, got: %s", got)
+	}
+}
+
+func TestForShareNowait(t *testing.T) {
+	got := format(t, "SELECT * FROM t FOR SHARE OF t NOWAIT")
+	if !strings.Contains(got, "FOR SHARE OF t NOWAIT") {
+		t.Errorf("expected FOR SHARE OF t NOWAIT, got: %s", got)
+	}
+}
+
+func TestForUpdateSkipLocked(t *testing.T) {
+	got := format(t, "SELECT * FROM t FOR UPDATE SKIP LOCKED")
+	if !strings.Contains(got, "FOR UPDATE SKIP LOCKED") {
+		t.Errorf("expected FOR UPDATE SKIP LOCKED, got: %s", got)
+	}
+}
+
 func TestNoPanics(t *testing.T) {
 	// These should not panic even if output is imperfect
 	sqls := []string{

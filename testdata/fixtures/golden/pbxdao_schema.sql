@@ -302,11 +302,13 @@ AS $$
 		r.pbx_user_id,
 		r.pbx_prompt_id,
 		r.pbx_voicemail_id,
-		array_agg(u.pbx_user_id) AS users,
-		array_agg(u.pbx_user_id) AS connectedusers,
-		array_agg(u.pbx_user_id) AS disconnectedusers,
-		json_object_agg(m.type, m.next) AS menu,
-		json_agg(row_to_json(i)) AS schedule,
+		array_agg(u.pbx_user_id) FILTER (WHERE u.pbx_route_id IS NOT NULL) AS users,
+		array_agg(u.pbx_user_id) FILTER (WHERE u.pbx_route_id IS NOT NULL
+	AND (u.connected = true)) AS connectedusers,
+		array_agg(u.pbx_user_id) FILTER (WHERE u.pbx_route_id IS NOT NULL
+	AND (u.connected = false)) AS disconnectedusers,
+		json_object_agg(m.type, m.next) FILTER (WHERE m.pbx_route_id IS NOT NULL) AS menu,
+		json_agg(row_to_json(i) ORDER BY i.index) FILTER (WHERE i.pbx_route_id IS NOT NULL) AS schedule,
 		(
 			SELECT
 				row_to_json(q)
@@ -352,7 +354,7 @@ AS $$
 		p.pbx_prompt_id,
 		COALESCE(p.description, ''),
 		COALESCE(p.extension, ''),
-		jsonb_agg(row_to_json(r)) AS recordings,
+		jsonb_agg(row_to_json(r)) FILTER (WHERE r.pbx_prompt_id IS NOT NULL) AS recordings,
 		p.organisation_id IS NOT NULL,
 		p.organisation_id,
 		p.created_at,
@@ -497,7 +499,7 @@ AS $$
 		COALESCE(v.msisdn, ''),
 		v.pbx_prompt_id,
 		v.organisation_id,
-		jsonb_agg(row_to_json(u)) AS users,
+		jsonb_agg(row_to_json(u)) FILTER (WHERE u.pbx_voicemail_id IS NOT NULL) AS users,
 		v.created_at,
 		v.updated_at
 	FROM
@@ -539,9 +541,9 @@ AS $$
 		mex_call_as_msisdn,
 		mex_call_as,
 		available_by_default,
-		json_agg(row_to_json(ma)) AS mex_accept_call,
-		json_agg(row_to_json(ra)) AS route_accept_call,
-		json_agg(row_to_json(ru)) AS route_user,
+		json_agg(row_to_json(ma) ORDER BY ma.subscription_id) FILTER (WHERE ma.subscription_id IS NOT NULL) AS mex_accept_call,
+		json_agg(row_to_json(ra) ORDER BY ra.pbx_route_id) FILTER (WHERE ra.pbx_route_id IS NOT NULL) AS route_accept_call,
+		json_agg(row_to_json(ru) ORDER BY ru.pbx_route_id) FILTER (WHERE ru.pbx_user_id IS NOT NULL) AS route_user,
 		cp.created_at,
 		cp.updated_at,
 		cp.deleted_at

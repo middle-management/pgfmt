@@ -335,7 +335,32 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.Builder.WriteString(", ")
 			}
 		}
+		if len(n.FuncCall.AggOrder) > 0 {
+			if n.FuncCall.AggWithinGroup {
+				output.Builder.WriteString(")")
+				output.Builder.WriteString(" WITHIN GROUP (ORDER BY ")
+				output.writeCommaSeparatedList(n.FuncCall.AggOrder)
+			} else {
+				output.Builder.WriteString(" ORDER BY ")
+				output.writeCommaSeparatedList(n.FuncCall.AggOrder)
+			}
+		}
 		output.Builder.WriteString(")")
+		if n.FuncCall.AggFilter != nil {
+			output.Builder.WriteString(" FILTER (WHERE ")
+			output.writeNode(n.FuncCall.AggFilter)
+			output.Builder.WriteString(")")
+		}
+		if n.FuncCall.Over != nil {
+			output.Builder.WriteString(" OVER ")
+			over := n.FuncCall.Over
+			if over.Name != "" && len(over.PartitionClause) == 0 && len(over.OrderClause) == 0 && over.Refname == "" {
+				// Simple window reference: OVER w
+				output.Builder.WriteString(over.Name)
+			} else {
+				output.writeWindowDef(over)
+			}
+		}
 
 	case *pg_query.Node_SortBy:
 		output.writeNode(n.SortBy.Node)
@@ -1135,6 +1160,33 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(")")
 		}
 
+	case *pg_query.Node_LockingClause:
+		switch n.LockingClause.Strength {
+		case pg_query.LockClauseStrength_LCS_FORKEYSHARE:
+			output.Builder.WriteString("FOR KEY SHARE")
+		case pg_query.LockClauseStrength_LCS_FORSHARE:
+			output.Builder.WriteString("FOR SHARE")
+		case pg_query.LockClauseStrength_LCS_FORNOKEYUPDATE:
+			output.Builder.WriteString("FOR NO KEY UPDATE")
+		case pg_query.LockClauseStrength_LCS_FORUPDATE:
+			output.Builder.WriteString("FOR UPDATE")
+		}
+		if len(n.LockingClause.LockedRels) > 0 {
+			output.Builder.WriteString(" OF ")
+			output.writeCommaSeparatedList(n.LockingClause.LockedRels)
+		}
+		switch n.LockingClause.WaitPolicy {
+		case pg_query.LockWaitPolicy_LockWaitSkip:
+			output.Builder.WriteString(" SKIP LOCKED")
+		case pg_query.LockWaitPolicy_LockWaitError:
+			output.Builder.WriteString(" NOWAIT")
+		case pg_query.LockWaitPolicy_LockWaitBlock:
+			// default, no keyword needed
+		}
+
+	case *pg_query.Node_WindowDef:
+		output.writeWindowDef(n.WindowDef)
+
 	case nil:
 		// nothing
 
@@ -1424,6 +1476,9 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 		if len(stmt.GroupClause) > 0 {
 			output.writeNewlineIndent()
 			output.Builder.WriteString("GROUP BY")
+			if stmt.GroupDistinct {
+				output.Builder.WriteString(" DISTINCT")
+			}
 			output.writeNewlineIndent()
 			output.Builder.WriteString("\t")
 			output.writeCommaSeparatedList(stmt.GroupClause)
@@ -1669,6 +1724,117 @@ func (output *Printer) writeWithClause(node *pg_query.WithClause) {
 		}
 	}
 	output.Builder.WriteString("\n")
+}
+
+// Frame option bit constants from PostgreSQL parsenodes.h
+const (
+	frameOptionNonDefault            = 0x00001
+	frameOptionRange                 = 0x00002
+	frameOptionRows                  = 0x00004
+	frameOptionGroups                = 0x00008
+	frameOptionBetween               = 0x00010
+	frameOptionStartUnboundedPreceding = 0x00020
+	frameOptionEndUnboundedPreceding   = 0x00040
+	frameOptionStartUnboundedFollowing = 0x00080
+	frameOptionEndUnboundedFollowing   = 0x00100
+	frameOptionStartCurrentRow       = 0x00200
+	frameOptionEndCurrentRow         = 0x00400
+	frameOptionStartOffsetPreceding  = 0x00800
+	frameOptionEndOffsetPreceding    = 0x01000
+	frameOptionStartOffsetFollowing  = 0x02000
+	frameOptionEndOffsetFollowing    = 0x04000
+	frameOptionExcludeCurrentRow     = 0x08000
+	frameOptionExcludeGroup          = 0x10000
+	frameOptionExcludeTies           = 0x20000
+)
+
+func (output *Printer) writeWindowDef(def *pg_query.WindowDef) {
+	if def.Name != "" {
+		output.Builder.WriteString(def.Name)
+		output.Builder.WriteString(" AS ")
+	}
+	output.Builder.WriteString("(")
+	needSpace := false
+	if def.Refname != "" {
+		output.Builder.WriteString(def.Refname)
+		needSpace = true
+	}
+	if len(def.PartitionClause) > 0 {
+		if needSpace {
+			output.Builder.WriteString(" ")
+		}
+		output.Builder.WriteString("PARTITION BY ")
+		output.writeCommaSeparatedList(def.PartitionClause)
+		needSpace = true
+	}
+	if len(def.OrderClause) > 0 {
+		if needSpace {
+			output.Builder.WriteString(" ")
+		}
+		output.Builder.WriteString("ORDER BY ")
+		output.writeCommaSeparatedList(def.OrderClause)
+		needSpace = true
+	}
+	fo := def.FrameOptions
+	if fo&frameOptionNonDefault != 0 {
+		if needSpace {
+			output.Builder.WriteString(" ")
+		}
+		if fo&frameOptionRange != 0 {
+			output.Builder.WriteString("RANGE ")
+		} else if fo&frameOptionRows != 0 {
+			output.Builder.WriteString("ROWS ")
+		} else if fo&frameOptionGroups != 0 {
+			output.Builder.WriteString("GROUPS ")
+		}
+		if fo&frameOptionBetween != 0 {
+			output.Builder.WriteString("BETWEEN ")
+		}
+		output.writeFrameBound(fo, true, def.StartOffset)
+		if fo&frameOptionBetween != 0 {
+			output.Builder.WriteString(" AND ")
+			output.writeFrameBound(fo, false, def.EndOffset)
+		}
+		if fo&frameOptionExcludeCurrentRow != 0 {
+			output.Builder.WriteString(" EXCLUDE CURRENT ROW")
+		} else if fo&frameOptionExcludeGroup != 0 {
+			output.Builder.WriteString(" EXCLUDE GROUP")
+		} else if fo&frameOptionExcludeTies != 0 {
+			output.Builder.WriteString(" EXCLUDE TIES")
+		}
+	}
+	output.Builder.WriteString(")")
+}
+
+func (output *Printer) writeFrameBound(fo int32, isStart bool, offset *pg_query.Node) {
+	var unboundedPreceding, unboundedFollowing, currentRow, offsetPreceding, offsetFollowing int32
+	if isStart {
+		unboundedPreceding = frameOptionStartUnboundedPreceding
+		unboundedFollowing = frameOptionStartUnboundedFollowing
+		currentRow = frameOptionStartCurrentRow
+		offsetPreceding = frameOptionStartOffsetPreceding
+		offsetFollowing = frameOptionStartOffsetFollowing
+	} else {
+		unboundedPreceding = frameOptionEndUnboundedPreceding
+		unboundedFollowing = frameOptionEndUnboundedFollowing
+		currentRow = frameOptionEndCurrentRow
+		offsetPreceding = frameOptionEndOffsetPreceding
+		offsetFollowing = frameOptionEndOffsetFollowing
+	}
+
+	if fo&unboundedPreceding != 0 {
+		output.Builder.WriteString("UNBOUNDED PRECEDING")
+	} else if fo&unboundedFollowing != 0 {
+		output.Builder.WriteString("UNBOUNDED FOLLOWING")
+	} else if fo&currentRow != 0 {
+		output.Builder.WriteString("CURRENT ROW")
+	} else if fo&offsetPreceding != 0 {
+		output.writeNode(offset)
+		output.Builder.WriteString(" PRECEDING")
+	} else if fo&offsetFollowing != 0 {
+		output.writeNode(offset)
+		output.Builder.WriteString(" FOLLOWING")
+	}
 }
 
 func (output *Printer) writeListWithSeparator(l []*pg_query.Node, separator string) {
