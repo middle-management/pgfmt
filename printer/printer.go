@@ -980,6 +980,125 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeNode(n.DefElem.Arg)
 		}
 
+	case *pg_query.Node_CreateFunctionStmt:
+		output.Builder.WriteString("CREATE ")
+		if n.CreateFunctionStmt.Replace {
+			output.Builder.WriteString("OR REPLACE ")
+		}
+		if n.CreateFunctionStmt.IsProcedure {
+			output.Builder.WriteString("PROCEDURE ")
+		} else {
+			output.Builder.WriteString("FUNCTION ")
+		}
+		output.writeListWithSeparator(n.CreateFunctionStmt.Funcname, ".")
+		output.Builder.WriteString("(")
+		output.writeFunctionParams(n.CreateFunctionStmt.Parameters)
+		output.Builder.WriteString(")")
+		if n.CreateFunctionStmt.ReturnType != nil {
+			// Check if this is RETURNS TABLE
+			var tableParams []*pg_query.Node
+			for _, p := range n.CreateFunctionStmt.Parameters {
+				fp := p.GetFunctionParameter()
+				if fp != nil && fp.Mode == pg_query.FunctionParameterMode_FUNC_PARAM_TABLE {
+					tableParams = append(tableParams, p)
+				}
+			}
+			if len(tableParams) > 0 {
+				output.Builder.WriteString("\nRETURNS TABLE (")
+				for i, p := range tableParams {
+					fp := p.GetFunctionParameter()
+					output.Builder.WriteString(fp.Name)
+					output.Builder.WriteString(" ")
+					output.writeTypeName(fp.ArgType)
+					if i != len(tableParams)-1 {
+						output.Builder.WriteString(", ")
+					}
+				}
+				output.Builder.WriteString(")")
+			} else {
+				output.Builder.WriteString("\nRETURNS ")
+				output.writeTypeName(n.CreateFunctionStmt.ReturnType)
+			}
+		}
+		for _, opt := range n.CreateFunctionStmt.Options {
+			de := opt.GetDefElem()
+			if de == nil {
+				continue
+			}
+			switch de.Defname {
+			case "as":
+				if l := de.Arg.GetList(); l != nil && len(l.Items) > 0 {
+					output.Builder.WriteString("\nAS ")
+					output.writeNode(l.Items[0])
+				}
+			case "language":
+				output.Builder.WriteString("\nLANGUAGE ")
+				output.Builder.WriteString(de.Arg.GetString_().GetSval())
+			case "volatility":
+				output.Builder.WriteString("\n")
+				output.Builder.WriteString(strings.ToUpper(de.Arg.GetString_().GetSval()))
+			case "strict":
+				if de.Arg.GetBoolean().GetBoolval() {
+					output.Builder.WriteString("\nSTRICT")
+				} else {
+					output.Builder.WriteString("\nCALLED ON NULL INPUT")
+				}
+			case "security":
+				if de.Arg.GetBoolean().GetBoolval() {
+					output.Builder.WriteString("\nSECURITY DEFINER")
+				} else {
+					output.Builder.WriteString("\nSECURITY INVOKER")
+				}
+			case "parallel":
+				output.Builder.WriteString("\nPARALLEL ")
+				output.Builder.WriteString(strings.ToUpper(de.Arg.GetString_().GetSval()))
+			case "set":
+				// SET configuration options - skip for now
+			}
+		}
+		if n.CreateFunctionStmt.SqlBody != nil {
+			output.Builder.WriteString("\n")
+			output.writeNode(n.CreateFunctionStmt.SqlBody)
+		}
+
+	case *pg_query.Node_FunctionParameter:
+		switch n.FunctionParameter.Mode {
+		case pg_query.FunctionParameterMode_FUNC_PARAM_IN:
+			// IN is default, don't print
+		case pg_query.FunctionParameterMode_FUNC_PARAM_OUT:
+			output.Builder.WriteString("OUT ")
+		case pg_query.FunctionParameterMode_FUNC_PARAM_INOUT:
+			output.Builder.WriteString("INOUT ")
+		case pg_query.FunctionParameterMode_FUNC_PARAM_VARIADIC:
+			output.Builder.WriteString("VARIADIC ")
+		}
+		if n.FunctionParameter.Name != "" {
+			output.Builder.WriteString(n.FunctionParameter.Name)
+			output.Builder.WriteString(" ")
+		}
+		output.writeTypeName(n.FunctionParameter.ArgType)
+		if n.FunctionParameter.Defexpr != nil {
+			output.Builder.WriteString(" DEFAULT ")
+			output.writeNode(n.FunctionParameter.Defexpr)
+		}
+
+	case *pg_query.Node_ObjectWithArgs:
+		output.writeListWithSeparator(n.ObjectWithArgs.Objname, ".")
+		if !n.ObjectWithArgs.ArgsUnspecified {
+			output.Builder.WriteString("(")
+			for i, arg := range n.ObjectWithArgs.Objargs {
+				if tn := arg.GetTypeName(); tn != nil {
+					output.writeTypeName(tn)
+				} else {
+					output.writeNode(arg)
+				}
+				if i != len(n.ObjectWithArgs.Objargs)-1 {
+					output.Builder.WriteString(", ")
+				}
+			}
+			output.Builder.WriteString(")")
+		}
+
 	case nil:
 		// nothing
 
@@ -1359,6 +1478,19 @@ func (output *Printer) writeAlias(a *pg_query.Alias) {
 		}
 		output.Builder.WriteString(")")
 	}
+}
+
+func (output *Printer) writeFunctionParams(params []*pg_query.Node) {
+	// Filter out TABLE params (they go in RETURNS TABLE, not the param list)
+	var filtered []*pg_query.Node
+	for _, p := range params {
+		fp := p.GetFunctionParameter()
+		if fp != nil && fp.Mode == pg_query.FunctionParameterMode_FUNC_PARAM_TABLE {
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+	output.writeCommaSeparatedList(filtered)
 }
 
 func (output *Printer) writeCommaSeparatedList(l []*pg_query.Node) {
