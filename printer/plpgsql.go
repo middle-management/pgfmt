@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	pg_query "github.com/pganalyze/pg_query_go/v5"
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
 
 // plContext holds state during PL/pgSQL body formatting.
@@ -165,47 +165,20 @@ func (ctx *plContext) writeDeclare(indent int) {
 	var decls []string
 	for _, d := range ctx.datums {
 		kind, inner := unwrapNode(d)
-		if kind != "PLpgSQL_var" {
-			continue
-		}
-		name := jsonStr(inner, "refname")
-		if name == "" || strings.HasPrefix(name, "__") {
-			continue
-		}
-		if jsonFloat(inner, "lineno") == 0 {
-			continue // implicit (found, params)
-		}
-		dt := jsonGetObj(inner, "datatype")
-		if dt == nil {
-			continue
-		}
-		pt := jsonGetObj(dt, "PLpgSQL_type")
-		if pt == nil {
-			continue
-		}
-		typ := strings.TrimSpace(jsonStr(pt, "typname"))
-		if typ == "" || typ == "UNKNOWN" {
-			continue
-		}
-
-		var parts []string
-		parts = append(parts, name)
-		if jsonBool(inner, "isconst") {
-			parts = append(parts, "CONSTANT")
-		}
-		parts = append(parts, typ)
-		if jsonBool(inner, "notnull") {
-			parts = append(parts, "NOT NULL")
-		}
-		decl := strings.Join(parts, " ")
-
-		if defVal := jsonGetObj(inner, "default_val"); defVal != nil {
-			if defExpr := jsonGetObj(defVal, "PLpgSQL_expr"); defExpr != nil {
-				decl += " := " + jsonStr(defExpr, "query")
+		switch kind {
+		case "PLpgSQL_var":
+			decl := ctx.varDecl(inner)
+			if decl != "" {
+				decls = append(decls, decl)
 			}
+		case "PLpgSQL_rec":
+			// Record variables (e.g. "r record")
+			name := jsonStr(inner, "refname")
+			if name == "" || strings.HasPrefix(name, "(") || jsonFloat(inner, "lineno") == 0 {
+				continue
+			}
+			decls = append(decls, name+" record")
 		}
-
-		decls = append(decls, decl)
 	}
 
 	if len(decls) > 0 {
@@ -218,6 +191,56 @@ func (ctx *plContext) writeDeclare(indent int) {
 			ctx.w(d + ";")
 		}
 	}
+}
+
+// varDecl builds a DECLARE line for a PLpgSQL_var, or returns "" to skip it.
+func (ctx *plContext) varDecl(inner map[string]interface{}) string {
+	name := jsonStr(inner, "refname")
+	if name == "" || strings.HasPrefix(name, "__") {
+		return ""
+	}
+	// Skip implicit variables (found, params) that have no source line
+	if jsonFloat(inner, "lineno") == 0 {
+		return ""
+	}
+	// Skip implicit exception variables
+	if jsonBool(inner, "isconst") && (name == "sqlstate" || name == "sqlerrm") {
+		return ""
+	}
+	dt := jsonGetObj(inner, "datatype")
+	if dt == nil {
+		return ""
+	}
+	pt := jsonGetObj(dt, "PLpgSQL_type")
+	if pt == nil {
+		return ""
+	}
+	typ := strings.TrimSpace(jsonStr(pt, "typname"))
+	if typ == "" || typ == "UNKNOWN" {
+		return ""
+	}
+	// Skip parser-inferred types (FOR loop variables, etc.)
+	if strings.HasPrefix(typ, "pg_catalog.") {
+		return ""
+	}
+
+	var parts []string
+	parts = append(parts, name)
+	if jsonBool(inner, "isconst") {
+		parts = append(parts, "CONSTANT")
+	}
+	parts = append(parts, typ)
+	if jsonBool(inner, "notnull") {
+		parts = append(parts, "NOT NULL")
+	}
+	decl := strings.Join(parts, " ")
+
+	if defVal := jsonGetObj(inner, "default_val"); defVal != nil {
+		if defExpr := jsonGetObj(defVal, "PLpgSQL_expr"); defExpr != nil {
+			decl += " := " + jsonStr(defExpr, "query")
+		}
+	}
+	return decl
 }
 
 // writeBlock emits a BEGIN/[EXCEPTION/]END block.
@@ -701,6 +724,9 @@ func (ctx *plContext) getRowVarName(node map[string]interface{}) string {
 			}
 		}
 	}
+	if rec := jsonGetObj(node, "PLpgSQL_rec"); rec != nil {
+		return jsonStr(rec, "refname")
+	}
 	if v := jsonGetObj(node, "PLpgSQL_var"); v != nil {
 		return jsonStr(v, "refname")
 	}
@@ -714,6 +740,9 @@ func (ctx *plContext) getTargetName(node map[string]interface{}) string {
 	}
 	if row := jsonGetObj(node, "PLpgSQL_row"); row != nil {
 		return ctx.rowFieldNames(row)
+	}
+	if rec := jsonGetObj(node, "PLpgSQL_rec"); rec != nil {
+		return jsonStr(rec, "refname")
 	}
 	if v := jsonGetObj(node, "PLpgSQL_var"); v != nil {
 		return jsonStr(v, "refname")
