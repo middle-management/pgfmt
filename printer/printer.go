@@ -297,22 +297,21 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 	case *pg_query.Node_SortBy:
 		output.writeNode(n.SortBy.Node)
-		output.Builder.WriteString(" ")
 		switch n.SortBy.SortbyDir {
 		case pg_query.SortByDir_SORTBY_ASC:
-			output.Builder.WriteString("ASC ")
+			output.Builder.WriteString(" ASC")
 		case pg_query.SortByDir_SORTBY_DESC:
-			output.Builder.WriteString("DESC ")
+			output.Builder.WriteString(" DESC")
 		case pg_query.SortByDir_SORTBY_USING:
-			output.Builder.WriteString("USING ")
+			output.Builder.WriteString(" USING ")
 			output.writeQualOp(n.SortBy.UseOp)
 		case pg_query.SortByDir_SORTBY_DEFAULT:
 		}
 		switch n.SortBy.SortbyNulls {
 		case pg_query.SortByNulls_SORTBY_NULLS_FIRST:
-			output.Builder.WriteString("NULLS FIRST ")
+			output.Builder.WriteString(" NULLS FIRST")
 		case pg_query.SortByNulls_SORTBY_NULLS_LAST:
-			output.Builder.WriteString("NULLS LAST ")
+			output.Builder.WriteString(" NULLS LAST")
 		case pg_query.SortByNulls_SORTBY_NULLS_DEFAULT:
 		}
 
@@ -362,57 +361,53 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 	case *pg_query.Node_IndexElem:
 		if n.IndexElem.Name != "" {
 			output.Builder.WriteString(n.IndexElem.Name)
-			output.Builder.WriteString(" ")
 		} else if n.IndexElem.Expr != nil {
 			switch n.IndexElem.Expr.GetNode().(type) {
-			case *pg_query.Node_FuncCall:
-			case *pg_query.Node_SqlvalueFunction:
-			case *pg_query.Node_TypeCast:
-			case *pg_query.Node_CoalesceExpr:
-			case *pg_query.Node_MinMaxExpr:
-			case *pg_query.Node_XmlExpr:
-			case *pg_query.Node_XmlSerialize:
+			case *pg_query.Node_FuncCall,
+				*pg_query.Node_SqlvalueFunction,
+				*pg_query.Node_TypeCast,
+				*pg_query.Node_CoalesceExpr,
+				*pg_query.Node_MinMaxExpr,
+				*pg_query.Node_XmlExpr,
+				*pg_query.Node_XmlSerialize:
 				output.writeNode(n.IndexElem.Expr)
 			default:
 				output.Builder.WriteString("(")
 				output.writeNode(n.IndexElem.Expr)
-				output.Builder.WriteString(") ")
+				output.Builder.WriteString(")")
 			}
 		} else {
 			fmt.Fprintf(os.Stderr, "invalid index elem\n")
 		}
 
 		if len(n.IndexElem.Collation) > 0 {
-			output.Builder.WriteString("COLLATE ")
+			output.Builder.WriteString(" COLLATE ")
 			for _, o := range n.IndexElem.Collation {
 				output.writeNode(o)
 			}
-			output.Builder.WriteString(" ")
 		}
 
 		if len(n.IndexElem.Opclass) > 0 {
-			output.writeListWithSeparator(n.IndexElem.Opclass, ".")
 			output.Builder.WriteString(" ")
+			output.writeListWithSeparator(n.IndexElem.Opclass, ".")
 		}
 
 		switch n.IndexElem.Ordering {
 		case pg_query.SortByDir_SORTBY_ASC:
-			output.Builder.WriteString("ASC ")
+			output.Builder.WriteString(" ASC")
 		case pg_query.SortByDir_SORTBY_DESC:
-			output.Builder.WriteString("DESC ")
+			output.Builder.WriteString(" DESC")
 		case pg_query.SortByDir_SORTBY_USING:
 			fmt.Fprintf(os.Stderr, "SORTBY_USING not allowed in CREATE INDEX\n")
 		case pg_query.SortByDir_SORTBY_DEFAULT:
 		}
 		switch n.IndexElem.NullsOrdering {
 		case pg_query.SortByNulls_SORTBY_NULLS_FIRST:
-			output.Builder.WriteString("NULLS FIRST ")
+			output.Builder.WriteString(" NULLS FIRST")
 		case pg_query.SortByNulls_SORTBY_NULLS_LAST:
-			output.Builder.WriteString("NULLS LAST ")
+			output.Builder.WriteString(" NULLS LAST")
 		case pg_query.SortByNulls_SORTBY_NULLS_DEFAULT:
 		}
-
-		// TODO remove trailing space
 
 	case *pg_query.Node_IndexStmt:
 		output.Builder.WriteString("CREATE ")
@@ -432,40 +427,40 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		output.Builder.WriteString("ON ")
 		output.writeRangeVar(n.IndexStmt.Relation)
-		output.Builder.WriteString(" ")
 		if n.IndexStmt.AccessMethod != "" {
-			output.Builder.WriteString("USING ")
-			output.Builder.WriteString(n.IndexStmt.AccessMethod) // TODO quote identifier
+			output.Builder.WriteString(" USING ")
+			output.Builder.WriteString(n.IndexStmt.AccessMethod)
+			output.Builder.WriteString(" ")
+		} else {
 			output.Builder.WriteString(" ")
 		}
 
 		output.Builder.WriteString("(")
 		output.writeCommaSeparatedList(n.IndexStmt.IndexParams)
-		output.Builder.WriteString(") ")
+		output.Builder.WriteString(")")
 
 		if len(n.IndexStmt.IndexIncludingParams) > 0 {
-			output.Builder.WriteString("INCLUDE (")
+			output.Builder.WriteString(" INCLUDE (")
 			output.writeCommaSeparatedList(n.IndexStmt.IndexIncludingParams)
-			output.Builder.WriteString(") ")
+			output.Builder.WriteString(")")
 		}
 
 		if len(n.IndexStmt.Options) > 0 {
-			output.Builder.WriteString("WITH ")
+			output.Builder.WriteString(" WITH ")
 			for _, o := range n.IndexStmt.Options {
 				output.writeNode(o)
 			}
-			output.Builder.WriteString(" ")
 		}
 
 		if n.IndexStmt.TableSpace != "" {
-			output.Builder.WriteString("TABLESPACE ")
-			output.Builder.WriteString(n.IndexStmt.TableSpace) // TODO quote identifier
-			output.Builder.WriteString(" ")
+			output.Builder.WriteString(" TABLESPACE ")
+			output.Builder.WriteString(n.IndexStmt.TableSpace)
 		}
 
-		output.writeNode(n.IndexStmt.WhereClause)
-
-		// TODO remove trailing space
+		if n.IndexStmt.WhereClause != nil {
+			output.Builder.WriteString(" WHERE ")
+			output.writeNode(n.IndexStmt.WhereClause)
+		}
 
 	case *pg_query.Node_RangeVar:
 		output.writeRangeVar(n.RangeVar)
@@ -505,19 +500,17 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		output.writeNode(n.JoinExpr.Rarg)
 		if n.JoinExpr.Quals != nil {
-			output.Builder.WriteString("ON ")
+			output.Builder.WriteString(" ON ")
 			output.writeNode(n.JoinExpr.Quals)
-			output.Builder.WriteString(" ")
 		}
 		if len(n.JoinExpr.UsingClause) > 0 {
-			output.Builder.WriteString("USING (")
+			output.Builder.WriteString(" USING (")
 			output.writeCommaSeparatedList(n.JoinExpr.UsingClause)
-			output.Builder.WriteString(") ")
+			output.Builder.WriteString(")")
 		}
 		if n.JoinExpr.Alias != nil {
-			output.Builder.WriteString("AS ")
+			output.Builder.WriteString(" AS ")
 			output.writeAlias(n.JoinExpr.Alias)
-			output.Builder.WriteString(" ")
 		}
 
 	case *pg_query.Node_ResTarget:
@@ -567,10 +560,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 		output.Builder.WriteString("INSERT INTO ")
 		output.writeRangeVar(n.InsertStmt.Relation)
-		output.Builder.WriteString(" ")
 
 		if len(n.InsertStmt.Cols) > 0 {
-			output.Builder.WriteString("(")
+			output.Builder.WriteString(" (")
 			for i, c := range n.InsertStmt.Cols {
 				output.Builder.WriteString(c.GetResTarget().Name)
 				output.writeOptIndirection(c.GetResTarget().Indirection)
@@ -578,34 +570,33 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 					output.Builder.WriteString(", ")
 				}
 			}
-			output.Builder.WriteString(") ")
+			output.Builder.WriteString(")")
 		}
 
 		switch n.InsertStmt.Override {
 		case pg_query.OverridingKind_OVERRIDING_NOT_SET:
 			// do nothing
 		case pg_query.OverridingKind_OVERRIDING_USER_VALUE:
-			output.Builder.WriteString("OVERRIDING USER VALUE ")
+			output.Builder.WriteString(" OVERRIDING USER VALUE")
 		case pg_query.OverridingKind_OVERRIDING_SYSTEM_VALUE:
-			output.Builder.WriteString("OVERRIDING SYSTEM VALUE ")
+			output.Builder.WriteString(" OVERRIDING SYSTEM VALUE")
 		}
 
 		if n.InsertStmt.SelectStmt != nil {
+			output.Builder.WriteString("\n")
 			output.writeNode(n.InsertStmt.SelectStmt)
-			output.Builder.WriteString(" ")
 		} else {
-			output.Builder.WriteString("DEFAULT VALUES ")
+			output.Builder.WriteString("\nDEFAULT VALUES")
 		}
 
 		if n.InsertStmt.OnConflictClause != nil {
+			output.Builder.WriteString("\n")
 			output.writeOnConflictClause(n.InsertStmt.OnConflictClause)
-			output.Builder.WriteString(" ")
 		}
 
 		if len(n.InsertStmt.ReturningList) > 0 {
-			output.Builder.WriteString("RETURNING ")
+			output.Builder.WriteString("\nRETURNING\n\t")
 			output.writeCommaSeparatedList(n.InsertStmt.ReturningList)
-			output.Builder.WriteString(" ")
 		}
 
 	case *pg_query.Node_AStar:
@@ -690,7 +681,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("IF NOT EXISTS ")
 		}
 		output.writeRangeVar(n.CreateStmt.Relation)
-		output.Builder.WriteString("(\n")
+		output.Builder.WriteString(" (\n")
 		for i, elt := range n.CreateStmt.TableElts {
 			output.Builder.WriteString("\t")
 			output.writeNode(elt)
@@ -761,7 +752,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("REFERENCES ")
 			output.writeRangeVar(n.Constraint.Pktable)
 			if len(n.Constraint.PkAttrs) > 0 {
-				output.Builder.WriteString("(")
+				output.Builder.WriteString(" (")
 				output.writeCommaSeparatedList(n.Constraint.PkAttrs)
 				output.Builder.WriteString(")")
 			}
@@ -1129,9 +1120,8 @@ func (output *Printer) writeRangeVar(stmt *pg_query.RangeVar) {
 		output.Builder.WriteString(".")
 	}
 	output.Builder.WriteString(stmt.Relname)
-	output.Builder.WriteString(" ")
 	if stmt.Alias != nil {
-		output.Builder.WriteString("AS ")
+		output.Builder.WriteString(" AS ")
 		output.writeAlias(stmt.Alias)
 	}
 }
@@ -1160,13 +1150,13 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 			return
 		}
 
-		output.Builder.WriteString("SELECT ")
+		output.Builder.WriteString("SELECT")
 		if stmt.DistinctClause != nil {
-			output.Builder.WriteString("DISTINCT ")
+			output.Builder.WriteString(" DISTINCT")
 			if len(stmt.DistinctClause) > 0 {
-				output.Builder.WriteString("ON (")
+				output.Builder.WriteString(" ON (")
 				output.writeCommaSeparatedList(stmt.DistinctClause)
-				output.Builder.WriteString(") ")
+				output.Builder.WriteString(")")
 			}
 		}
 		output.Builder.WriteString("\n\t")
@@ -1176,7 +1166,6 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 				output.Builder.WriteString(",\n\t")
 			}
 		}
-		output.Builder.WriteString(" ")
 
 		if stmt.IntoClause != nil {
 			output.Builder.WriteString("\nINTO ")
@@ -1188,30 +1177,25 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 		if len(stmt.FromClause) > 0 {
 			output.Builder.WriteString("\nFROM\n\t")
 			output.writeListWithSeparator(stmt.FromClause, ", ")
-			output.Builder.WriteString(" ")
 		}
 		if stmt.WhereClause != nil {
 			output.Builder.WriteString("\nWHERE\n\t")
 			output.writeNode(stmt.WhereClause)
-			output.Builder.WriteString(" ")
 		}
 
 		if len(stmt.GroupClause) > 0 {
 			output.Builder.WriteString("\nGROUP BY\n\t")
 			output.writeCommaSeparatedList(stmt.GroupClause)
-			output.Builder.WriteString(" ")
 		}
 
 		if stmt.HavingClause != nil {
-			output.Builder.WriteString("HAVING ")
+			output.Builder.WriteString("\nHAVING\n\t")
 			output.writeNode(stmt.HavingClause)
-			output.Builder.WriteString(" ")
 		}
 
 		if len(stmt.WindowClause) > 0 {
-			output.Builder.WriteString("WINDOW ")
+			output.Builder.WriteString("\nWINDOW\n\t")
 			output.writeCommaSeparatedList(stmt.WindowClause)
-			output.Builder.WriteString(" ")
 		}
 	case pg_query.SetOperation_SETOP_UNION, pg_query.SetOperation_SETOP_INTERSECT, pg_query.SetOperation_SETOP_EXCEPT:
 		output.Builder.WriteString("(")
@@ -1239,17 +1223,16 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 	}
 
 	if len(stmt.SortClause) > 0 {
-		output.Builder.WriteString("ORDER BY ")
+		output.Builder.WriteString("\nORDER BY\n\t")
 		output.writeCommaSeparatedList(stmt.SortClause)
-		output.Builder.WriteString(" ")
 	}
 
 	if stmt.LimitCount != nil {
 		switch stmt.LimitOption {
 		case pg_query.LimitOption_LIMIT_OPTION_COUNT:
-			output.Builder.WriteString("LIMIT ")
+			output.Builder.WriteString("\nLIMIT ")
 		case pg_query.LimitOption_LIMIT_OPTION_WITH_TIES:
-			output.Builder.WriteString("FETCH FIRST ")
+			output.Builder.WriteString("\nFETCH FIRST ")
 		}
 
 		if stmt.LimitCount.GetAConst().GetIsnull() {
@@ -1258,21 +1241,19 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 			output.writeNode(stmt.LimitCount)
 		}
 
-		output.Builder.WriteString(" ")
 		if stmt.LimitOption == pg_query.LimitOption_LIMIT_OPTION_WITH_TIES {
-			output.Builder.WriteString("ROWS WITH TIES ")
+			output.Builder.WriteString(" ROWS WITH TIES")
 		}
 	}
 
 	if stmt.LimitOffset != nil {
-		output.Builder.WriteString("OFFSET ")
+		output.Builder.WriteString("\nOFFSET ")
 		output.writeNode(stmt.LimitOffset)
-		output.Builder.WriteString(" ")
 	}
 
 	if len(stmt.LockingClause) > 0 {
+		output.Builder.WriteString("\n")
 		output.writeCommaSeparatedList(stmt.LockingClause)
-		output.Builder.WriteString(" ")
 	}
 }
 

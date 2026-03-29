@@ -53,7 +53,7 @@ CREATE TABLE p_pbx_call_profile (
 );
 
 CREATE TABLE p_pbx_call_profile_mex_accept_call (
-	pbx_call_profile_id "uuid" NOT NULL REFERENCES p_pbx_call_profile ,
+	pbx_call_profile_id "uuid" NOT NULL REFERENCES p_pbx_call_profile,
 	subscription_id "uuid",
 	accept_calls "pg_catalog"."bool" NOT NULL DEFAULT true,
 	created_at "pg_catalog"."timestamptz" NOT NULL,
@@ -69,14 +69,14 @@ CREATE TABLE p_pbx_user (
 	level "pg_catalog"."varchar",
 	available_at "pg_catalog"."timestamptz",
 	organisation_id "uuid" NOT NULL,
-	call_profile_available_id "uuid" REFERENCES p_pbx_call_profile ,
-	call_profile_unavailable_id "uuid" REFERENCES p_pbx_call_profile ,
+	call_profile_available_id "uuid" REFERENCES p_pbx_call_profile,
+	call_profile_unavailable_id "uuid" REFERENCES p_pbx_call_profile,
 	created_at "pg_catalog"."timestamptz" NOT NULL,
 	updated_at "pg_catalog"."timestamptz" NOT NULL,
 	deleted_at "pg_catalog"."timestamptz"
 );
 
-CREATE UNIQUE INDEX ON p_pbx_user  USING btree (msisdn , organisation_id ) deleted_at IS NULL;
+CREATE UNIQUE INDEX ON p_pbx_user USING btree (msisdn, organisation_id) WHERE deleted_at IS NULL;
 
 CREATE TABLE p_pbx_prompt (
 	pbx_prompt_id "uuid" PRIMARY KEY,
@@ -94,7 +94,7 @@ CREATE TABLE p_pbx_voicemail (
 	pin "pg_catalog"."varchar",
 	extension "pg_catalog"."varchar",
 	msisdn "pg_catalog"."varchar",
-	pbx_prompt_id "uuid" REFERENCES p_pbx_prompt ,
+	pbx_prompt_id "uuid" REFERENCES p_pbx_prompt,
 	organisation_id "uuid" NOT NULL,
 	created_at "pg_catalog"."timestamptz" NOT NULL,
 	updated_at "pg_catalog"."timestamptz" NOT NULL,
@@ -108,23 +108,23 @@ CREATE TABLE p_pbx_route (
 	name "pg_catalog"."varchar",
 	suffix "pg_catalog"."varchar",
 	call_display "pg_catalog"."varchar",
-	pbx_user_id "uuid" REFERENCES p_pbx_user ,
-	pbx_prompt_id "uuid" REFERENCES p_pbx_prompt ,
-	pbx_voicemail_id "uuid" REFERENCES p_pbx_voicemail ,
+	pbx_user_id "uuid" REFERENCES p_pbx_user,
+	pbx_prompt_id "uuid" REFERENCES p_pbx_prompt,
+	pbx_voicemail_id "uuid" REFERENCES p_pbx_voicemail,
 	organisation_id "uuid",
 	subscription_id "uuid",
 	created_at "pg_catalog"."timestamptz" NOT NULL,
 	updated_at "pg_catalog"."timestamptz" NOT NULL
 );
 
-CREATE INDEX ON p_pbx_route  USING btree (organisation_id ) ;
+CREATE INDEX ON p_pbx_route USING btree (organisation_id);
 
-ALTER TABLE p_pbx_route 
+ALTER TABLE p_pbx_route
 	ADD COLUMN next "uuid" REFERENCES p_pbx_route (pbx_route_id);
 
 CREATE TABLE p_pbx_call_profile_route_accept_call (
-	pbx_call_profile_id "uuid" NOT NULL REFERENCES p_pbx_call_profile ,
-	pbx_route_id "uuid" NOT NULL REFERENCES p_pbx_route ,
+	pbx_call_profile_id "uuid" NOT NULL REFERENCES p_pbx_call_profile,
+	pbx_route_id "uuid" NOT NULL REFERENCES p_pbx_route,
 	accept_calls "pg_catalog"."bool" NOT NULL,
 	created_at "pg_catalog"."timestamptz" NOT NULL,
 	updated_at "pg_catalog"."timestamptz" NOT NULL,
@@ -133,7 +133,7 @@ CREATE TABLE p_pbx_call_profile_route_accept_call (
 
 CREATE TABLE p_pbx_route_schedule (
 	pbx_schedule_id "uuid" PRIMARY KEY,
-	pbx_route_id "uuid" NOT NULL REFERENCES p_pbx_route ,
+	pbx_route_id "uuid" NOT NULL REFERENCES p_pbx_route,
 	name "pg_catalog"."varchar",
 	type "pg_catalog"."varchar" NOT NULL,
 	index "pg_catalog"."int4" NOT NULL,
@@ -153,17 +153,17 @@ CREATE TABLE p_pbx_route_schedule (
 	updated_at "pg_catalog"."timestamptz" NOT NULL
 );
 
-CREATE INDEX ON p_pbx_route_schedule  USING btree (pbx_route_id ) ;
+CREATE INDEX ON p_pbx_route_schedule USING btree (pbx_route_id);
 
 CREATE TABLE p_pbx_route_queue (
-	pbx_route_id "uuid" PRIMARY KEY REFERENCES p_pbx_route ,
+	pbx_route_id "uuid" PRIMARY KEY REFERENCES p_pbx_route,
 	max_waiting_callers "pg_catalog"."int4" NOT NULL,
 	created_at "pg_catalog"."timestamptz" NOT NULL,
 	updated_at "pg_catalog"."timestamptz" NOT NULL
 );
 
 CREATE TABLE p_pbx_route_menu (
-	pbx_route_id "uuid" NOT NULL REFERENCES p_pbx_route ,
+	pbx_route_id "uuid" NOT NULL REFERENCES p_pbx_route,
 	type "pg_catalog"."varchar" NOT NULL,
 	next "uuid" REFERENCES p_pbx_route (pbx_route_id),
 	created_at "pg_catalog"."timestamptz" NOT NULL,
@@ -171,22 +171,22 @@ CREATE TABLE p_pbx_route_menu (
 	PRIMARY KEY (pbx_route_id, type)
 );
 
-CREATE INDEX ON p_pbx_route_menu  USING btree (pbx_route_id ) ;
+CREATE INDEX ON p_pbx_route_menu USING btree (pbx_route_id);
 
 CREATE TABLE p_pbx_route_user (
-	pbx_user_id "uuid" NOT NULL REFERENCES p_pbx_user ,
-	pbx_route_id "uuid" NOT NULL REFERENCES p_pbx_route ,
+	pbx_user_id "uuid" NOT NULL REFERENCES p_pbx_user,
+	pbx_route_id "uuid" NOT NULL REFERENCES p_pbx_route,
 	created_at "pg_catalog"."timestamptz" NOT NULL,
 	updated_at "pg_catalog"."timestamptz" NOT NULL,
 	connected "pg_catalog"."bool" NOT NULL,
 	PRIMARY KEY (pbx_user_id, pbx_route_id)
 );
 
-CREATE INDEX ON p_pbx_route_user  USING btree (pbx_route_id ) ;
+CREATE INDEX ON p_pbx_route_user USING btree (pbx_route_id);
 
 CREATE TABLE p_pbx_voicemail_user (
-	pbx_voicemail_id "uuid" NOT NULL REFERENCES p_pbx_voicemail ,
-	pbx_user_id "uuid" NOT NULL REFERENCES p_pbx_user ,
+	pbx_voicemail_id "uuid" NOT NULL REFERENCES p_pbx_voicemail,
+	pbx_user_id "uuid" NOT NULL REFERENCES p_pbx_user,
 	notify_sms "pg_catalog"."bool" NOT NULL DEFAULT false,
 	notify_email "pg_catalog"."bool" NOT NULL DEFAULT false,
 	email "pg_catalog"."varchar",
@@ -197,7 +197,7 @@ CREATE TABLE p_pbx_voicemail_user (
 
 CREATE TABLE p_pbx_prompt_recording (
 	pbx_prompt_recording_id "uuid" PRIMARY KEY,
-	pbx_prompt_id "uuid" NOT NULL REFERENCES p_pbx_prompt ,
+	pbx_prompt_id "uuid" NOT NULL REFERENCES p_pbx_prompt,
 	url "pg_catalog"."varchar" NOT NULL,
 	content_type "pg_catalog"."varchar",
 	language "pg_catalog"."varchar",
@@ -207,7 +207,7 @@ CREATE TABLE p_pbx_prompt_recording (
 );
 
 CREATE TABLE p_pbx_prompt_recording_alternative (
-	pbx_prompt_recording_id "uuid" REFERENCES p_pbx_prompt_recording ,
+	pbx_prompt_recording_id "uuid" REFERENCES p_pbx_prompt_recording,
 	url "pg_catalog"."varchar" NOT NULL,
 	content_type "pg_catalog"."varchar" NOT NULL,
 	created_at "pg_catalog"."timestamptz" NOT NULL,
@@ -217,7 +217,7 @@ CREATE TABLE p_pbx_prompt_recording_alternative (
 
 CREATE TABLE p_pbx_prompt_callback (
 	pbx_prompt_callback_id "uuid" PRIMARY KEY,
-	pbx_prompt_id "uuid" NOT NULL REFERENCES p_pbx_prompt ,
+	pbx_prompt_id "uuid" NOT NULL REFERENCES p_pbx_prompt,
 	status "pg_catalog"."varchar" NOT NULL,
 	language "pg_catalog"."varchar" NOT NULL,
 	msisdn "pg_catalog"."varchar" NOT NULL,
@@ -229,7 +229,7 @@ CREATE TABLE p_pbx_prompt_callback (
 
 CREATE TABLE p_pbx_voicemail_recording (
 	pbx_voicemail_recording_id "uuid" PRIMARY KEY,
-	pbx_voicemail_id "uuid" NOT NULL REFERENCES p_pbx_voicemail ,
+	pbx_voicemail_id "uuid" NOT NULL REFERENCES p_pbx_voicemail,
 	url "pg_catalog"."varchar" NOT NULL,
 	content_type "pg_catalog"."varchar",
 	msisdn "pg_catalog"."varchar",
@@ -241,7 +241,7 @@ CREATE TABLE p_pbx_voicemail_recording (
 );
 
 CREATE TABLE p_pbx_voicemail_recording_alternative (
-	pbx_voicemail_recording_id "uuid" REFERENCES p_pbx_voicemail_recording ,
+	pbx_voicemail_recording_id "uuid" REFERENCES p_pbx_voicemail_recording,
 	url "pg_catalog"."varchar" NOT NULL,
 	content_type "pg_catalog"."varchar" NOT NULL,
 	created_at "pg_catalog"."timestamptz" NOT NULL,
@@ -250,8 +250,8 @@ CREATE TABLE p_pbx_voicemail_recording_alternative (
 );
 
 CREATE TABLE p_pbx_voicemail_user_recording_status (
-	pbx_voicemail_recording_id "uuid" NOT NULL REFERENCES p_pbx_voicemail_recording ,
-	pbx_user_id "uuid" NOT NULL REFERENCES p_pbx_user ,
+	pbx_voicemail_recording_id "uuid" NOT NULL REFERENCES p_pbx_voicemail_recording,
+	pbx_user_id "uuid" NOT NULL REFERENCES p_pbx_user,
 	read "pg_catalog"."bool" NOT NULL,
 	created_at "pg_catalog"."timestamptz" NOT NULL,
 	updated_at "pg_catalog"."timestamptz" NOT NULL,
@@ -266,7 +266,7 @@ CREATE TABLE p_pbx_customer (
 	updated_at "timestamptz" NOT NULL
 );
 
-CREATE UNIQUE INDEX ON p_pbx_customer  USING btree (organisation_id ) ;
+CREATE UNIQUE INDEX ON p_pbx_customer USING btree (organisation_id);
 
 ;
 

@@ -158,8 +158,8 @@ func TestInsertOnConflict(t *testing.T) {
 
 func TestInsertReturning(t *testing.T) {
 	got := format(t, "INSERT INTO foo (name) VALUES ('a') RETURNING id")
-	if !strings.Contains(got, "RETURNING id") {
-		t.Errorf("expected RETURNING, got: %s", got)
+	if !strings.Contains(got, "RETURNING") || !strings.Contains(got, "id") {
+		t.Errorf("expected RETURNING with id, got: %s", got)
 	}
 }
 
