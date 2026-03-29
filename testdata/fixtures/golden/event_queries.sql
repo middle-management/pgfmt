@@ -47,10 +47,14 @@ new_event AS (
 				r.reactor = pggen.arg('reactor')::"text"
 		))
 		AND (e.index >= lower(pggen.arg('range')::"int8range"))
-		AND (upper(pggen.arg('range')) IS NULL
-			OR (e.index < upper(pggen.arg('range'))))
-		AND ((e.type = ANY (pggen.arg('types')))
-			OR pggen.arg('types') IS NULL)
+		AND (
+			upper(pggen.arg('range')) IS NULL
+			OR (e.index < upper(pggen.arg('range')))
+		)
+		AND (
+			(e.type = ANY (pggen.arg('types')))
+			OR pggen.arg('types') IS NULL
+		)
 	ORDER BY
 		index
 	ON CONFLICT (event_id, reactor) DO NOTHING
@@ -71,10 +75,14 @@ FROM
 	event AS evt
 WHERE
 	(evt.index >= lower(pggen.arg('range')::"int8range"))
-	AND (upper(pggen.arg('range')) IS NULL
-		OR (evt.index < upper(pggen.arg('range'))))
-	AND ((evt.type = ANY (pggen.arg('types')))
-		OR pggen.arg('types') IS NULL)
+	AND (
+		upper(pggen.arg('range')) IS NULL
+		OR (evt.index < upper(pggen.arg('range')))
+	)
+	AND (
+		(evt.type = ANY (pggen.arg('types')))
+		OR pggen.arg('types') IS NULL
+	)
 ORDER BY
 	evt.index;
 

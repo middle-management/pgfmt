@@ -293,46 +293,49 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 AS $$
-SELECT
-	r.pbx_route_id,
-	r.type,
-	COALESCE(r.name, '') AS name,
-	r.next,
-	r.extension,
-	r.pbx_user_id,
-	r.pbx_prompt_id,
-	r.pbx_voicemail_id,
-	array_agg(u.pbx_user_id) AS users,
-	array_agg(u.pbx_user_id) AS connectedusers,
-	array_agg(u.pbx_user_id) AS disconnectedusers,
-	json_object_agg(m.type, m.next) AS menu,
-	json_agg(row_to_json(i)) AS schedule,
-	(
 	SELECT
-		row_to_json(q)
+		r.pbx_route_id,
+		r.type,
+		COALESCE(r.name, '') AS name,
+		r.next,
+		r.extension,
+		r.pbx_user_id,
+		r.pbx_prompt_id,
+		r.pbx_voicemail_id,
+		array_agg(u.pbx_user_id) AS users,
+		array_agg(u.pbx_user_id) AS connectedusers,
+		array_agg(u.pbx_user_id) AS disconnectedusers,
+		json_object_agg(m.type, m.next) AS menu,
+		json_agg(row_to_json(i)) AS schedule,
+		(
+			SELECT
+				row_to_json(q)
+			FROM
+				p_pbx_route_queue AS q
+			WHERE
+				r.pbx_route_id = q.pbx_route_id
+		) AS queue,
+		COALESCE(r.suffix, '') AS suffix,
+		COALESCE(r.call_display, 'a') AS call_display,
+		r.subscription_id,
+		r.organisation_id,
+		r.created_at,
+		r.updated_at
 	FROM
-		p_pbx_route_queue AS q
-	WHERE
-		r.pbx_route_id = q.pbx_route_id
-) AS queue,
-	COALESCE(r.suffix, '') AS suffix,
-	COALESCE(r.call_display, 'a') AS call_display,
-	r.subscription_id,
-	r.organisation_id,
-	r.created_at,
-	r.updated_at
-FROM
-	p_pbx_route AS r
+		p_pbx_route AS r
 	LEFT JOIN p_pbx_route_user AS u USING (pbx_route_id)
 	LEFT JOIN p_pbx_route_menu AS m USING (pbx_route_id)
 	LEFT JOIN p_pbx_route_schedule AS i USING (pbx_route_id)
-WHERE
-	r.pbx_route_id = ANY (route_id)
-GROUP BY
-	r.pbx_route_id
+	WHERE
+		r.pbx_route_id = ANY (route_id)
+	GROUP BY
+		r.pbx_route_id
 $$;
 
-CREATE OR REPLACE FUNCTION pbx_prompt_select(prompt_ids "uuid"[], contenttype "pg_catalog"."varchar")
+CREATE OR REPLACE FUNCTION pbx_prompt_select(
+	prompt_ids "uuid"[],
+	contenttype "pg_catalog"."varchar"
+)
 RETURNS TABLE (
 	pbx_prompt_id "uuid",
 	description "pg_catalog"."varchar",
@@ -345,81 +348,92 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 AS $$
-SELECT
-	p.pbx_prompt_id,
-	COALESCE(p.description, ''),
-	COALESCE(p.extension, ''),
-	jsonb_agg(row_to_json(r)) AS recordings,
-	p.organisation_id IS NOT NULL,
-	p.organisation_id,
-	p.created_at,
-	p.updated_at
-FROM
-	p_pbx_prompt AS p
-	LEFT JOIN LATERAL (
 	SELECT
-		r.pbx_prompt_recording_id,
-		r.pbx_prompt_id,
-		COALESCE(a.content_type, r.content_type) AS content_type,
-		COALESCE(a.url, r.url) AS url,
+		p.pbx_prompt_id,
+		COALESCE(p.description, ''),
+		COALESCE(p.extension, ''),
+		jsonb_agg(row_to_json(r)) AS recordings,
+		p.organisation_id IS NOT NULL,
+		p.organisation_id,
+		p.created_at,
+		p.updated_at
+	FROM
+		p_pbx_prompt AS p
+	LEFT JOIN LATERAL (
+			SELECT
+				r.pbx_prompt_recording_id,
+				r.pbx_prompt_id,
+				COALESCE(a.content_type, r.content_type) AS content_type,
+				COALESCE(a.url, r.url) AS url,
+				r.duration,
+				r.language,
+				r.created_at,
+				r.updated_at
+			FROM
+				p_pbx_prompt_recording AS r
+	LEFT JOIN p_pbx_prompt_recording_alternative AS a ON (a.pbx_prompt_recording_id = r.pbx_prompt_recording_id)
+			AND (a.content_type = contenttype)
+			WHERE
+				(
+					contenttype IS NULL
+					OR (r.content_type = contenttype)
+					OR (a.content_type = contenttype)
+				)
+				AND (r.pbx_prompt_id = p.pbx_prompt_id)
+		) r ON true
+	WHERE
+		p.pbx_prompt_id = ANY (prompt_ids)
+	GROUP BY
+		p.pbx_prompt_id
+$$;
+
+CREATE OR REPLACE FUNCTION pbx_voicemail_recording_select(
+	voicemail_recording_ids "uuid"[],
+	contenttype "pg_catalog"."varchar"
+)
+RETURNS TABLE (
+	pbx_voicemail_recording_id "uuid",
+	url "pg_catalog"."varchar",
+	content_type "pg_catalog"."varchar",
+	msisdn "pg_catalog"."varchar",
+	duration "pg_catalog"."int8",
+	read "bool",
+	pbx_voicemail_id "uuid",
+	recorded_at "timestamptz",
+	created_at "timestamptz",
+	updated_at "timestamptz"
+)
+LANGUAGE sql
+AS $$
+	SELECT
+		r.pbx_voicemail_recording_id,
+		COALESCE(a.url, r.url, '') AS url,
+		COALESCE(a.content_type, r.content_type, 'audio/wav') AS content_type,
+		COALESCE(r.msisdn, '') AS msisdn,
 		r.duration,
-		r.language,
+		false AS read,
+		r.pbx_voicemail_id,
+		r.recorded_at,
 		r.created_at,
 		r.updated_at
 	FROM
-		p_pbx_prompt_recording AS r
-	LEFT JOIN p_pbx_prompt_recording_alternative AS a ON (a.pbx_prompt_recording_id = r.pbx_prompt_recording_id)
-		AND (a.content_type = contenttype)
-	WHERE
-		(contenttype IS NULL
-			OR (r.content_type = contenttype)
-			OR (a.content_type = contenttype))
-		AND (r.pbx_prompt_id = p.pbx_prompt_id)
-) r ON true
-WHERE
-	p.pbx_prompt_id = ANY (prompt_ids)
-GROUP BY
-	p.pbx_prompt_id
-$$;
-
-CREATE OR REPLACE FUNCTION pbx_voicemail_recording_select(voicemail_recording_ids "uuid"[], contenttype "pg_catalog"."varchar")
-RETURNS TABLE (
-	pbx_voicemail_recording_id "uuid",
-	url "pg_catalog"."varchar",
-	content_type "pg_catalog"."varchar",
-	msisdn "pg_catalog"."varchar",
-	duration "pg_catalog"."int8",
-	read "bool",
-	pbx_voicemail_id "uuid",
-	recorded_at "timestamptz",
-	created_at "timestamptz",
-	updated_at "timestamptz"
-)
-LANGUAGE sql
-AS $$
-SELECT
-	r.pbx_voicemail_recording_id,
-	COALESCE(a.url, r.url, '') AS url,
-	COALESCE(a.content_type, r.content_type, 'audio/wav') AS content_type,
-	COALESCE(r.msisdn, '') AS msisdn,
-	r.duration,
-	false AS read,
-	r.pbx_voicemail_id,
-	r.recorded_at,
-	r.created_at,
-	r.updated_at
-FROM
-	p_pbx_voicemail_recording AS r
+		p_pbx_voicemail_recording AS r
 	LEFT JOIN p_pbx_voicemail_recording_alternative AS a ON (r.pbx_voicemail_recording_id = a.pbx_voicemail_recording_id)
 	AND (a.content_type = contenttype)
-WHERE
-	(r.pbx_voicemail_recording_id = ANY (voicemail_recording_ids))
-	AND (contenttype IS NULL
-		OR (r.content_type = contenttype)
-		OR (a.content_type = contenttype))
+	WHERE
+		(r.pbx_voicemail_recording_id = ANY (voicemail_recording_ids))
+		AND (
+			contenttype IS NULL
+			OR (r.content_type = contenttype)
+			OR (a.content_type = contenttype)
+		)
 $$;
 
-CREATE OR REPLACE FUNCTION pbx_voicemail_recording_with_read_select(voicemail_recording_ids "uuid"[], contenttype "pg_catalog"."varchar", usermsisdn "pg_catalog"."varchar")
+CREATE OR REPLACE FUNCTION pbx_voicemail_recording_with_read_select(
+	voicemail_recording_ids "uuid"[],
+	contenttype "pg_catalog"."varchar",
+	usermsisdn "pg_catalog"."varchar"
+)
 RETURNS TABLE (
 	pbx_voicemail_recording_id "uuid",
 	url "pg_catalog"."varchar",
@@ -434,30 +448,32 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 AS $$
-SELECT
-	r.pbx_voicemail_recording_id,
-	COALESCE(a.url, r.url, '') AS url,
-	COALESCE(a.content_type, r.content_type, '') AS content_type,
-	COALESCE(r.msisdn, '') AS msisdn,
-	r.duration,
-	COALESCE(s.read, false) AS read,
-	r.pbx_voicemail_id,
-	r.recorded_at,
-	r.created_at,
-	r.updated_at
-FROM
-	p_pbx_voicemail_recording AS r
+	SELECT
+		r.pbx_voicemail_recording_id,
+		COALESCE(a.url, r.url, '') AS url,
+		COALESCE(a.content_type, r.content_type, '') AS content_type,
+		COALESCE(r.msisdn, '') AS msisdn,
+		r.duration,
+		COALESCE(s.read, false) AS read,
+		r.pbx_voicemail_id,
+		r.recorded_at,
+		r.created_at,
+		r.updated_at
+	FROM
+		p_pbx_voicemail_recording AS r
 	CROSS JOIN p_pbx_voicemail_user AS vu USING (pbx_voicemail_id)
 	CROSS JOIN p_pbx_user AS u USING (pbx_user_id)
 	LEFT JOIN p_pbx_voicemail_user_recording_status AS s USING (pbx_voicemail_recording_id, pbx_user_id)
 	LEFT JOIN p_pbx_voicemail_recording_alternative AS a ON (r.pbx_voicemail_recording_id = a.pbx_voicemail_recording_id)
 	AND (a.content_type = contenttype)
-WHERE
-	(r.pbx_voicemail_recording_id = ANY (voicemail_recording_ids))
-	AND (u.msisdn = usermsisdn)
-	AND (contenttype::"text" IS NULL
-		OR (r.content_type = contenttype)
-		OR (a.content_type = contenttype))
+	WHERE
+		(r.pbx_voicemail_recording_id = ANY (voicemail_recording_ids))
+		AND (u.msisdn = usermsisdn)
+		AND (
+			contenttype::"text" IS NULL
+			OR (r.content_type = contenttype)
+			OR (a.content_type = contenttype)
+		)
 $$;
 
 CREATE OR REPLACE FUNCTION pbx_voicemail_select(voicemail_ids "uuid"[])
@@ -474,23 +490,23 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 AS $$
-SELECT
-	v.pbx_voicemail_id,
-	COALESCE(v.name, ''),
-	COALESCE(v.pin, ''),
-	COALESCE(v.msisdn, ''),
-	v.pbx_prompt_id,
-	v.organisation_id,
-	jsonb_agg(row_to_json(u)) AS users,
-	v.created_at,
-	v.updated_at
-FROM
-	p_pbx_voicemail AS v
+	SELECT
+		v.pbx_voicemail_id,
+		COALESCE(v.name, ''),
+		COALESCE(v.pin, ''),
+		COALESCE(v.msisdn, ''),
+		v.pbx_prompt_id,
+		v.organisation_id,
+		jsonb_agg(row_to_json(u)) AS users,
+		v.created_at,
+		v.updated_at
+	FROM
+		p_pbx_voicemail AS v
 	LEFT JOIN p_pbx_voicemail_user AS u USING (pbx_voicemail_id)
-WHERE
-	v.pbx_voicemail_id = ANY (voicemail_ids)
-GROUP BY
-	v.pbx_voicemail_id
+	WHERE
+		v.pbx_voicemail_id = ANY (voicemail_ids)
+	GROUP BY
+		v.pbx_voicemail_id
 $$;
 
 COMMIT;
@@ -515,33 +531,33 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 AS $$
-SELECT
-	cp.pbx_call_profile_id,
-	u.pbx_user_id,
-	desktop_call_as_msisdn,
-	mobile_call_as_msisdn,
-	mex_call_as_msisdn,
-	mex_call_as,
-	available_by_default,
-	json_agg(row_to_json(ma)) AS mex_accept_call,
-	json_agg(row_to_json(ra)) AS route_accept_call,
-	json_agg(row_to_json(ru)) AS route_user,
-	cp.created_at,
-	cp.updated_at,
-	cp.deleted_at
-FROM
-	p_pbx_call_profile AS cp
+	SELECT
+		cp.pbx_call_profile_id,
+		u.pbx_user_id,
+		desktop_call_as_msisdn,
+		mobile_call_as_msisdn,
+		mex_call_as_msisdn,
+		mex_call_as,
+		available_by_default,
+		json_agg(row_to_json(ma)) AS mex_accept_call,
+		json_agg(row_to_json(ra)) AS route_accept_call,
+		json_agg(row_to_json(ru)) AS route_user,
+		cp.created_at,
+		cp.updated_at,
+		cp.deleted_at
+	FROM
+		p_pbx_call_profile AS cp
 	LEFT JOIN p_pbx_call_profile_mex_accept_call AS ma USING (pbx_call_profile_id)
 	LEFT JOIN p_pbx_call_profile_route_accept_call AS ra USING (pbx_call_profile_id)
 	LEFT JOIN p_pbx_user AS u ON (u.call_profile_available_id = cp.pbx_call_profile_id)
 	OR (u.call_profile_unavailable_id = cp.pbx_call_profile_id)
 	LEFT JOIN p_pbx_route_user AS ru ON u.pbx_user_id = ru.pbx_user_id
 	LEFT JOIN unnest(call_profile_ids) WITH ORDINALITY so(pbx_call_profile_idsort_order) ON cp.pbx_call_profile_id = so.pbx_call_profile_id
-WHERE
-	cp.pbx_call_profile_id = ANY (call_profile_ids)
-GROUP BY
-	cp.pbx_call_profile_id, u.pbx_user_id, so.sort_order
-ORDER BY
-	so.sort_order ASC
+	WHERE
+		cp.pbx_call_profile_id = ANY (call_profile_ids)
+	GROUP BY
+		cp.pbx_call_profile_id, u.pbx_user_id, so.sort_order
+	ORDER BY
+		so.sort_order ASC
 $$;
 

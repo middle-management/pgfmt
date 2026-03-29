@@ -155,12 +155,12 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_EXPR_SUBLINK:
 			output.Builder.WriteString("(")
-			output.indent++
+			output.indent += 2
 			output.writeNewlineIndent()
 			output.writeNode(n.SubLink.Subselect)
-			output.indent--
+			output.indent -= 2
 			output.writeNewlineIndent()
-			output.Builder.WriteString(")")
+			output.Builder.WriteString("\t)")
 		case pg_query.SubLinkType_CTE_SUBLINK:
 			output.Builder.WriteString("/* UNSUPPORTED: CTE sublink */")
 		default:
@@ -515,12 +515,12 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("LATERAL ")
 		}
 		output.Builder.WriteString("(")
-		output.indent++
+		output.indent += 2
 		output.writeNewlineIndent()
 		output.writeNode(n.RangeSubselect.Subquery)
-		output.indent--
+		output.indent -= 2
 		output.writeNewlineIndent()
-		output.Builder.WriteString(")")
+		output.Builder.WriteString("\t)")
 
 		if n.RangeSubselect.Alias != nil {
 			output.Builder.WriteString(" ")
@@ -595,7 +595,6 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 	case *pg_query.Node_BoolExpr:
 		switch n.BoolExpr.Boolop {
 		case pg_query.BoolExprType_AND_EXPR:
-			output.indent++
 			for i, x := range n.BoolExpr.Args {
 				output.writeExprWithParensIfNeeded(x)
 				if i != len(n.BoolExpr.Args)-1 {
@@ -603,10 +602,8 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 					output.Builder.WriteString("AND ")
 				}
 			}
-			output.indent--
 
 		case pg_query.BoolExprType_OR_EXPR:
-			output.indent++
 			for i, x := range n.BoolExpr.Args {
 				output.writeExprWithParensIfNeeded(x)
 				if i != len(n.BoolExpr.Args)-1 {
@@ -614,7 +611,6 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 					output.Builder.WriteString("OR ")
 				}
 			}
-			output.indent--
 
 		case pg_query.BoolExprType_NOT_EXPR:
 			output.Builder.WriteString("NOT ")
@@ -1087,8 +1083,8 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		if asBody != "" {
 			if strings.EqualFold(lang, "sql") {
-				output.Builder.WriteString("\nAS $$\n")
-				output.formatSQLBody(asBody)
+				output.Builder.WriteString("\nAS $$")
+				output.formatSQLBody(asBody, 1)
 				output.Builder.WriteString("\n$$")
 			} else {
 				output.Builder.WriteString("\nAS $$\n")
@@ -1148,8 +1144,23 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 }
 
 func (output *Printer) writeExprWithParensIfNeeded(node *pg_query.Node) {
-	switch node.GetNode().(type) {
-	case *pg_query.Node_AExpr, *pg_query.Node_BoolExpr:
+	switch n := node.GetNode().(type) {
+	case *pg_query.Node_BoolExpr:
+		// Multi-arg boolean expressions get block-style parens
+		if len(n.BoolExpr.Args) > 1 {
+			output.Builder.WriteString("(")
+			output.indent++
+			output.writeNewlineIndent()
+			output.writeNode(node)
+			output.indent--
+			output.writeNewlineIndent()
+			output.Builder.WriteString(")")
+		} else {
+			output.Builder.WriteString("(")
+			output.writeNode(node)
+			output.Builder.WriteString(")")
+		}
+	case *pg_query.Node_AExpr:
 		output.Builder.WriteString("(")
 		output.writeNode(node)
 		output.Builder.WriteString(")")
@@ -1404,9 +1415,10 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 		if stmt.WhereClause != nil {
 			output.writeNewlineIndent()
 			output.Builder.WriteString("WHERE")
+			output.indent++
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\t")
 			output.writeNode(stmt.WhereClause)
+			output.indent--
 		}
 
 		if len(stmt.GroupClause) > 0 {
@@ -1520,7 +1532,7 @@ func (output *Printer) writeAlias(a *pg_query.Alias) {
 	}
 }
 
-func (output *Printer) formatSQLBody(body string) {
+func (output *Printer) formatSQLBody(body string, indentLevel int) {
 	result, err := pg_query.Parse(body)
 	if err != nil {
 		// If we can't parse it, emit raw
@@ -1529,11 +1541,16 @@ func (output *Printer) formatSQLBody(body string) {
 	}
 	for i, stmt := range result.Stmts {
 		b := &strings.Builder{}
-		p := &Printer{Builder: b}
+		p := &Printer{Builder: b, indent: indentLevel}
 		p.Print(stmt.Stmt)
+		// Add newline + indent before each statement
+		output.Builder.WriteString("\n")
+		for j := 0; j < indentLevel; j++ {
+			output.Builder.WriteString("\t")
+		}
 		output.Builder.WriteString(b.String())
 		if i != len(result.Stmts)-1 {
-			output.Builder.WriteString(";\n")
+			output.Builder.WriteString(";")
 		}
 	}
 }
@@ -1548,7 +1565,33 @@ func (output *Printer) writeFunctionParams(params []*pg_query.Node) {
 		}
 		filtered = append(filtered, p)
 	}
-	output.writeCommaSeparatedList(filtered)
+
+	// Render params to check total length
+	b := &strings.Builder{}
+	tmp := &Printer{Builder: b}
+	tmp.writeCommaSeparatedList(filtered)
+	inline := b.String()
+
+	// Find how far we are on the current line
+	s := output.Builder.String()
+	lastNewline := strings.LastIndex(s, "\n")
+	currentLineLen := len(s) - lastNewline - 1
+
+	if currentLineLen+len(inline)+1 > 100 && len(filtered) > 1 {
+		// Multi-line params
+		output.indent++
+		for i, p := range filtered {
+			output.writeNewlineIndent()
+			output.writeNode(p)
+			if i != len(filtered)-1 {
+				output.Builder.WriteString(",")
+			}
+		}
+		output.indent--
+		output.writeNewlineIndent()
+	} else {
+		output.Builder.WriteString(inline)
+	}
 }
 
 func (output *Printer) writeCommaSeparatedList(l []*pg_query.Node) {
