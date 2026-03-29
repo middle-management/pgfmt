@@ -26,10 +26,24 @@ func isReservedKeyword(s string) bool {
 
 type Printer struct {
 	Builder *strings.Builder
+	indent  int // current indentation level
 }
 
 func (output *Printer) Print(node *pg_query.Node) {
 	output.writeNode(node)
+}
+
+// writeIndent writes the current indentation (tabs).
+func (output *Printer) writeIndent() {
+	for i := 0; i < output.indent; i++ {
+		output.Builder.WriteString("\t")
+	}
+}
+
+// writeNewlineIndent writes a newline followed by the current indentation.
+func (output *Printer) writeNewlineIndent() {
+	output.Builder.WriteString("\n")
+	output.writeIndent()
 }
 
 type nodeContext int
@@ -336,8 +350,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			}
 			output.Builder.WriteString(")")
 		}
-		output.Builder.WriteString(" ")
-		output.Builder.WriteString("AS ")
+		output.Builder.WriteString(" AS ")
 
 		switch n.CommonTableExpr.Ctematerialized {
 		case pg_query.CTEMaterialize_CTEMaterializeDefault:
@@ -347,9 +360,13 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.CTEMaterialize_CTEMaterializeNever:
 			output.Builder.WriteString("NOT MATERIALIZED ")
 		}
-		output.Builder.WriteString("(\n")
+		output.Builder.WriteString("(")
+		output.indent++
+		output.writeNewlineIndent()
 		output.writeNode(n.CommonTableExpr.Ctequery)
-		output.Builder.WriteString("\n)\n")
+		output.indent--
+		output.writeNewlineIndent()
+		output.Builder.WriteString(")")
 
 	case *pg_query.Node_CoalesceExpr:
 		output.Builder.WriteString("COALESCE(")
@@ -1159,42 +1176,61 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 				output.Builder.WriteString(")")
 			}
 		}
-		output.Builder.WriteString("\n\t")
+		output.writeNewlineIndent()
+		output.Builder.WriteString("\t")
 		for i, t := range stmt.TargetList {
 			output.writeNode(t)
 			if i != len(stmt.TargetList)-1 {
-				output.Builder.WriteString(",\n\t")
+				output.Builder.WriteString(",")
+				output.writeNewlineIndent()
+				output.Builder.WriteString("\t")
 			}
 		}
 
 		if stmt.IntoClause != nil {
-			output.Builder.WriteString("\nINTO ")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("INTO ")
 			if stmt.IntoClause.Rel != nil {
 				output.writeRangeVar(stmt.IntoClause.Rel)
 			}
 		}
 
 		if len(stmt.FromClause) > 0 {
-			output.Builder.WriteString("\nFROM\n\t")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("FROM")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\t")
 			output.writeListWithSeparator(stmt.FromClause, ", ")
 		}
 		if stmt.WhereClause != nil {
-			output.Builder.WriteString("\nWHERE\n\t")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("WHERE")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\t")
 			output.writeNode(stmt.WhereClause)
 		}
 
 		if len(stmt.GroupClause) > 0 {
-			output.Builder.WriteString("\nGROUP BY\n\t")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("GROUP BY")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\t")
 			output.writeCommaSeparatedList(stmt.GroupClause)
 		}
 
 		if stmt.HavingClause != nil {
-			output.Builder.WriteString("\nHAVING\n\t")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("HAVING")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\t")
 			output.writeNode(stmt.HavingClause)
 		}
 
 		if len(stmt.WindowClause) > 0 {
-			output.Builder.WriteString("\nWINDOW\n\t")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("WINDOW")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\t")
 			output.writeCommaSeparatedList(stmt.WindowClause)
 		}
 	case pg_query.SetOperation_SETOP_UNION, pg_query.SetOperation_SETOP_INTERSECT, pg_query.SetOperation_SETOP_EXCEPT:
@@ -1223,16 +1259,20 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 	}
 
 	if len(stmt.SortClause) > 0 {
-		output.Builder.WriteString("\nORDER BY\n\t")
+		output.writeNewlineIndent()
+		output.Builder.WriteString("ORDER BY")
+		output.writeNewlineIndent()
+		output.Builder.WriteString("\t")
 		output.writeCommaSeparatedList(stmt.SortClause)
 	}
 
 	if stmt.LimitCount != nil {
+		output.writeNewlineIndent()
 		switch stmt.LimitOption {
 		case pg_query.LimitOption_LIMIT_OPTION_COUNT:
-			output.Builder.WriteString("\nLIMIT ")
+			output.Builder.WriteString("LIMIT ")
 		case pg_query.LimitOption_LIMIT_OPTION_WITH_TIES:
-			output.Builder.WriteString("\nFETCH FIRST ")
+			output.Builder.WriteString("FETCH FIRST ")
 		}
 
 		if stmt.LimitCount.GetAConst().GetIsnull() {
@@ -1247,12 +1287,13 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 	}
 
 	if stmt.LimitOffset != nil {
-		output.Builder.WriteString("\nOFFSET ")
+		output.writeNewlineIndent()
+		output.Builder.WriteString("OFFSET ")
 		output.writeNode(stmt.LimitOffset)
 	}
 
 	if len(stmt.LockingClause) > 0 {
-		output.Builder.WriteString("\n")
+		output.writeNewlineIndent()
 		output.writeCommaSeparatedList(stmt.LockingClause)
 	}
 }
@@ -1346,8 +1387,16 @@ func (output *Printer) writeWithClause(node *pg_query.WithClause) {
 	if node.Recursive {
 		output.Builder.WriteString("RECURSIVE ")
 	}
+	output.indent++
+	for i, cte := range node.Ctes {
+		output.writeNewlineIndent()
+		output.writeNode(cte)
+		if i != len(node.Ctes)-1 {
+			output.Builder.WriteString(",")
+		}
+	}
+	output.indent--
 	output.Builder.WriteString("\n")
-	output.writeListWithSeparator(node.Ctes, ", ")
 }
 
 func (output *Printer) writeListWithSeparator(l []*pg_query.Node, separator string) {
