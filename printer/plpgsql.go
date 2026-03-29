@@ -41,9 +41,21 @@ func formatSQL(query string) string {
 	return b.String()
 }
 
-// writeSQL formats a SQL query and writes it with re-indented continuation lines.
+// compactSQL collapses a formatted SQL string to a single line.
+func compactSQL(formatted string) string {
+	return strings.Join(strings.Fields(formatted), " ")
+}
+
+// writeSQL formats a SQL query and writes it. Uses compact single-line form
+// if it fits within ~100 characters at the current indent level.
 func (ctx *plContext) writeSQL(query string, ind int) {
-	ctx.writeIndented(formatSQL(query), ind)
+	formatted := formatSQL(query)
+	compact := compactSQL(formatted)
+	if len(compact) <= 100-ind*4 {
+		ctx.w(compact)
+		return
+	}
+	ctx.writeIndented(formatted, ind)
 }
 
 // writeIndented writes a possibly multi-line string, re-indenting continuation lines.
@@ -443,26 +455,36 @@ func (ctx *plContext) writeRaise(node *plStmtRaise, ind int) {
 func (ctx *plContext) writeExecSQL(node *plStmtExecSQL, ind int) {
 	formatted := formatSQL(node.SQLStmt.E.Query)
 
-	if node.Into {
-		targetName := node.Target.fieldNames()
+	insertInto := func(sql, sep string) string {
 		intoClause := "INTO "
 		if node.Strict {
 			intoClause = "INTO STRICT "
 		}
-		intoClause += targetName
+		intoClause += node.Target.fieldNames()
 
-		// Insert INTO before FROM in the formatted SQL
-		upper := strings.ToUpper(formatted)
-		if fromIdx := strings.Index(upper, "\nFROM"); fromIdx >= 0 {
-			formatted = formatted[:fromIdx] + "\n" + intoClause + formatted[fromIdx:]
-		} else if fromIdx := strings.Index(upper, " FROM "); fromIdx >= 0 {
-			formatted = formatted[:fromIdx] + " " + intoClause + formatted[fromIdx:]
-		} else {
-			formatted += " " + intoClause
+		upper := strings.ToUpper(sql)
+		if fromIdx := strings.Index(upper, sep+"FROM"); fromIdx >= 0 {
+			return sql[:fromIdx] + sep + intoClause + sql[fromIdx:]
 		}
+		return sql + " " + intoClause
 	}
 
 	ctx.newlineIndent(ind)
+	if node.Into {
+		compact := insertInto(compactSQL(formatted), " ")
+		if len(compact) <= 100-ind*4 {
+			ctx.w(compact + ";")
+			return
+		}
+		formatted = insertInto(formatted, "\n")
+	} else {
+		compact := compactSQL(formatted)
+		if len(compact) <= 100-ind*4 {
+			ctx.w(compact + ";")
+			return
+		}
+	}
+
 	ctx.writeIndented(formatted, ind)
 	ctx.w(";")
 }
@@ -470,14 +492,22 @@ func (ctx *plContext) writeExecSQL(node *plStmtExecSQL, ind int) {
 func (ctx *plContext) writePerform(node *plStmtPerform, ind int) {
 	// Parser converts PERFORM to SELECT; format as SQL then swap back
 	formatted := formatSQL(node.Expr.E.Query)
-	trimmed := strings.TrimSpace(formatted)
-	if strings.HasPrefix(strings.ToUpper(trimmed), "SELECT") {
-		trimmed = "PERFORM" + trimmed[6:]
-	} else {
-		trimmed = "PERFORM " + trimmed
+
+	swapSelectToPerform := func(s string) string {
+		s = strings.TrimSpace(s)
+		if strings.HasPrefix(strings.ToUpper(s), "SELECT") {
+			return "PERFORM" + s[6:]
+		}
+		return "PERFORM " + s
 	}
+
+	compact := swapSelectToPerform(compactSQL(formatted))
 	ctx.newlineIndent(ind)
-	ctx.writeIndented(trimmed, ind)
+	if len(compact) <= 100-ind*4 {
+		ctx.w(compact)
+	} else {
+		ctx.writeIndented(swapSelectToPerform(formatted), ind)
+	}
 	ctx.w(";")
 }
 
