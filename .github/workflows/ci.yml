@@ -28,6 +28,4 @@ jobs:
         run: go test -v ./...
 
       - name: Verify golden files are up to date
-        run: |
-          go test ./...
-          git diff --exit-code testdata/fixtures/golden/
+        run: git diff --exit-code testdata/fixtures/golden/
