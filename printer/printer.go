@@ -91,14 +91,22 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		switch n.SubLink.SubLinkType {
 		case pg_query.SubLinkType_EXISTS_SUBLINK:
 			output.Builder.WriteString("EXISTS (")
+			output.indent++
+			output.writeNewlineIndent()
 			output.writeNode(n.SubLink.Subselect)
+			output.indent--
+			output.writeNewlineIndent()
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_ALL_SUBLINK:
 			output.writeNode(n.SubLink.Testexpr)
 			output.Builder.WriteString(" ")
 			output.writeSubqueryOp(n.SubLink.OperName)
 			output.Builder.WriteString(" ALL (")
+			output.indent++
+			output.writeNewlineIndent()
 			output.writeNode(n.SubLink.Subselect)
+			output.indent--
+			output.writeNewlineIndent()
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_ANY_SUBLINK:
 			output.writeNode(n.SubLink.Testexpr)
@@ -109,29 +117,49 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			} else {
 				output.Builder.WriteString("IN (")
 			}
+			output.indent++
+			output.writeNewlineIndent()
 			output.writeNode(n.SubLink.Subselect)
+			output.indent--
+			output.writeNewlineIndent()
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_ROWCOMPARE_SUBLINK:
 			output.writeNode(n.SubLink.Testexpr)
 			output.Builder.WriteString(" ")
 			output.writeSubqueryOp(n.SubLink.OperName)
 			output.Builder.WriteString(" (")
+			output.indent++
+			output.writeNewlineIndent()
 			output.writeNode(n.SubLink.Subselect)
+			output.indent--
+			output.writeNewlineIndent()
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_MULTIEXPR_SUBLINK:
 			output.writeNode(n.SubLink.Testexpr)
 			output.Builder.WriteString(" ")
 			output.writeSubqueryOp(n.SubLink.OperName)
 			output.Builder.WriteString(" (")
+			output.indent++
+			output.writeNewlineIndent()
 			output.writeNode(n.SubLink.Subselect)
+			output.indent--
+			output.writeNewlineIndent()
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_ARRAY_SUBLINK:
 			output.Builder.WriteString("ARRAY(")
+			output.indent++
+			output.writeNewlineIndent()
 			output.writeNode(n.SubLink.Subselect)
+			output.indent--
+			output.writeNewlineIndent()
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_EXPR_SUBLINK:
 			output.Builder.WriteString("(")
+			output.indent++
+			output.writeNewlineIndent()
 			output.writeNode(n.SubLink.Subselect)
+			output.indent--
+			output.writeNewlineIndent()
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_CTE_SUBLINK:
 			output.Builder.WriteString("/* UNSUPPORTED: CTE sublink */")
@@ -487,7 +515,11 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("LATERAL ")
 		}
 		output.Builder.WriteString("(")
+		output.indent++
+		output.writeNewlineIndent()
 		output.writeNode(n.RangeSubselect.Subquery)
+		output.indent--
+		output.writeNewlineIndent()
 		output.Builder.WriteString(")")
 
 		if n.RangeSubselect.Alias != nil {
@@ -540,29 +572,31 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 	case *pg_query.Node_BoolExpr:
 		switch n.BoolExpr.Boolop {
 		case pg_query.BoolExprType_AND_EXPR:
+			output.indent++
 			for i, x := range n.BoolExpr.Args {
-				output.Builder.WriteString("(")
-				output.writeNode(x)
-				output.Builder.WriteString(")")
+				output.writeExprWithParensIfNeeded(x)
 				if i != len(n.BoolExpr.Args)-1 {
-					output.Builder.WriteString(" AND ")
+					output.writeNewlineIndent()
+					output.Builder.WriteString("AND ")
 				}
 			}
+			output.indent--
 
 		case pg_query.BoolExprType_OR_EXPR:
+			output.indent++
 			for i, x := range n.BoolExpr.Args {
-				output.Builder.WriteString("(")
-				output.writeNode(x)
-				output.Builder.WriteString(")")
+				output.writeExprWithParensIfNeeded(x)
 				if i != len(n.BoolExpr.Args)-1 {
-					output.Builder.WriteString(" OR ")
+					output.writeNewlineIndent()
+					output.Builder.WriteString("OR ")
 				}
 			}
+			output.indent--
 
 		case pg_query.BoolExprType_NOT_EXPR:
 			output.Builder.WriteString("NOT ")
 			for _, x := range n.BoolExpr.Args {
-				output.writeNode(x)
+				output.writeExprWithParensIfNeeded(x)
 			}
 
 		}
