@@ -6,7 +6,13 @@ DECLARE
 	result text;
 BEGIN
 	IF p_id > 0 THEN
-		SELECT name INTO result FROM users WHERE id = p_id;
+		SELECT
+			name
+		INTO result
+		FROM
+			users
+		WHERE
+			id = p_id;
 	ELSIF p_id = 0 THEN
 		result := 'zero';
 	ELSE
@@ -64,7 +70,8 @@ AS $$
 DECLARE
 	v integer := 0;
 BEGIN
-	PERFORM pg_notify('channel', 'hello');
+	PERFORM
+		pg_notify('channel', 'hello');
 	EXECUTE 'SELECT 1';
 	EXECUTE 'SELECT $1' USING 42;
 	CASE p_mode
@@ -94,7 +101,11 @@ DECLARE
 	arr integer[] := ARRAY[1,2,3];
 	v integer;
 BEGIN
-	FOR r IN SELECT id, name FROM users LOOP
+	FOR r IN SELECT
+		id,
+		name
+	FROM
+		users LOOP
 		RAISE NOTICE '% %', r.id, r.name;
 	END LOOP;
 	FOREACH v IN ARRAY arr LOOP
@@ -108,7 +119,8 @@ CREATE PROCEDURE refresh_cache()
 LANGUAGE plpgsql
 AS $$
 BEGIN
-	PERFORM pg_notify('cache', 'refresh');
+	PERFORM
+		pg_notify('cache', 'refresh');
 	RETURN;
 END
 $$;
@@ -119,7 +131,13 @@ LANGUAGE plpgsql
 STABLE
 AS $$
 BEGIN
-	RETURN QUERY SELECT id, name FROM users WHERE active = true;
+	RETURN QUERY SELECT
+		id,
+		name
+	FROM
+		users
+	WHERE
+		active = true;
 	RETURN;
 END
 $$;

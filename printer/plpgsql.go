@@ -28,6 +28,35 @@ func (ctx *plContext) newlineIndent(level int) {
 	ctx.indent(level)
 }
 
+// formatSQL formats a SQL query string using the main SQL formatter.
+// Returns the original string unchanged if parsing fails.
+func formatSQL(query string) string {
+	result, err := pg_query.Parse(query)
+	if err != nil || len(result.Stmts) == 0 {
+		return query
+	}
+	b := &strings.Builder{}
+	p := &Printer{Builder: b}
+	p.Print(result.Stmts[0].Stmt)
+	return b.String()
+}
+
+// writeSQL formats a SQL query and writes it with re-indented continuation lines.
+func (ctx *plContext) writeSQL(query string, ind int) {
+	ctx.writeIndented(formatSQL(query), ind)
+}
+
+// writeIndented writes a possibly multi-line string, re-indenting continuation lines.
+func (ctx *plContext) writeIndented(s string, ind int) {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if i > 0 {
+			ctx.newlineIndent(ind)
+		}
+		ctx.w(line)
+	}
+}
+
 var raiseLevelName = map[int]string{
 	10: "DEBUG",
 	14: "DEBUG",
@@ -232,7 +261,9 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 		ctx.writeForI(s.ForI, ind)
 	case s.ForS != nil:
 		ctx.newlineIndent(ind)
-		ctx.w("FOR " + s.ForS.Var.name() + " IN " + s.ForS.Query.E.Query + " LOOP")
+		ctx.w("FOR " + s.ForS.Var.name() + " IN ")
+		ctx.writeSQL(s.ForS.Query.E.Query, ind)
+		ctx.w(" LOOP")
 		ctx.writeStmts(s.ForS.Body, ind+1)
 		ctx.newlineIndent(ind)
 		ctx.w("END LOOP;")
@@ -261,7 +292,9 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 		}
 	case s.ReturnQuery != nil:
 		ctx.newlineIndent(ind)
-		ctx.w("RETURN QUERY " + s.ReturnQuery.Query.query() + ";")
+		ctx.w("RETURN QUERY ")
+		ctx.writeSQL(s.ReturnQuery.Query.query(), ind)
+		ctx.w(";")
 	case s.Raise != nil:
 		ctx.writeRaise(s.Raise, ind)
 	case s.ExecSQL != nil:
@@ -408,43 +441,44 @@ func (ctx *plContext) writeRaise(node *plStmtRaise, ind int) {
 }
 
 func (ctx *plContext) writeExecSQL(node *plStmtExecSQL, ind int) {
-	query := node.SQLStmt.E.Query
+	formatted := formatSQL(node.SQLStmt.E.Query)
 
 	if node.Into {
 		targetName := node.Target.fieldNames()
-
 		intoClause := "INTO "
 		if node.Strict {
 			intoClause = "INTO STRICT "
 		}
 		intoClause += targetName
 
-		// Normalize whitespace left by parser removing INTO
-		query = strings.Join(strings.Fields(query), " ")
-
-		// Insert INTO before FROM
-		upper := strings.ToUpper(query)
-		if fromIdx := strings.Index(upper, " FROM "); fromIdx >= 0 {
-			query = query[:fromIdx] + " " + intoClause + query[fromIdx:]
+		// Insert INTO before FROM in the formatted SQL
+		upper := strings.ToUpper(formatted)
+		if fromIdx := strings.Index(upper, "\nFROM"); fromIdx >= 0 {
+			formatted = formatted[:fromIdx] + "\n" + intoClause + formatted[fromIdx:]
+		} else if fromIdx := strings.Index(upper, " FROM "); fromIdx >= 0 {
+			formatted = formatted[:fromIdx] + " " + intoClause + formatted[fromIdx:]
 		} else {
-			query += " " + intoClause
+			formatted += " " + intoClause
 		}
 	}
 
 	ctx.newlineIndent(ind)
-	ctx.w(query + ";")
+	ctx.writeIndented(formatted, ind)
+	ctx.w(";")
 }
 
 func (ctx *plContext) writePerform(node *plStmtPerform, ind int) {
-	query := strings.TrimSpace(node.Expr.E.Query)
-	// Parser converts PERFORM to SELECT; convert back
-	if strings.HasPrefix(strings.ToUpper(query), "SELECT ") {
-		query = "PERFORM " + query[7:]
+	// Parser converts PERFORM to SELECT; format as SQL then swap back
+	formatted := formatSQL(node.Expr.E.Query)
+	trimmed := strings.TrimSpace(formatted)
+	if strings.HasPrefix(strings.ToUpper(trimmed), "SELECT") {
+		trimmed = "PERFORM" + trimmed[6:]
 	} else {
-		query = "PERFORM " + query
+		trimmed = "PERFORM " + trimmed
 	}
 	ctx.newlineIndent(ind)
-	ctx.w(query + ";")
+	ctx.writeIndented(trimmed, ind)
+	ctx.w(";")
 }
 
 func (ctx *plContext) writeDynExecute(node *plStmtDynExecute, ind int) {

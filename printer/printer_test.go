@@ -298,8 +298,8 @@ BEGIN
   PERFORM pg_notify('chan', 'msg');
 END;
 $$ LANGUAGE plpgsql;`)
-	if !strings.Contains(got, "PERFORM pg_notify") {
-		t.Errorf("expected PERFORM, got: %s", got)
+	if !strings.Contains(got, "PERFORM") || !strings.Contains(got, "pg_notify") {
+		t.Errorf("expected PERFORM with pg_notify, got: %s", got)
 	}
 }
 
