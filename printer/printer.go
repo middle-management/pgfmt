@@ -609,7 +609,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeWithClause(n.InsertStmt.WithClause)
 		}
 
-		output.Builder.WriteString("INSERT INTO ")
+		output.Builder.WriteString("INSERT INTO")
+		output.writeNewlineIndent()
+		output.Builder.WriteString("\t")
 		output.writeRangeVar(n.InsertStmt.Relation)
 
 		if len(n.InsertStmt.Cols) > 0 {
@@ -634,19 +636,23 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 		if n.InsertStmt.SelectStmt != nil {
-			output.Builder.WriteString("\n")
+			output.writeNewlineIndent()
 			output.writeNode(n.InsertStmt.SelectStmt)
 		} else {
-			output.Builder.WriteString("\nDEFAULT VALUES")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("DEFAULT VALUES")
 		}
 
 		if n.InsertStmt.OnConflictClause != nil {
-			output.Builder.WriteString("\n")
+			output.writeNewlineIndent()
 			output.writeOnConflictClause(n.InsertStmt.OnConflictClause)
 		}
 
 		if len(n.InsertStmt.ReturningList) > 0 {
-			output.Builder.WriteString("\nRETURNING\n\t")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("RETURNING")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\t")
 			output.writeCommaSeparatedList(n.InsertStmt.ReturningList)
 		}
 
@@ -1421,15 +1427,14 @@ func (output *Printer) writeWithClause(node *pg_query.WithClause) {
 	if node.Recursive {
 		output.Builder.WriteString("RECURSIVE ")
 	}
-	output.indent++
 	for i, cte := range node.Ctes {
-		output.writeNewlineIndent()
+		output.Builder.WriteString("\n")
+		output.writeIndent()
 		output.writeNode(cte)
 		if i != len(node.Ctes)-1 {
 			output.Builder.WriteString(",")
 		}
 	}
-	output.indent--
 	output.Builder.WriteString("\n")
 }
 
