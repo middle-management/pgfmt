@@ -20,7 +20,27 @@ func format(t *testing.T, sql string) string {
 		p.Print(stmt.Stmt)
 		out.WriteString(b.String())
 	}
-	return out.String()
+	formatted := out.String()
+
+	// Verify the formatted output is semantically identical to the input
+	// by comparing deparsed (canonical) forms of both parse trees.
+	inputCanonical, err := pg_query.Deparse(result)
+	if err != nil {
+		t.Fatalf("deparse input error: %v", err)
+	}
+	outputTree, err := pg_query.Parse(formatted)
+	if err != nil {
+		t.Fatalf("formatted output failed to parse: %v\nformatted:\n%s", err, formatted)
+	}
+	outputCanonical, err := pg_query.Deparse(outputTree)
+	if err != nil {
+		t.Fatalf("deparse output error: %v", err)
+	}
+	if inputCanonical != outputCanonical {
+		t.Errorf("formatting changed query semantics:\n--- input deparsed ---\n%s\n--- output deparsed ---\n%s", inputCanonical, outputCanonical)
+	}
+
+	return formatted
 }
 
 func TestColumnRefDots(t *testing.T) {
