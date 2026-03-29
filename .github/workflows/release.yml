@@ -42,10 +42,10 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             ext=".exe"
           fi
-          output="pgfmt-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
-          go build -o "$output" .
+          go build -o "pgfmt-${{ matrix.goos }}-${{ matrix.goarch }}${ext}" .
+          go build -o "pgfmt-lsp-${{ matrix.goos }}-${{ matrix.goarch }}${ext}" ./cmd/pgfmt-lsp
 
-      - name: Upload release asset
+      - name: Upload release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -53,5 +53,6 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             ext=".exe"
           fi
-          asset="pgfmt-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
-          gh release upload "${{ github.event.release.tag_name }}" "$asset"
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "pgfmt-${{ matrix.goos }}-${{ matrix.goarch }}${ext}" \
+            "pgfmt-lsp-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
