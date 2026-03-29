@@ -10,93 +10,22 @@ import (
 // plContext holds state during PL/pgSQL body formatting.
 type plContext struct {
 	printer *Printer
-	datums  []interface{}
+	datums  []plDatum
 }
 
 func (ctx *plContext) w(s string) {
 	ctx.printer.Builder.WriteString(s)
 }
 
-func (ctx *plContext) plIndent(level int) {
+func (ctx *plContext) indent(level int) {
 	for i := 0; i < level; i++ {
 		ctx.w("\t")
 	}
 }
 
-// JSON navigation helpers
-
-func jsonObj(v interface{}) map[string]interface{} {
-	m, _ := v.(map[string]interface{})
-	return m
-}
-
-func jsonArr(v interface{}) []interface{} {
-	a, _ := v.([]interface{})
-	return a
-}
-
-func jsonStr(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
-		s, _ := v.(string)
-		return s
-	}
-	return ""
-}
-
-func jsonFloat(m map[string]interface{}, key string) float64 {
-	if v, ok := m[key]; ok {
-		f, _ := v.(float64)
-		return f
-	}
-	return 0
-}
-
-func jsonBool(m map[string]interface{}, key string) bool {
-	if v, ok := m[key]; ok {
-		b, _ := v.(bool)
-		return b
-	}
-	return false
-}
-
-func jsonGetObj(m map[string]interface{}, key string) map[string]interface{} {
-	if v, ok := m[key]; ok {
-		return jsonObj(v)
-	}
-	return nil
-}
-
-func jsonGetArr(m map[string]interface{}, key string) []interface{} {
-	if v, ok := m[key]; ok {
-		return jsonArr(v)
-	}
-	return nil
-}
-
-// unwrapNode takes {"PLpgSQL_stmt_if": {...}} and returns ("PLpgSQL_stmt_if", {...}).
-func unwrapNode(v interface{}) (string, map[string]interface{}) {
-	m := jsonObj(v)
-	if m == nil {
-		return "", nil
-	}
-	for k, val := range m {
-		if inner := jsonObj(val); inner != nil {
-			return k, inner
-		}
-	}
-	return "", nil
-}
-
-// getExprQuery extracts the query string from a PLpgSQL_expr node.
-func getExprQuery(v interface{}) string {
-	m := jsonObj(v)
-	if m == nil {
-		return ""
-	}
-	if expr := jsonGetObj(m, "PLpgSQL_expr"); expr != nil {
-		return jsonStr(expr, "query")
-	}
-	return jsonStr(m, "query")
+func (ctx *plContext) newlineIndent(level int) {
+	ctx.w("\n")
+	ctx.indent(level)
 }
 
 var raiseLevelName = map[int]string{
@@ -132,49 +61,36 @@ func (output *Printer) formatPLpgSQLBody(body string, indentLevel int) {
 		return
 	}
 
-	var parsed []interface{}
+	var parsed []plFunctionW
 	if err := json.Unmarshal([]byte(jsonResult), &parsed); err != nil || len(parsed) == 0 {
 		output.Builder.WriteString("\n")
 		output.Builder.WriteString(body)
 		return
 	}
 
-	_, fn := unwrapNode(parsed[0])
-	if fn == nil {
-		output.Builder.WriteString("\n")
-		output.Builder.WriteString(body)
-		return
-	}
-
+	fn := &parsed[0].F
 	ctx := &plContext{
 		printer: output,
-		datums:  jsonGetArr(fn, "datums"),
+		datums:  fn.Datums,
 	}
 
 	ctx.writeDeclare(indentLevel)
-
-	actionWrapper := jsonGetObj(fn, "action")
-	block := jsonGetObj(actionWrapper, "PLpgSQL_stmt_block")
-	if block != nil {
-		ctx.writeBlock(block, indentLevel, true)
-	}
+	ctx.writeBlock(&fn.Action.B, indentLevel, true)
 }
 
 // writeDeclare emits the DECLARE section for user-declared variables.
-func (ctx *plContext) writeDeclare(indent int) {
+func (ctx *plContext) writeDeclare(ind int) {
 	var decls []string
-	for _, d := range ctx.datums {
-		kind, inner := unwrapNode(d)
-		switch kind {
-		case "PLpgSQL_var":
-			decl := ctx.varDecl(inner)
-			if decl != "" {
+	for i := range ctx.datums {
+		d := &ctx.datums[i]
+		switch {
+		case d.Var != nil:
+			if decl := varDecl(d.Var); decl != "" {
 				decls = append(decls, decl)
 			}
-		case "PLpgSQL_rec":
-			// Record variables (e.g. "r record")
-			name := jsonStr(inner, "refname")
-			if name == "" || strings.HasPrefix(name, "(") || jsonFloat(inner, "lineno") == 0 {
+		case d.Rec != nil:
+			name := d.Rec.RefName
+			if name == "" || strings.HasPrefix(name, "(") || d.Rec.LineNo == 0 {
 				continue
 			}
 			decls = append(decls, name+" record")
@@ -182,40 +98,30 @@ func (ctx *plContext) writeDeclare(indent int) {
 	}
 
 	if len(decls) > 0 {
-		ctx.w("\n")
-		ctx.plIndent(indent)
+		ctx.newlineIndent(ind)
 		ctx.w("DECLARE")
 		for _, d := range decls {
-			ctx.w("\n")
-			ctx.plIndent(indent + 1)
+			ctx.newlineIndent(ind + 1)
 			ctx.w(d + ";")
 		}
 	}
 }
 
 // varDecl builds a DECLARE line for a PLpgSQL_var, or returns "" to skip it.
-func (ctx *plContext) varDecl(inner map[string]interface{}) string {
-	name := jsonStr(inner, "refname")
-	if name == "" || strings.HasPrefix(name, "__") {
+func varDecl(v *plVar) string {
+	if v.RefName == "" || strings.HasPrefix(v.RefName, "__") {
 		return ""
 	}
-	// Skip implicit variables (found, params) that have no source line
-	if jsonFloat(inner, "lineno") == 0 {
+	if v.LineNo == 0 {
+		return "" // implicit (found, params)
+	}
+	if v.IsConst && (v.RefName == "sqlstate" || v.RefName == "sqlerrm") {
+		return "" // implicit exception variables
+	}
+	if v.DataType == nil {
 		return ""
 	}
-	// Skip implicit exception variables
-	if jsonBool(inner, "isconst") && (name == "sqlstate" || name == "sqlerrm") {
-		return ""
-	}
-	dt := jsonGetObj(inner, "datatype")
-	if dt == nil {
-		return ""
-	}
-	pt := jsonGetObj(dt, "PLpgSQL_type")
-	if pt == nil {
-		return ""
-	}
-	typ := strings.TrimSpace(jsonStr(pt, "typname"))
+	typ := strings.TrimSpace(v.DataType.T.TypeName)
 	if typ == "" || typ == "UNKNOWN" {
 		return ""
 	}
@@ -225,91 +131,73 @@ func (ctx *plContext) varDecl(inner map[string]interface{}) string {
 	}
 
 	var parts []string
-	parts = append(parts, name)
-	if jsonBool(inner, "isconst") {
+	parts = append(parts, v.RefName)
+	if v.IsConst {
 		parts = append(parts, "CONSTANT")
 	}
 	parts = append(parts, typ)
-	if jsonBool(inner, "notnull") {
+	if v.NotNull {
 		parts = append(parts, "NOT NULL")
 	}
 	decl := strings.Join(parts, " ")
 
-	if defVal := jsonGetObj(inner, "default_val"); defVal != nil {
-		if defExpr := jsonGetObj(defVal, "PLpgSQL_expr"); defExpr != nil {
-			decl += " := " + jsonStr(defExpr, "query")
-		}
+	if v.DefaultVal != nil && v.DefaultVal.E.Query != "" {
+		decl += " := " + v.DefaultVal.E.Query
 	}
 	return decl
 }
 
 // writeBlock emits a BEGIN/[EXCEPTION/]END block.
-func (ctx *plContext) writeBlock(block map[string]interface{}, indent int, topLevel bool) {
-	body := jsonGetArr(block, "body")
-	exceptions := jsonGetObj(block, "exceptions")
+func (ctx *plContext) writeBlock(block *plStmtBlock, ind int, topLevel bool) {
+	body := block.Body
+	exceptions := block.Exceptions
 
 	// Detect parser-generated wrapper: [inner_block_with_exceptions, bare_return]
 	// and flatten to a single block.
-	if exceptions == nil && len(body) >= 1 {
-		firstKind, firstNode := unwrapNode(body[0])
-		if firstKind == "PLpgSQL_stmt_block" && jsonGetObj(firstNode, "exceptions") != nil {
+	if exceptions == nil && len(body) >= 1 && body[0].Block != nil {
+		inner := body[0].Block
+		if inner.Exceptions != nil {
 			allTrailingBare := true
 			for _, s := range body[1:] {
-				sk, sn := unwrapNode(s)
-				if sk == "PLpgSQL_stmt_return" && jsonGetObj(sn, "expr") == nil && jsonFloat(sn, "lineno") == 0 {
+				if s.Return != nil && s.Return.Expr == nil && s.Return.LineNo == 0 {
 					continue
 				}
 				allTrailingBare = false
 				break
 			}
 			if allTrailingBare {
-				block = firstNode
-				body = jsonGetArr(block, "body")
-				exceptions = jsonGetObj(block, "exceptions")
+				body = inner.Body
+				exceptions = inner.Exceptions
+				block = inner
 			}
 		}
 	}
 
-	ctx.w("\n")
-	ctx.plIndent(indent)
-
-	label := jsonStr(block, "label")
-	if label != "" {
-		ctx.w("<<" + label + ">>\n")
-		ctx.plIndent(indent)
+	ctx.newlineIndent(ind)
+	if block.Label != "" {
+		ctx.w("<<" + block.Label + ">>\n")
+		ctx.indent(ind)
 	}
 
 	ctx.w("BEGIN")
-	ctx.writeStmts(body, indent+1)
+	ctx.writeStmts(body, ind+1)
 
 	if exceptions != nil {
-		excBlock := jsonGetObj(exceptions, "PLpgSQL_exception_block")
-		if excBlock != nil {
-			ctx.w("\n")
-			ctx.plIndent(indent)
-			ctx.w("EXCEPTION")
-			for _, e := range jsonGetArr(excBlock, "exc_list") {
-				_, excNode := unwrapNode(e)
-				if excNode == nil {
-					continue
-				}
-				var condNames []string
-				for _, c := range jsonGetArr(excNode, "conditions") {
-					cond := jsonGetObj(jsonObj(c), "PLpgSQL_condition")
-					if cond != nil {
-						condNames = append(condNames, jsonStr(cond, "condname"))
-					}
-				}
-				ctx.w("\n")
-				ctx.plIndent(indent + 1)
-				ctx.w("WHEN " + strings.Join(condNames, " OR ") + " THEN")
-				ctx.writeStmts(jsonGetArr(excNode, "action"), indent+2)
+		ctx.newlineIndent(ind)
+		ctx.w("EXCEPTION")
+		for _, ew := range exceptions.B.ExcList {
+			exc := &ew.E
+			var condNames []string
+			for _, cw := range exc.Conditions {
+				condNames = append(condNames, cw.C.CondName)
 			}
+			ctx.newlineIndent(ind + 1)
+			ctx.w("WHEN " + strings.Join(condNames, " OR ") + " THEN")
+			ctx.writeStmts(exc.Action, ind+2)
 		}
 	}
 
-	ctx.w("\n")
-	ctx.plIndent(indent)
+	ctx.newlineIndent(ind)
 	ctx.w("END")
 	if !topLevel {
 		ctx.w(";")
@@ -317,153 +205,124 @@ func (ctx *plContext) writeBlock(block map[string]interface{}, indent int, topLe
 }
 
 // writeStmts emits a list of PL/pgSQL statements.
-func (ctx *plContext) writeStmts(stmts []interface{}, indent int) {
-	for _, s := range stmts {
-		kind, node := unwrapNode(s)
-		if node == nil {
-			continue
+func (ctx *plContext) writeStmts(stmts []plStmt, ind int) {
+	for i := range stmts {
+		ctx.writeStmt(&stmts[i], ind)
+	}
+}
+
+func (ctx *plContext) writeStmt(s *plStmt, ind int) {
+	switch {
+	case s.Assign != nil:
+		ctx.newlineIndent(ind)
+		ctx.w(s.Assign.Expr.E.Query + ";")
+	case s.If != nil:
+		ctx.writeIf(s.If, ind)
+	case s.Case != nil:
+		ctx.writeCase(s.Case, ind)
+	case s.Loop != nil:
+		ctx.writeLoop(s.Loop, ind)
+	case s.While != nil:
+		ctx.newlineIndent(ind)
+		ctx.w("WHILE " + s.While.Cond.E.Query + " LOOP")
+		ctx.writeStmts(s.While.Body, ind+1)
+		ctx.newlineIndent(ind)
+		ctx.w("END LOOP;")
+	case s.ForI != nil:
+		ctx.writeForI(s.ForI, ind)
+	case s.ForS != nil:
+		ctx.newlineIndent(ind)
+		ctx.w("FOR " + s.ForS.Var.name() + " IN " + s.ForS.Query.E.Query + " LOOP")
+		ctx.writeStmts(s.ForS.Body, ind+1)
+		ctx.newlineIndent(ind)
+		ctx.w("END LOOP;")
+	case s.ForEachA != nil:
+		ctx.newlineIndent(ind)
+		varName := ctx.getDatumName(s.ForEachA.VarNo)
+		ctx.w("FOREACH " + varName + " IN ARRAY " + s.ForEachA.Expr.E.Query + " LOOP")
+		ctx.writeStmts(s.ForEachA.Body, ind+1)
+		ctx.newlineIndent(ind)
+		ctx.w("END LOOP;")
+	case s.Exit != nil:
+		ctx.writeExit(s.Exit, ind)
+	case s.Return != nil:
+		ctx.newlineIndent(ind)
+		if s.Return.Expr != nil {
+			ctx.w("RETURN " + s.Return.Expr.E.Query + ";")
+		} else {
+			ctx.w("RETURN;")
 		}
-		ctx.writeStmt(kind, node, indent)
-	}
-}
-
-func (ctx *plContext) writeStmt(kind string, node map[string]interface{}, indent int) {
-	switch kind {
-	case "PLpgSQL_stmt_assign":
-		ctx.writeAssign(node, indent)
-	case "PLpgSQL_stmt_if":
-		ctx.writeIf(node, indent)
-	case "PLpgSQL_stmt_case":
-		ctx.writeCase(node, indent)
-	case "PLpgSQL_stmt_loop":
-		ctx.writeLoop(node, indent)
-	case "PLpgSQL_stmt_while":
-		ctx.writeWhile(node, indent)
-	case "PLpgSQL_stmt_fori":
-		ctx.writeForI(node, indent)
-	case "PLpgSQL_stmt_fors":
-		ctx.writeForS(node, indent)
-	case "PLpgSQL_stmt_foreach_a":
-		ctx.writeForEach(node, indent)
-	case "PLpgSQL_stmt_exit":
-		ctx.writeExit(node, indent)
-	case "PLpgSQL_stmt_return":
-		ctx.writeReturn(node, indent)
-	case "PLpgSQL_stmt_return_next":
-		ctx.writeReturnNext(node, indent)
-	case "PLpgSQL_stmt_return_query":
-		ctx.writeReturnQuery(node, indent)
-	case "PLpgSQL_stmt_raise":
-		ctx.writeRaise(node, indent)
-	case "PLpgSQL_stmt_execsql":
-		ctx.writeExecSQL(node, indent)
-	case "PLpgSQL_stmt_perform":
-		ctx.writePerform(node, indent)
-	case "PLpgSQL_stmt_dynexecute":
-		ctx.writeDynExecute(node, indent)
-	case "PLpgSQL_stmt_block":
-		ctx.writeBlock(node, indent, false)
-	}
-}
-
-func (ctx *plContext) writeAssign(node map[string]interface{}, indent int) {
-	expr := getExprQuery(jsonGetObj(node, "expr"))
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	ctx.w(expr + ";")
-}
-
-func (ctx *plContext) writeReturn(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	if exprNode := jsonGetObj(node, "expr"); exprNode != nil {
-		ctx.w("RETURN " + getExprQuery(exprNode) + ";")
-	} else {
-		ctx.w("RETURN;")
-	}
-}
-
-func (ctx *plContext) writeReturnNext(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	ctx.w("RETURN NEXT " + getExprQuery(jsonGetObj(node, "expr")) + ";")
-}
-
-func (ctx *plContext) writeReturnQuery(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	query := getExprQuery(jsonGetObj(node, "query"))
-	ctx.w("RETURN QUERY " + query + ";")
-}
-
-func (ctx *plContext) writeIf(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	ctx.w("IF " + getExprQuery(jsonGetObj(node, "cond")) + " THEN")
-
-	ctx.writeStmts(jsonGetArr(node, "then_body"), indent+1)
-
-	for _, e := range jsonGetArr(node, "elsif_list") {
-		elsif := jsonGetObj(jsonObj(e), "PLpgSQL_if_elsif")
-		if elsif == nil {
-			continue
+	case s.ReturnNext != nil:
+		ctx.newlineIndent(ind)
+		if s.ReturnNext.Expr != nil {
+			ctx.w("RETURN NEXT " + s.ReturnNext.Expr.E.Query + ";")
+		} else {
+			ctx.w("RETURN NEXT;")
 		}
-		ctx.w("\n")
-		ctx.plIndent(indent)
-		ctx.w("ELSIF " + getExprQuery(jsonGetObj(elsif, "cond")) + " THEN")
-		ctx.writeStmts(jsonGetArr(elsif, "stmts"), indent+1)
+	case s.ReturnQuery != nil:
+		ctx.newlineIndent(ind)
+		ctx.w("RETURN QUERY " + s.ReturnQuery.Query.query() + ";")
+	case s.Raise != nil:
+		ctx.writeRaise(s.Raise, ind)
+	case s.ExecSQL != nil:
+		ctx.writeExecSQL(s.ExecSQL, ind)
+	case s.Perform != nil:
+		ctx.writePerform(s.Perform, ind)
+	case s.DynExecute != nil:
+		ctx.writeDynExecute(s.DynExecute, ind)
+	case s.Block != nil:
+		ctx.writeBlock(s.Block, ind, false)
+	}
+}
+
+func (ctx *plContext) writeIf(node *plStmtIf, ind int) {
+	ctx.newlineIndent(ind)
+	ctx.w("IF " + node.Cond.E.Query + " THEN")
+	ctx.writeStmts(node.ThenBody, ind+1)
+
+	for _, ew := range node.ElsIfList {
+		ctx.newlineIndent(ind)
+		ctx.w("ELSIF " + ew.E.Cond.E.Query + " THEN")
+		ctx.writeStmts(ew.E.Stmts, ind+1)
 	}
 
-	if elseBody := jsonGetArr(node, "else_body"); len(elseBody) > 0 {
-		ctx.w("\n")
-		ctx.plIndent(indent)
+	if len(node.ElseBody) > 0 {
+		ctx.newlineIndent(ind)
 		ctx.w("ELSE")
-		ctx.writeStmts(elseBody, indent+1)
+		ctx.writeStmts(node.ElseBody, ind+1)
 	}
 
-	ctx.w("\n")
-	ctx.plIndent(indent)
+	ctx.newlineIndent(ind)
 	ctx.w("END IF;")
 }
 
-func (ctx *plContext) writeCase(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-
-	hasTestExpr := jsonGetObj(node, "t_expr") != nil
+func (ctx *plContext) writeCase(node *plStmtCase, ind int) {
+	ctx.newlineIndent(ind)
+	hasTestExpr := node.TExpr != nil
 	if hasTestExpr {
-		ctx.w("CASE " + getExprQuery(jsonGetObj(node, "t_expr")))
+		ctx.w("CASE " + node.TExpr.E.Query)
 	} else {
 		ctx.w("CASE")
 	}
 
-	for _, w := range jsonGetArr(node, "case_when_list") {
-		when := jsonGetObj(jsonObj(w), "PLpgSQL_case_when")
-		if when == nil {
-			continue
-		}
-		ctx.w("\n")
-		ctx.plIndent(indent + 1)
-
-		expr := getExprQuery(jsonGetObj(when, "expr"))
+	for _, ww := range node.CaseWhenList {
+		w := &ww.W
+		ctx.newlineIndent(ind + 1)
+		expr := w.Expr.E.Query
 		if hasTestExpr {
 			expr = extractCaseWhenValue(expr)
 		}
 		ctx.w("WHEN " + expr + " THEN")
-		ctx.writeStmts(jsonGetArr(when, "stmts"), indent+2)
+		ctx.writeStmts(w.Stmts, ind+2)
 	}
 
-	if jsonBool(node, "have_else") {
-		if elseStmts := jsonGetArr(node, "else_stmts"); len(elseStmts) > 0 {
-			ctx.w("\n")
-			ctx.plIndent(indent + 1)
-			ctx.w("ELSE")
-			ctx.writeStmts(elseStmts, indent+2)
-		}
+	if node.HaveElse && len(node.ElseStmts) > 0 {
+		ctx.newlineIndent(ind + 1)
+		ctx.w("ELSE")
+		ctx.writeStmts(node.ElseStmts, ind+2)
 	}
 
-	ctx.w("\n")
-	ctx.plIndent(indent)
+	ctx.newlineIndent(ind)
 	ctx.w("END CASE;")
 }
 
@@ -481,140 +340,81 @@ func extractCaseWhenValue(expr string) string {
 	return val
 }
 
-func (ctx *plContext) writeLoop(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	if label := jsonStr(node, "label"); label != "" {
-		ctx.w("<<" + label + ">>\n")
-		ctx.plIndent(indent)
+func (ctx *plContext) writeLoop(node *plStmtLoop, ind int) {
+	ctx.newlineIndent(ind)
+	if node.Label != "" {
+		ctx.w("<<" + node.Label + ">>\n")
+		ctx.indent(ind)
 	}
 	ctx.w("LOOP")
-	ctx.writeStmts(jsonGetArr(node, "body"), indent+1)
-	ctx.w("\n")
-	ctx.plIndent(indent)
+	ctx.writeStmts(node.Body, ind+1)
+	ctx.newlineIndent(ind)
 	ctx.w("END LOOP;")
 }
 
-func (ctx *plContext) writeWhile(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	ctx.w("WHILE " + getExprQuery(jsonGetObj(node, "cond")) + " LOOP")
-	ctx.writeStmts(jsonGetArr(node, "body"), indent+1)
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	ctx.w("END LOOP;")
-}
-
-func (ctx *plContext) writeForI(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-
-	varNode := jsonGetObj(node, "var")
-	varInner := jsonGetObj(varNode, "PLpgSQL_var")
-	varName := jsonStr(varInner, "refname")
-
-	lower := getExprQuery(jsonGetObj(node, "lower"))
-	upper := getExprQuery(jsonGetObj(node, "upper"))
-
-	ctx.w("FOR " + varName + " IN ")
-	if jsonBool(node, "reverse") {
+func (ctx *plContext) writeForI(node *plStmtForI, ind int) {
+	ctx.newlineIndent(ind)
+	ctx.w("FOR " + node.Var.name() + " IN ")
+	if node.Reverse {
 		ctx.w("REVERSE ")
 	}
-	ctx.w(lower + ".." + upper)
-	if step := jsonGetObj(node, "step"); step != nil {
-		ctx.w(" BY " + getExprQuery(step))
+	ctx.w(node.Lower.E.Query + ".." + node.Upper.E.Query)
+	if node.Step != nil {
+		ctx.w(" BY " + node.Step.E.Query)
 	}
 	ctx.w(" LOOP")
-
-	ctx.writeStmts(jsonGetArr(node, "body"), indent+1)
-	ctx.w("\n")
-	ctx.plIndent(indent)
+	ctx.writeStmts(node.Body, ind+1)
+	ctx.newlineIndent(ind)
 	ctx.w("END LOOP;")
 }
 
-func (ctx *plContext) writeForS(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-
-	varName := ctx.getRowVarName(jsonGetObj(node, "var"))
-	query := getExprQuery(jsonGetObj(node, "query"))
-
-	ctx.w("FOR " + varName + " IN " + query + " LOOP")
-	ctx.writeStmts(jsonGetArr(node, "body"), indent+1)
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	ctx.w("END LOOP;")
-}
-
-func (ctx *plContext) writeForEach(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-
-	varName := ctx.getDatumName(int(jsonFloat(node, "varno")))
-	expr := getExprQuery(jsonGetObj(node, "expr"))
-
-	ctx.w("FOREACH " + varName + " IN ARRAY " + expr + " LOOP")
-	ctx.writeStmts(jsonGetArr(node, "body"), indent+1)
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	ctx.w("END LOOP;")
-}
-
-func (ctx *plContext) writeExit(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
-
-	if jsonBool(node, "is_exit") {
+func (ctx *plContext) writeExit(node *plStmtExit, ind int) {
+	ctx.newlineIndent(ind)
+	if node.IsExit {
 		ctx.w("EXIT")
 	} else {
 		ctx.w("CONTINUE")
 	}
-	if label := jsonStr(node, "label"); label != "" {
-		ctx.w(" " + label)
+	if node.Label != "" {
+		ctx.w(" " + node.Label)
 	}
-	if cond := jsonGetObj(node, "cond"); cond != nil {
-		ctx.w(" WHEN " + getExprQuery(cond))
+	if node.Cond != nil {
+		ctx.w(" WHEN " + node.Cond.E.Query)
 	}
 	ctx.w(";")
 }
 
-func (ctx *plContext) writeRaise(node map[string]interface{}, indent int) {
-	ctx.w("\n")
-	ctx.plIndent(indent)
+func (ctx *plContext) writeRaise(node *plStmtRaise, ind int) {
+	ctx.newlineIndent(ind)
 
-	message := jsonStr(node, "message")
-	params := jsonGetArr(node, "params")
-
-	if message == "" && len(params) == 0 {
+	if node.Message == "" && len(node.Params) == 0 {
 		ctx.w("RAISE;")
 		return
 	}
 
-	level := int(jsonFloat(node, "elog_level"))
-	levelStr := raiseLevelName[level]
+	levelStr := raiseLevelName[node.ElogLevel]
 	if levelStr == "" {
 		levelStr = "EXCEPTION"
 	}
 
 	ctx.w("RAISE " + levelStr)
-	if message != "" {
-		ctx.w(" '" + message + "'")
+	if node.Message != "" {
+		ctx.w(" '" + node.Message + "'")
 	}
-	for _, p := range params {
-		ctx.w(", " + getExprQuery(p))
+	for _, p := range node.Params {
+		ctx.w(", " + p.E.Query)
 	}
 	ctx.w(";")
 }
 
-func (ctx *plContext) writeExecSQL(node map[string]interface{}, indent int) {
-	query := getExprQuery(jsonGetObj(node, "sqlstmt"))
+func (ctx *plContext) writeExecSQL(node *plStmtExecSQL, ind int) {
+	query := node.SQLStmt.E.Query
 
-	if jsonBool(node, "into") {
-		target := jsonGetObj(node, "target")
-		targetName := ctx.getTargetName(target)
+	if node.Into {
+		targetName := node.Target.fieldNames()
 
 		intoClause := "INTO "
-		if jsonBool(node, "strict") {
+		if node.Strict {
 			intoClause = "INTO STRICT "
 		}
 		intoClause += targetName
@@ -631,121 +431,54 @@ func (ctx *plContext) writeExecSQL(node map[string]interface{}, indent int) {
 		}
 	}
 
-	ctx.w("\n")
-	ctx.plIndent(indent)
+	ctx.newlineIndent(ind)
 	ctx.w(query + ";")
 }
 
-func (ctx *plContext) writePerform(node map[string]interface{}, indent int) {
-	query := getExprQuery(jsonGetObj(node, "expr"))
+func (ctx *plContext) writePerform(node *plStmtPerform, ind int) {
+	query := strings.TrimSpace(node.Expr.E.Query)
 	// Parser converts PERFORM to SELECT; convert back
-	trimmed := strings.TrimSpace(query)
-	upper := strings.ToUpper(trimmed)
-	if strings.HasPrefix(upper, "SELECT ") {
-		query = "PERFORM " + trimmed[7:]
+	if strings.HasPrefix(strings.ToUpper(query), "SELECT ") {
+		query = "PERFORM " + query[7:]
 	} else {
-		query = "PERFORM " + trimmed
+		query = "PERFORM " + query
 	}
-
-	ctx.w("\n")
-	ctx.plIndent(indent)
+	ctx.newlineIndent(ind)
 	ctx.w(query + ";")
 }
 
-func (ctx *plContext) writeDynExecute(node map[string]interface{}, indent int) {
-	query := getExprQuery(jsonGetObj(node, "query"))
+func (ctx *plContext) writeDynExecute(node *plStmtDynExecute, ind int) {
+	ctx.newlineIndent(ind)
+	ctx.w("EXECUTE " + node.Query.E.Query)
 
-	ctx.w("\n")
-	ctx.plIndent(indent)
-	ctx.w("EXECUTE " + query)
-
-	if jsonBool(node, "into") {
-		target := jsonGetObj(node, "target")
-		targetName := ctx.getTargetName(target)
+	if node.Into {
 		ctx.w(" INTO ")
-		if jsonBool(node, "strict") {
+		if node.Strict {
 			ctx.w("STRICT ")
 		}
-		ctx.w(targetName)
+		ctx.w(node.Target.fieldNames())
 	}
 
-	if params := jsonGetArr(node, "params"); len(params) > 0 {
+	if len(node.Params) > 0 {
 		ctx.w(" USING ")
-		for i, p := range params {
+		for i, p := range node.Params {
 			if i > 0 {
 				ctx.w(", ")
 			}
-			ctx.w(getExprQuery(p))
+			ctx.w(p.E.Query)
 		}
 	}
 
 	ctx.w(";")
 }
 
-// Helper: look up a datum name by index.
+// getDatumName looks up a datum name by index.
 func (ctx *plContext) getDatumName(varno int) string {
 	if varno < 0 || varno >= len(ctx.datums) {
 		return "???"
 	}
-	kind, inner := unwrapNode(ctx.datums[varno])
-	switch kind {
-	case "PLpgSQL_var":
-		return jsonStr(inner, "refname")
-	case "PLpgSQL_row":
-		return ctx.rowFieldNames(inner)
-	case "PLpgSQL_rec":
-		return jsonStr(inner, "refname")
-	}
-	return "???"
-}
-
-func (ctx *plContext) rowFieldNames(row map[string]interface{}) string {
-	var names []string
-	for _, f := range jsonGetArr(row, "fields") {
-		fo := jsonObj(f)
-		if fo != nil {
-			names = append(names, jsonStr(fo, "name"))
-		}
-	}
-	return strings.Join(names, ", ")
-}
-
-// getRowVarName extracts a variable name from a PLpgSQL_row or PLpgSQL_var wrapper.
-func (ctx *plContext) getRowVarName(node map[string]interface{}) string {
-	if node == nil {
-		return "rec"
-	}
-	if row := jsonGetObj(node, "PLpgSQL_row"); row != nil {
-		fields := jsonGetArr(row, "fields")
-		if len(fields) > 0 {
-			fo := jsonObj(fields[0])
-			if fo != nil {
-				return jsonStr(fo, "name")
-			}
-		}
-	}
-	if rec := jsonGetObj(node, "PLpgSQL_rec"); rec != nil {
-		return jsonStr(rec, "refname")
-	}
-	if v := jsonGetObj(node, "PLpgSQL_var"); v != nil {
-		return jsonStr(v, "refname")
-	}
-	return "rec"
-}
-
-// getTargetName returns the target variable name for INTO clauses.
-func (ctx *plContext) getTargetName(node map[string]interface{}) string {
-	if node == nil {
-		return "???"
-	}
-	if row := jsonGetObj(node, "PLpgSQL_row"); row != nil {
-		return ctx.rowFieldNames(row)
-	}
-	if rec := jsonGetObj(node, "PLpgSQL_rec"); rec != nil {
-		return jsonStr(rec, "refname")
-	}
-	if v := jsonGetObj(node, "PLpgSQL_var"); v != nil {
-		return jsonStr(v, "refname")
+	if name := ctx.datums[varno].name(); name != "" {
+		return name
 	}
 	return "???"
 }
