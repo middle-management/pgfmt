@@ -8,7 +8,31 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      commit_sha: ${{ steps.bump.outputs.commit_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump extension version
+        id: bump
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          sed -i "s/^version = \"[^\"]*\"/version = \"${VERSION}\"/" zed-pgfmt/extension.toml
+          sed -i "s/^const VERSION: &str = \"[^\"]*\";/const VERSION: \&str = \"${VERSION}\";/" zed-pgfmt/src/lib.rs
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add zed-pgfmt/extension.toml zed-pgfmt/src/lib.rs
+          git commit -m "chore: bump extension version to ${VERSION}"
+          git push origin HEAD:main
+          echo "commit_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
   build:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -35,6 +59,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.commit_sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -54,8 +80,9 @@ jobs:
           CGO_ENABLED: "1"
           CC: ${{ matrix.cc }}
         run: |
-          go build -o "pgfmt-${{ matrix.goos }}-${{ matrix.goarch }}" .
-          go build -o "pgfmt-lsp-${{ matrix.goos }}-${{ matrix.goarch }}" ./cmd/pgfmt-lsp
+          VERSION="${{ github.event.release.tag_name }}"
+          go build -ldflags "-X main.version=${VERSION}" -o "pgfmt-${{ matrix.goos }}-${{ matrix.goarch }}" .
+          go build -ldflags "-X main.version=${VERSION}" -o "pgfmt-lsp-${{ matrix.goos }}-${{ matrix.goarch }}" ./cmd/pgfmt-lsp
 
       - name: Upload release assets
         env:

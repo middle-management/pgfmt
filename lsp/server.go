@@ -176,7 +176,7 @@ func (s *Server) notify(method string, params any) {
 }
 
 func (s *Server) publishDiagnostics(uri, content string) {
-	params := PublishDiagnosticsParams{URI: uri}
+	params := PublishDiagnosticsParams{URI: uri, Diagnostics: []Diagnostic{}}
 	if content != "" {
 		_, err := pg_query.Parse(content)
 		if err != nil {
