@@ -15,3 +15,5 @@
 
 # Go workspace file
 go.work
+zed-pgfmt/target/
+zed-pgfmt/extension.wasm
