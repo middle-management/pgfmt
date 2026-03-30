@@ -1,0 +1,11 @@
+[package]
+name = "pgfmt"
+version = "0.1.0"
+schema_version = 1
+authors = ["middle-management"]
+description = "PostgreSQL SQL formatting and diagnostics via pgfmt-lsp"
+repository = "https://github.com/middle-management/pgfmt"
+
+[language_servers.pgfmt-lsp]
+name = "pgfmt-lsp"
+languages = ["SQL"]
