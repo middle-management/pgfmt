@@ -10,6 +10,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: linux
@@ -26,9 +27,6 @@ jobs:
           - goos: darwin
             goarch: arm64
             runner: macos-latest
-          - goos: windows
-            goarch: amd64
-            runner: windows-latest
 
     runs-on: ${{ matrix.runner }}
     defaults:
@@ -54,21 +52,13 @@ jobs:
           CGO_ENABLED: "1"
           CC: ${{ matrix.cc }}
         run: |
-          ext=""
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            ext=".exe"
-          fi
-          go build -o "pgfmt-${{ matrix.goos }}-${{ matrix.goarch }}${ext}" .
-          go build -o "pgfmt-lsp-${{ matrix.goos }}-${{ matrix.goarch }}${ext}" ./cmd/pgfmt-lsp
+          go build -o "pgfmt-${{ matrix.goos }}-${{ matrix.goarch }}" .
+          go build -o "pgfmt-lsp-${{ matrix.goos }}-${{ matrix.goarch }}" ./cmd/pgfmt-lsp
 
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ext=""
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            ext=".exe"
-          fi
           gh release upload "${{ github.event.release.tag_name }}" \
-            "pgfmt-${{ matrix.goos }}-${{ matrix.goarch }}${ext}" \
-            "pgfmt-lsp-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
+            "pgfmt-${{ matrix.goos }}-${{ matrix.goarch }}" \
+            "pgfmt-lsp-${{ matrix.goos }}-${{ matrix.goarch }}"
