@@ -1,3 +1,4 @@
+-- Simple function with DECLARE and IF/ELSE
 CREATE FUNCTION get_user_label(p_id pg_catalog.int4)
 RETURNS text
 LANGUAGE plpgsql
@@ -16,6 +17,7 @@ BEGIN
 END
 $$;
 
+-- Function with loops
 CREATE FUNCTION loop_demo()
 RETURNS void
 LANGUAGE plpgsql
@@ -39,6 +41,7 @@ BEGIN
 END
 $$;
 
+-- Function with EXCEPTION handling
 CREATE OR REPLACE FUNCTION safe_divide(a pg_catalog.int4, b pg_catalog.int4)
 RETURNS pg_catalog.numeric
 LANGUAGE plpgsql
@@ -57,6 +60,7 @@ EXCEPTION
 END
 $$;
 
+-- Function with PERFORM, EXECUTE, CASE
 CREATE FUNCTION kitchen_sink(p_mode pg_catalog.int4)
 RETURNS void
 LANGUAGE plpgsql
@@ -85,6 +89,7 @@ BEGIN
 END
 $$;
 
+-- Function with FOR-query and FOREACH
 CREATE FUNCTION iter_demo()
 RETURNS void
 LANGUAGE plpgsql
@@ -104,6 +109,7 @@ BEGIN
 END
 $$;
 
+-- Procedure (not function)
 CREATE PROCEDURE refresh_cache()
 LANGUAGE plpgsql
 AS $$
@@ -113,6 +119,7 @@ BEGIN
 END
 $$;
 
+-- Function with RETURN QUERY
 CREATE FUNCTION get_active_users()
 RETURNS SETOF record
 LANGUAGE plpgsql

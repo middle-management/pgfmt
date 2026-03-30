@@ -25,12 +25,16 @@ func isReservedKeyword(s string) bool {
 }
 
 type Printer struct {
-	Builder *strings.Builder
-	indent  int // current indentation level
+	Builder        *strings.Builder
+	indent         int       // current indentation level
+	comments       []comment // inline comments for the current statement
+	commentIdx     int       // next inline comment to process
+	lastNodeEndPos int       // output position after last node with a source location
 }
 
 func (output *Printer) Print(node *pg_query.Node) {
 	output.writeNode(node)
+	output.flushRemainingComments()
 }
 
 // writeIndent writes the current indentation (tabs).
@@ -44,6 +48,137 @@ func (output *Printer) writeIndent() {
 func (output *Printer) writeNewlineIndent() {
 	output.Builder.WriteString("\n")
 	output.writeIndent()
+}
+
+// nodeLocation extracts the source byte position from a Node.
+// Returns -1 if the node type has no location field.
+func nodeLocation(node *pg_query.Node) int32 {
+	if node == nil {
+		return -1
+	}
+	switch n := node.GetNode().(type) {
+	case *pg_query.Node_AConst:
+		return n.AConst.GetLocation()
+	case *pg_query.Node_AExpr:
+		return n.AExpr.GetLocation()
+	case *pg_query.Node_ColumnRef:
+		return n.ColumnRef.GetLocation()
+	case *pg_query.Node_FuncCall:
+		return n.FuncCall.GetLocation()
+	case *pg_query.Node_TypeCast:
+		return n.TypeCast.GetLocation()
+	case *pg_query.Node_ParamRef:
+		return n.ParamRef.GetLocation()
+	case *pg_query.Node_BoolExpr:
+		return n.BoolExpr.GetLocation()
+	case *pg_query.Node_SubLink:
+		return n.SubLink.GetLocation()
+	case *pg_query.Node_NullTest:
+		return n.NullTest.GetLocation()
+	case *pg_query.Node_ResTarget:
+		return n.ResTarget.GetLocation()
+	case *pg_query.Node_RangeVar:
+		return n.RangeVar.GetLocation()
+	case *pg_query.Node_NamedArgExpr:
+		return n.NamedArgExpr.GetLocation()
+	case *pg_query.Node_CoalesceExpr:
+		return n.CoalesceExpr.GetLocation()
+	case *pg_query.Node_MinMaxExpr:
+		return n.MinMaxExpr.GetLocation()
+	case *pg_query.Node_CaseExpr:
+		return n.CaseExpr.GetLocation()
+	case *pg_query.Node_CaseWhen:
+		return n.CaseWhen.GetLocation()
+	case *pg_query.Node_SortBy:
+		return n.SortBy.GetLocation()
+	case *pg_query.Node_WindowDef:
+		return n.WindowDef.GetLocation()
+	case *pg_query.Node_ColumnDef:
+		return n.ColumnDef.GetLocation()
+	case *pg_query.Node_Constraint:
+		return n.Constraint.GetLocation()
+	case *pg_query.Node_WithClause:
+		return n.WithClause.GetLocation()
+	case *pg_query.Node_XmlExpr:
+		return n.XmlExpr.GetLocation()
+	case *pg_query.Node_SqlvalueFunction:
+		return n.SqlvalueFunction.GetLocation()
+	case *pg_query.Node_GroupingFunc:
+		return n.GroupingFunc.GetLocation()
+	case *pg_query.Node_SetToDefault:
+		return n.SetToDefault.GetLocation()
+	default:
+		return -1
+	}
+}
+
+// emitInlineCommentsUpTo emits all pending inline comments whose source
+// position is before pos, inserting them into the output buffer at the
+// appropriate location (before the first newline after the last node's output).
+func (output *Printer) emitInlineCommentsUpTo(pos int32) {
+	if len(output.comments) == 0 || output.commentIdx >= len(output.comments) {
+		return
+	}
+	if output.comments[output.commentIdx].start >= pos {
+		return
+	}
+
+	s := output.Builder.String()
+	insertPos := output.lastNodeEndPos
+
+	// Find the first newline at or after insertPos
+	nlOffset := strings.Index(s[insertPos:], "\n")
+
+	// Get indentation from that newline (for subsequent comment lines)
+	indentStr := ""
+	if nlOffset >= 0 {
+		nlAbs := insertPos + nlOffset
+		for i := nlAbs + 1; i < len(s); i++ {
+			if s[i] == '\t' || s[i] == ' ' {
+				indentStr += string(s[i])
+			} else {
+				break
+			}
+		}
+	}
+
+	var toInsert strings.Builder
+	first := true
+	for output.commentIdx < len(output.comments) && output.comments[output.commentIdx].start < pos {
+		c := output.comments[output.commentIdx]
+		if first && nlOffset >= 0 {
+			// First comment: place on the same line as the previous node
+			toInsert.WriteString(" ")
+			toInsert.WriteString(c.text)
+		} else {
+			// Subsequent comments or no newline: place on new indented lines
+			toInsert.WriteString("\n")
+			toInsert.WriteString(indentStr)
+			toInsert.WriteString(c.text)
+		}
+		first = false
+		output.commentIdx++
+	}
+
+	if toInsert.Len() > 0 {
+		if nlOffset >= 0 {
+			// Insert before the newline
+			nlAbs := insertPos + nlOffset
+			output.Builder.Reset()
+			output.Builder.WriteString(s[:nlAbs])
+			output.Builder.WriteString(toInsert.String())
+			output.Builder.WriteString(s[nlAbs:])
+		} else {
+			// No newline found; append at the end
+			output.Builder.WriteString(toInsert.String())
+		}
+	}
+}
+
+// flushRemainingComments emits any comments not yet emitted, using
+// retroactive insertion to place them at the correct output position.
+func (output *Printer) flushRemainingComments() {
+	output.emitInlineCommentsUpTo(1<<31 - 1)
 }
 
 type nodeContext int
@@ -76,6 +211,16 @@ func withNodeContext(ctx nodeContext) option {
 }
 
 func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
+	loc := nodeLocation(node)
+	if loc > 0 && len(output.comments) > 0 {
+		output.emitInlineCommentsUpTo(loc)
+	}
+	defer func() {
+		if loc > 0 {
+			output.lastNodeEndPos = output.Builder.Len()
+		}
+	}()
+
 	o := &nodeOption{}
 	for _, opt := range opts {
 		opt(o)

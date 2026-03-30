@@ -17,8 +17,9 @@ func TestFormatSQL(t *testing.T) {
 	if !strings.Contains(got, "SELECT") {
 		t.Errorf("expected formatted SQL with SELECT, got: %s", got)
 	}
-	if !strings.HasSuffix(got, ";\n") {
-		t.Errorf("expected trailing semicolon+newline, got: %q", got)
+	trimmed := strings.TrimRight(got, "\n")
+	if !strings.HasSuffix(trimmed, ";") {
+		t.Errorf("expected trailing semicolon, got: %q", got)
 	}
 }
 

@@ -1,14 +1,17 @@
+-- Aggregate ORDER BY
 SELECT
 	string_agg(name, ', ' ORDER BY name ASC) AS names
 FROM
 	users;
 
+-- Aggregate FILTER
 SELECT
 	count(*) FILTER (WHERE status = 'active') AS active_count,
 	count(*) FILTER (WHERE status = 'inactive') AS inactive_count
 FROM
 	users;
 
+-- WITHIN GROUP (ordered-set aggregate)
 SELECT
 	department,
 	percentile_cont(0.5) WITHIN GROUP (ORDER BY salary DESC) AS median_salary
@@ -17,6 +20,7 @@ FROM
 GROUP BY
 	department;
 
+-- Window function with OVER
 SELECT
 	id,
 	name,
@@ -25,6 +29,7 @@ SELECT
 FROM
 	employees;
 
+-- Named window reference
 SELECT
 	id,
 	sum(amount) OVER w,
@@ -34,6 +39,7 @@ FROM
 WINDOW
 	w AS (PARTITION BY customer_id ORDER BY created_at);
 
+-- Window with frame clause (ROWS BETWEEN)
 SELECT
 	id,
 	amount,
@@ -41,6 +47,7 @@ SELECT
 FROM
 	orders;
 
+-- Window with RANGE and EXCLUDE
 SELECT
 	id,
 	ts,
@@ -48,6 +55,7 @@ SELECT
 FROM
 	events;
 
+-- GROUP BY DISTINCT
 SELECT
 	x,
 	count(*)
@@ -56,6 +64,7 @@ FROM
 GROUP BY DISTINCT
 	x;
 
+-- FOR UPDATE
 SELECT
 	id,
 	name
@@ -65,6 +74,7 @@ WHERE
 	id = $1
 FOR UPDATE;
 
+-- FOR SHARE with table and NOWAIT
 SELECT
 	u.id,
 	u.name
@@ -73,6 +83,7 @@ FROM
 	JOIN accounts AS a ON u.id = a.user_id
 FOR SHARE OF u NOWAIT;
 
+-- FOR UPDATE SKIP LOCKED (queue pattern)
 SELECT
 	id,
 	payload
@@ -85,6 +96,7 @@ ORDER BY
 LIMIT 1
 FOR UPDATE SKIP LOCKED;
 
+-- FOR KEY SHARE
 SELECT
 	id
 FROM
@@ -93,6 +105,7 @@ WHERE
 	id = $1
 FOR KEY SHARE;
 
+-- Combined: aggregate with ORDER BY, FILTER, and window OVER
 SELECT
 	department,
 	json_agg(row_to_json(e) ORDER BY e.name) FILTER (WHERE e.active = true) AS active_employees,

@@ -1,17 +1,25 @@
+-- name: CreateIndexUnique :exec
 CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_event_index_unique ON event USING btree (index);
 
+-- name: CreateIndexType :exec
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_index_type ON event USING btree (index ASC, type);
 
+-- name: CreateIndexCreated :exec
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_created_at ON event USING btree (created_at ASC);
 
+-- name: CreateGinIndexData :exec
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_data_trgm ON event USING gin ((data::text) ext.gin_trgm_ops);
 
+-- name: CreateGinIndexType :exec
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_type_trgm ON event USING gin (type ext.gin_trgm_ops);
 
+-- name: CreateGinIndexCreatedBy :exec
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_created_by_trgm ON event USING gin ((created_by::text) ext.gin_trgm_ops);
 
+-- name: CreateIndexReactor :exec
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_reactor_reactor ON event_reactor USING btree (reactor);
 
+-- name: TakeTransactionEventLock :exec
 WITH 
 i AS (
 	SELECT
@@ -24,10 +32,12 @@ SELECT
 FROM
 	i;
 
+-- name: InsertEvent :exec
 INSERT INTO
 	event (id, type, data, created_at, created_by)
 VALUES (pggen.arg('id'), pggen.arg('type'), pggen.arg('data'), pggen.arg('createdAt'), pggen.arg('createdBy'));
 
+-- name: LoadReactorEvents :many
 WITH 
 new_event AS (
 	INSERT INTO
@@ -69,6 +79,7 @@ FROM
 ORDER BY
 	evt.index;
 
+-- name: LoadEvents :many
 SELECT
 	*
 FROM
@@ -86,6 +97,7 @@ WHERE
 ORDER BY
 	evt.index;
 
+-- name: SelectMinTransactionEventLock :one
 SELECT
 	min(objid)
 FROM
