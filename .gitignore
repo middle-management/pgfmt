@@ -15,5 +15,6 @@
 
 # Go workspace file
 go.work
+testdata/fixtures/output/
 zed-pgfmt/target/
 zed-pgfmt/extension.wasm
