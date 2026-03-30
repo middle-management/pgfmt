@@ -9,23 +9,28 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-
     strategy:
       matrix:
         include:
           - goos: linux
             goarch: amd64
+            runner: ubuntu-latest
           - goos: linux
             goarch: arm64
+            runner: ubuntu-latest
+            cc: aarch64-linux-gnu-gcc
+            cross_pkg: gcc-aarch64-linux-gnu
           - goos: darwin
             goarch: amd64
+            runner: macos-latest
           - goos: darwin
             goarch: arm64
+            runner: macos-latest
           - goos: windows
             goarch: amd64
-          - goos: windows
-            goarch: arm64
+            runner: windows-latest
+
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - uses: actions/checkout@v4
@@ -33,10 +38,18 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
 
+      - name: Install cross-compiler
+        if: matrix.cross_pkg != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.cross_pkg }}
+
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "1"
+          CC: ${{ matrix.cc }}
         run: |
           ext=""
           if [ "${{ matrix.goos }}" = "windows" ]; then
