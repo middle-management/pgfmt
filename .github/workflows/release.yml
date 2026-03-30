@@ -22,7 +22,7 @@ jobs:
             cross_pkg: gcc-aarch64-linux-gnu
           - goos: darwin
             goarch: amd64
-            runner: macos-latest
+            runner: macos-13
           - goos: darwin
             goarch: arm64
             runner: macos-latest
@@ -31,6 +31,9 @@ jobs:
             runner: windows-latest
 
     runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
