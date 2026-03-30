@@ -51,25 +51,22 @@ vim.lsp.enable('pgfmt')
 }
 ```
 
-**Zed** (in `.zed/settings.json` or `~/.config/zed/settings.json`):
+**Zed** — install the [pgfmt Zed extension](https://github.com/middle-management/pgfmt/tree/main/zed-pgfmt) from the extension registry. It bundles `pgfmt-lsp` and downloads it automatically — no manual setup required.
+
+Then enable formatting in `.zed/settings.json` or `~/.config/zed/settings.json`:
 
 ```json
 {
   "languages": {
     "SQL": {
-      "formatter": {
-        "external": {
-          "command": "pgfmt",
-          "arguments": []
-        }
-      },
+      "formatter": "language_server",
       "format_on_save": "on"
     }
   }
 }
 ```
 
-Note: Zed doesn't inherit shell `$PATH` from tools like mise/asdf. Use an absolute path to `pgfmt` if it's not found.
+See the [extension README](zed-pgfmt/README.md) for advanced configuration, including how to use a custom binary path.
 
 ### Features
 
