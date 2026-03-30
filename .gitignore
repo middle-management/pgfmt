@@ -1,5 +1,6 @@
 # Binaries for programs and plugins
-pgfmt
+/pgfmt
+/pgfmt-lsp
 *.exe
 *.exe~
 *.dll
@@ -14,4 +15,3 @@ pgfmt
 
 # Go workspace file
 go.work
-pgfmt-lsp
