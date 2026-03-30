@@ -43,14 +43,16 @@ func Format(sql string) (string, error) {
 			ci++
 		}
 
-		// Skip any inline comments within the statement body
+		// Collect inline comments (within the statement body, after first real token)
+		var inlineComments []comment
 		for ci < len(comments) && comments[ci].start < stmtEnd {
+			inlineComments = append(inlineComments, comments[ci])
 			ci++
 		}
 
-		// Format the statement
+		// Format the statement, passing inline comments to the printer
 		b := &strings.Builder{}
-		p := &Printer{Builder: b}
+		p := &Printer{Builder: b, comments: inlineComments}
 		p.Print(stmt.Stmt)
 		out.WriteString(b.String())
 		out.WriteString(";\n\n")

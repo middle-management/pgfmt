@@ -255,6 +255,206 @@
       },
       "stmt_location": 351,
       "stmt_len": 20
+    },
+    {
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
+            {
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
+                      {
+                        "String": {
+                          "sval": "id"
+                        }
+                      }
+                    ],
+                    "location": 419
+                  }
+                },
+                "location": 419
+              }
+            },
+            {
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
+                      {
+                        "String": {
+                          "sval": "name"
+                        }
+                      }
+                    ],
+                    "location": 449
+                  }
+                },
+                "location": 449
+              }
+            },
+            {
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
+                      {
+                        "String": {
+                          "sval": "email"
+                        }
+                      }
+                    ],
+                    "location": 487
+                  }
+                },
+                "location": 487
+              }
+            },
+            {
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
+                      {
+                        "String": {
+                          "sval": "created_at"
+                        }
+                      }
+                    ],
+                    "location": 521
+                  }
+                },
+                "location": 521
+              }
+            }
+          ],
+          "fromClause": [
+            {
+              "RangeVar": {
+                "relname": "users",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 537
+              }
+            }
+          ],
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
+        }
+      },
+      "stmt_location": 372,
+      "stmt_len": 170
+    },
+    {
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
+            {
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
+                      {
+                        "String": {
+                          "sval": "a"
+                        }
+                      }
+                    ],
+                    "location": 598
+                  }
+                },
+                "location": 598
+              }
+            },
+            {
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
+                      {
+                        "String": {
+                          "sval": "b"
+                        }
+                      }
+                    ],
+                    "location": 657
+                  }
+                },
+                "location": 657
+              }
+            },
+            {
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
+                      {
+                        "String": {
+                          "sval": "c"
+                        }
+                      }
+                    ],
+                    "location": 664
+                  }
+                },
+                "location": 664
+              }
+            }
+          ],
+          "fromClause": [
+            {
+              "RangeVar": {
+                "relname": "t",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 671
+              }
+            }
+          ],
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
+        }
+      },
+      "stmt_location": 543,
+      "stmt_len": 129
+    },
+    {
+      "stmt": {
+        "SelectStmt": {
+          "targetList": [
+            {
+              "ResTarget": {
+                "val": {
+                  "ColumnRef": {
+                    "fields": [
+                      {
+                        "A_Star": {}
+                      }
+                    ],
+                    "location": 724
+                  }
+                },
+                "location": 724
+              }
+            }
+          ],
+          "fromClause": [
+            {
+              "RangeVar": {
+                "relname": "t",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 731
+              }
+            }
+          ],
+          "limitOption": "LIMIT_OPTION_DEFAULT",
+          "op": "SETOP_NONE"
+        }
+      },
+      "stmt_location": 673,
+      "stmt_len": 59
     }
   ]
 }

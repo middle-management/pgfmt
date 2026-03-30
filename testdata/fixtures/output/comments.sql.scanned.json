@@ -3022,13 +3022,2281 @@
       "token": 125
     },
     {
-      "start": 6269,
-      "end": 6270,
+      "start": 6266,
+      "end": 6267,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 6272,
+      "end": 6273,
+      "token": 123
+    },
+    {
+      "start": 6280,
+      "end": 6286,
+      "token": "IDENT"
+    },
+    {
+      "start": 6286,
+      "end": 6287,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6288,
+      "end": 6289,
+      "token": 123
+    },
+    {
+      "start": 6298,
+      "end": 6310,
+      "token": "IDENT"
+    },
+    {
+      "start": 6310,
+      "end": 6311,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6312,
+      "end": 6313,
+      "token": 123
+    },
+    {
+      "start": 6324,
+      "end": 6336,
+      "token": "IDENT"
+    },
+    {
+      "start": 6336,
+      "end": 6337,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6338,
+      "end": 6339,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 6352,
+      "end": 6353,
+      "token": 123
+    },
+    {
+      "start": 6368,
+      "end": 6379,
+      "token": "IDENT"
+    },
+    {
+      "start": 6379,
+      "end": 6380,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6381,
+      "end": 6382,
+      "token": 123
+    },
+    {
+      "start": 6399,
+      "end": 6404,
+      "token": "IDENT"
+    },
+    {
+      "start": 6404,
+      "end": 6405,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6406,
+      "end": 6407,
+      "token": 123
+    },
+    {
+      "start": 6426,
+      "end": 6437,
+      "token": "IDENT"
+    },
+    {
+      "start": 6437,
+      "end": 6438,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6439,
+      "end": 6440,
+      "token": 123
+    },
+    {
+      "start": 6461,
+      "end": 6469,
+      "token": "IDENT"
+    },
+    {
+      "start": 6469,
+      "end": 6470,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6471,
+      "end": 6472,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 6495,
+      "end": 6496,
+      "token": 123
+    },
+    {
+      "start": 6521,
+      "end": 6529,
+      "token": "IDENT"
+    },
+    {
+      "start": 6529,
+      "end": 6530,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6531,
+      "end": 6532,
+      "token": 123
+    },
+    {
+      "start": 6559,
+      "end": 6565,
+      "token": "IDENT"
+    },
+    {
+      "start": 6565,
+      "end": 6566,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6567,
+      "end": 6571,
+      "token": "IDENT"
+    },
+    {
+      "start": 6596,
+      "end": 6597,
+      "token": 125
+    },
+    {
+      "start": 6620,
+      "end": 6621,
+      "token": 125
+    },
+    {
+      "start": 6642,
+      "end": 6643,
       "token": "ASCII_93"
     },
     {
-      "start": 6271,
-      "end": 6272,
+      "start": 6643,
+      "end": 6644,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 6665,
+      "end": 6675,
+      "token": "IDENT"
+    },
+    {
+      "start": 6675,
+      "end": 6676,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6677,
+      "end": 6680,
+      "token": "ICONST"
+    },
+    {
+      "start": 6699,
+      "end": 6700,
+      "token": 125
+    },
+    {
+      "start": 6717,
+      "end": 6718,
+      "token": 125
+    },
+    {
+      "start": 6718,
+      "end": 6719,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 6736,
+      "end": 6746,
+      "token": "IDENT"
+    },
+    {
+      "start": 6746,
+      "end": 6747,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6748,
+      "end": 6751,
+      "token": "ICONST"
+    },
+    {
+      "start": 6766,
+      "end": 6767,
+      "token": 125
+    },
+    {
+      "start": 6780,
+      "end": 6781,
+      "token": 125
+    },
+    {
+      "start": 6781,
+      "end": 6782,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 6795,
+      "end": 6796,
+      "token": 123
+    },
+    {
+      "start": 6811,
+      "end": 6822,
+      "token": "IDENT"
+    },
+    {
+      "start": 6822,
+      "end": 6823,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6824,
+      "end": 6825,
+      "token": 123
+    },
+    {
+      "start": 6842,
+      "end": 6847,
+      "token": "IDENT"
+    },
+    {
+      "start": 6847,
+      "end": 6848,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6849,
+      "end": 6850,
+      "token": 123
+    },
+    {
+      "start": 6869,
+      "end": 6880,
+      "token": "IDENT"
+    },
+    {
+      "start": 6880,
+      "end": 6881,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6882,
+      "end": 6883,
+      "token": 123
+    },
+    {
+      "start": 6904,
+      "end": 6912,
+      "token": "IDENT"
+    },
+    {
+      "start": 6912,
+      "end": 6913,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6914,
+      "end": 6915,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 6938,
+      "end": 6939,
+      "token": 123
+    },
+    {
+      "start": 6964,
+      "end": 6972,
+      "token": "IDENT"
+    },
+    {
+      "start": 6972,
+      "end": 6973,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 6974,
+      "end": 6975,
+      "token": 123
+    },
+    {
+      "start": 7002,
+      "end": 7008,
+      "token": "IDENT"
+    },
+    {
+      "start": 7008,
+      "end": 7009,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7010,
+      "end": 7016,
+      "token": "IDENT"
+    },
+    {
+      "start": 7041,
+      "end": 7042,
+      "token": 125
+    },
+    {
+      "start": 7065,
+      "end": 7066,
+      "token": 125
+    },
+    {
+      "start": 7087,
+      "end": 7088,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 7088,
+      "end": 7089,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 7110,
+      "end": 7120,
+      "token": "IDENT"
+    },
+    {
+      "start": 7120,
+      "end": 7121,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7122,
+      "end": 7125,
+      "token": "ICONST"
+    },
+    {
+      "start": 7144,
+      "end": 7145,
+      "token": 125
+    },
+    {
+      "start": 7162,
+      "end": 7163,
+      "token": 125
+    },
+    {
+      "start": 7163,
+      "end": 7164,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 7181,
+      "end": 7191,
+      "token": "IDENT"
+    },
+    {
+      "start": 7191,
+      "end": 7192,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7193,
+      "end": 7196,
+      "token": "ICONST"
+    },
+    {
+      "start": 7211,
+      "end": 7212,
+      "token": 125
+    },
+    {
+      "start": 7225,
+      "end": 7226,
+      "token": 125
+    },
+    {
+      "start": 7226,
+      "end": 7227,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 7240,
+      "end": 7241,
+      "token": 123
+    },
+    {
+      "start": 7256,
+      "end": 7267,
+      "token": "IDENT"
+    },
+    {
+      "start": 7267,
+      "end": 7268,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7269,
+      "end": 7270,
+      "token": 123
+    },
+    {
+      "start": 7287,
+      "end": 7292,
+      "token": "IDENT"
+    },
+    {
+      "start": 7292,
+      "end": 7293,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7294,
+      "end": 7295,
+      "token": 123
+    },
+    {
+      "start": 7314,
+      "end": 7325,
+      "token": "IDENT"
+    },
+    {
+      "start": 7325,
+      "end": 7326,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7327,
+      "end": 7328,
+      "token": 123
+    },
+    {
+      "start": 7349,
+      "end": 7357,
+      "token": "IDENT"
+    },
+    {
+      "start": 7357,
+      "end": 7358,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7359,
+      "end": 7360,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 7383,
+      "end": 7384,
+      "token": 123
+    },
+    {
+      "start": 7409,
+      "end": 7417,
+      "token": "IDENT"
+    },
+    {
+      "start": 7417,
+      "end": 7418,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7419,
+      "end": 7420,
+      "token": 123
+    },
+    {
+      "start": 7447,
+      "end": 7453,
+      "token": "IDENT"
+    },
+    {
+      "start": 7453,
+      "end": 7454,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7455,
+      "end": 7462,
+      "token": "IDENT"
+    },
+    {
+      "start": 7487,
+      "end": 7488,
+      "token": 125
+    },
+    {
+      "start": 7511,
+      "end": 7512,
+      "token": 125
+    },
+    {
+      "start": 7533,
+      "end": 7534,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 7534,
+      "end": 7535,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 7556,
+      "end": 7566,
+      "token": "IDENT"
+    },
+    {
+      "start": 7566,
+      "end": 7567,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7568,
+      "end": 7571,
+      "token": "ICONST"
+    },
+    {
+      "start": 7590,
+      "end": 7591,
+      "token": 125
+    },
+    {
+      "start": 7608,
+      "end": 7609,
+      "token": 125
+    },
+    {
+      "start": 7609,
+      "end": 7610,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 7627,
+      "end": 7637,
+      "token": "IDENT"
+    },
+    {
+      "start": 7637,
+      "end": 7638,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7639,
+      "end": 7642,
+      "token": "ICONST"
+    },
+    {
+      "start": 7657,
+      "end": 7658,
+      "token": 125
+    },
+    {
+      "start": 7671,
+      "end": 7672,
+      "token": 125
+    },
+    {
+      "start": 7672,
+      "end": 7673,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 7686,
+      "end": 7687,
+      "token": 123
+    },
+    {
+      "start": 7702,
+      "end": 7713,
+      "token": "IDENT"
+    },
+    {
+      "start": 7713,
+      "end": 7714,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7715,
+      "end": 7716,
+      "token": 123
+    },
+    {
+      "start": 7733,
+      "end": 7738,
+      "token": "IDENT"
+    },
+    {
+      "start": 7738,
+      "end": 7739,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7740,
+      "end": 7741,
+      "token": 123
+    },
+    {
+      "start": 7760,
+      "end": 7771,
+      "token": "IDENT"
+    },
+    {
+      "start": 7771,
+      "end": 7772,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7773,
+      "end": 7774,
+      "token": 123
+    },
+    {
+      "start": 7795,
+      "end": 7803,
+      "token": "IDENT"
+    },
+    {
+      "start": 7803,
+      "end": 7804,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7805,
+      "end": 7806,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 7829,
+      "end": 7830,
+      "token": 123
+    },
+    {
+      "start": 7855,
+      "end": 7863,
+      "token": "IDENT"
+    },
+    {
+      "start": 7863,
+      "end": 7864,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7865,
+      "end": 7866,
+      "token": 123
+    },
+    {
+      "start": 7893,
+      "end": 7899,
+      "token": "IDENT"
+    },
+    {
+      "start": 7899,
+      "end": 7900,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 7901,
+      "end": 7913,
+      "token": "IDENT"
+    },
+    {
+      "start": 7938,
+      "end": 7939,
+      "token": 125
+    },
+    {
+      "start": 7962,
+      "end": 7963,
+      "token": 125
+    },
+    {
+      "start": 7984,
+      "end": 7985,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 7985,
+      "end": 7986,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8007,
+      "end": 8017,
+      "token": "IDENT"
+    },
+    {
+      "start": 8017,
+      "end": 8018,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8019,
+      "end": 8022,
+      "token": "ICONST"
+    },
+    {
+      "start": 8041,
+      "end": 8042,
+      "token": 125
+    },
+    {
+      "start": 8059,
+      "end": 8060,
+      "token": 125
+    },
+    {
+      "start": 8060,
+      "end": 8061,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8078,
+      "end": 8088,
+      "token": "IDENT"
+    },
+    {
+      "start": 8088,
+      "end": 8089,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8090,
+      "end": 8093,
+      "token": "ICONST"
+    },
+    {
+      "start": 8108,
+      "end": 8109,
+      "token": 125
+    },
+    {
+      "start": 8122,
+      "end": 8123,
+      "token": 125
+    },
+    {
+      "start": 8134,
+      "end": 8135,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 8135,
+      "end": 8136,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8147,
+      "end": 8159,
+      "token": "IDENT"
+    },
+    {
+      "start": 8159,
+      "end": 8160,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8161,
+      "end": 8162,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 8175,
+      "end": 8176,
+      "token": 123
+    },
+    {
+      "start": 8191,
+      "end": 8201,
+      "token": "IDENT"
+    },
+    {
+      "start": 8201,
+      "end": 8202,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8203,
+      "end": 8204,
+      "token": 123
+    },
+    {
+      "start": 8221,
+      "end": 8230,
+      "token": "IDENT"
+    },
+    {
+      "start": 8230,
+      "end": 8231,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8232,
+      "end": 8239,
+      "token": "IDENT"
+    },
+    {
+      "start": 8239,
+      "end": 8240,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8257,
+      "end": 8262,
+      "token": "IDENT"
+    },
+    {
+      "start": 8262,
+      "end": 8263,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8264,
+      "end": 8268,
+      "token": "TRUE_P",
+      "keywordKind": "RESERVED_KEYWORD"
+    },
+    {
+      "start": 8268,
+      "end": 8269,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8286,
+      "end": 8302,
+      "token": "IDENT"
+    },
+    {
+      "start": 8302,
+      "end": 8303,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8304,
+      "end": 8307,
+      "token": "IDENT"
+    },
+    {
+      "start": 8307,
+      "end": 8308,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8325,
+      "end": 8335,
+      "token": "IDENT"
+    },
+    {
+      "start": 8335,
+      "end": 8336,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8337,
+      "end": 8340,
+      "token": "ICONST"
+    },
+    {
+      "start": 8355,
+      "end": 8356,
+      "token": 125
+    },
+    {
+      "start": 8369,
+      "end": 8370,
+      "token": 125
+    },
+    {
+      "start": 8381,
+      "end": 8382,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 8382,
+      "end": 8383,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8394,
+      "end": 8407,
+      "token": "IDENT"
+    },
+    {
+      "start": 8407,
+      "end": 8408,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8409,
+      "end": 8431,
+      "token": "IDENT"
+    },
+    {
+      "start": 8431,
+      "end": 8432,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8443,
+      "end": 8447,
+      "token": "IDENT"
+    },
+    {
+      "start": 8447,
+      "end": 8448,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8449,
+      "end": 8461,
+      "token": "IDENT"
+    },
+    {
+      "start": 8470,
+      "end": 8471,
+      "token": 125
+    },
+    {
+      "start": 8478,
+      "end": 8479,
+      "token": 125
+    },
+    {
+      "start": 8479,
+      "end": 8480,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8487,
+      "end": 8502,
+      "token": "IDENT"
+    },
+    {
+      "start": 8502,
+      "end": 8503,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8504,
+      "end": 8507,
+      "token": "ICONST"
+    },
+    {
+      "start": 8507,
+      "end": 8508,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8515,
+      "end": 8525,
+      "token": "IDENT"
+    },
+    {
+      "start": 8525,
+      "end": 8526,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8527,
+      "end": 8530,
+      "token": "ICONST"
+    },
+    {
+      "start": 8535,
+      "end": 8536,
+      "token": 125
+    },
+    {
+      "start": 8536,
+      "end": 8537,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8542,
+      "end": 8543,
+      "token": 123
+    },
+    {
+      "start": 8550,
+      "end": 8556,
+      "token": "IDENT"
+    },
+    {
+      "start": 8556,
+      "end": 8557,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8558,
+      "end": 8559,
+      "token": 123
+    },
+    {
+      "start": 8568,
+      "end": 8580,
+      "token": "IDENT"
+    },
+    {
+      "start": 8580,
+      "end": 8581,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8582,
+      "end": 8583,
+      "token": 123
+    },
+    {
+      "start": 8594,
+      "end": 8606,
+      "token": "IDENT"
+    },
+    {
+      "start": 8606,
+      "end": 8607,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8608,
+      "end": 8609,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 8622,
+      "end": 8623,
+      "token": 123
+    },
+    {
+      "start": 8638,
+      "end": 8649,
+      "token": "IDENT"
+    },
+    {
+      "start": 8649,
+      "end": 8650,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8651,
+      "end": 8652,
+      "token": 123
+    },
+    {
+      "start": 8669,
+      "end": 8674,
+      "token": "IDENT"
+    },
+    {
+      "start": 8674,
+      "end": 8675,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8676,
+      "end": 8677,
+      "token": 123
+    },
+    {
+      "start": 8696,
+      "end": 8707,
+      "token": "IDENT"
+    },
+    {
+      "start": 8707,
+      "end": 8708,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8709,
+      "end": 8710,
+      "token": 123
+    },
+    {
+      "start": 8731,
+      "end": 8739,
+      "token": "IDENT"
+    },
+    {
+      "start": 8739,
+      "end": 8740,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8741,
+      "end": 8742,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 8765,
+      "end": 8766,
+      "token": 123
+    },
+    {
+      "start": 8791,
+      "end": 8799,
+      "token": "IDENT"
+    },
+    {
+      "start": 8799,
+      "end": 8800,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8801,
+      "end": 8802,
+      "token": 123
+    },
+    {
+      "start": 8829,
+      "end": 8835,
+      "token": "IDENT"
+    },
+    {
+      "start": 8835,
+      "end": 8836,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8837,
+      "end": 8840,
+      "token": "IDENT"
+    },
+    {
+      "start": 8865,
+      "end": 8866,
+      "token": 125
+    },
+    {
+      "start": 8889,
+      "end": 8890,
+      "token": 125
+    },
+    {
+      "start": 8911,
+      "end": 8912,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 8912,
+      "end": 8913,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 8934,
+      "end": 8944,
+      "token": "IDENT"
+    },
+    {
+      "start": 8944,
+      "end": 8945,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 8946,
+      "end": 8949,
+      "token": "ICONST"
+    },
+    {
+      "start": 8968,
+      "end": 8969,
+      "token": 125
+    },
+    {
+      "start": 8986,
+      "end": 8987,
+      "token": 125
+    },
+    {
+      "start": 8987,
+      "end": 8988,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 9005,
+      "end": 9015,
+      "token": "IDENT"
+    },
+    {
+      "start": 9015,
+      "end": 9016,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9017,
+      "end": 9020,
+      "token": "ICONST"
+    },
+    {
+      "start": 9035,
+      "end": 9036,
+      "token": 125
+    },
+    {
+      "start": 9049,
+      "end": 9050,
+      "token": 125
+    },
+    {
+      "start": 9050,
+      "end": 9051,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 9064,
+      "end": 9065,
+      "token": 123
+    },
+    {
+      "start": 9080,
+      "end": 9091,
+      "token": "IDENT"
+    },
+    {
+      "start": 9091,
+      "end": 9092,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9093,
+      "end": 9094,
+      "token": 123
+    },
+    {
+      "start": 9111,
+      "end": 9116,
+      "token": "IDENT"
+    },
+    {
+      "start": 9116,
+      "end": 9117,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9118,
+      "end": 9119,
+      "token": 123
+    },
+    {
+      "start": 9138,
+      "end": 9149,
+      "token": "IDENT"
+    },
+    {
+      "start": 9149,
+      "end": 9150,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9151,
+      "end": 9152,
+      "token": 123
+    },
+    {
+      "start": 9173,
+      "end": 9181,
+      "token": "IDENT"
+    },
+    {
+      "start": 9181,
+      "end": 9182,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9183,
+      "end": 9184,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 9207,
+      "end": 9208,
+      "token": 123
+    },
+    {
+      "start": 9233,
+      "end": 9241,
+      "token": "IDENT"
+    },
+    {
+      "start": 9241,
+      "end": 9242,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9243,
+      "end": 9244,
+      "token": 123
+    },
+    {
+      "start": 9271,
+      "end": 9277,
+      "token": "IDENT"
+    },
+    {
+      "start": 9277,
+      "end": 9278,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9279,
+      "end": 9282,
+      "token": "IDENT"
+    },
+    {
+      "start": 9307,
+      "end": 9308,
+      "token": 125
+    },
+    {
+      "start": 9331,
+      "end": 9332,
+      "token": 125
+    },
+    {
+      "start": 9353,
+      "end": 9354,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 9354,
+      "end": 9355,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 9376,
+      "end": 9386,
+      "token": "IDENT"
+    },
+    {
+      "start": 9386,
+      "end": 9387,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9388,
+      "end": 9391,
+      "token": "ICONST"
+    },
+    {
+      "start": 9410,
+      "end": 9411,
+      "token": 125
+    },
+    {
+      "start": 9428,
+      "end": 9429,
+      "token": 125
+    },
+    {
+      "start": 9429,
+      "end": 9430,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 9447,
+      "end": 9457,
+      "token": "IDENT"
+    },
+    {
+      "start": 9457,
+      "end": 9458,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9459,
+      "end": 9462,
+      "token": "ICONST"
+    },
+    {
+      "start": 9477,
+      "end": 9478,
+      "token": 125
+    },
+    {
+      "start": 9491,
+      "end": 9492,
+      "token": 125
+    },
+    {
+      "start": 9492,
+      "end": 9493,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 9506,
+      "end": 9507,
+      "token": 123
+    },
+    {
+      "start": 9522,
+      "end": 9533,
+      "token": "IDENT"
+    },
+    {
+      "start": 9533,
+      "end": 9534,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9535,
+      "end": 9536,
+      "token": 123
+    },
+    {
+      "start": 9553,
+      "end": 9558,
+      "token": "IDENT"
+    },
+    {
+      "start": 9558,
+      "end": 9559,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9560,
+      "end": 9561,
+      "token": 123
+    },
+    {
+      "start": 9580,
+      "end": 9591,
+      "token": "IDENT"
+    },
+    {
+      "start": 9591,
+      "end": 9592,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9593,
+      "end": 9594,
+      "token": 123
+    },
+    {
+      "start": 9615,
+      "end": 9623,
+      "token": "IDENT"
+    },
+    {
+      "start": 9623,
+      "end": 9624,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9625,
+      "end": 9626,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 9649,
+      "end": 9650,
+      "token": 123
+    },
+    {
+      "start": 9675,
+      "end": 9683,
+      "token": "IDENT"
+    },
+    {
+      "start": 9683,
+      "end": 9684,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9685,
+      "end": 9686,
+      "token": 123
+    },
+    {
+      "start": 9713,
+      "end": 9719,
+      "token": "IDENT"
+    },
+    {
+      "start": 9719,
+      "end": 9720,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9721,
+      "end": 9724,
+      "token": "IDENT"
+    },
+    {
+      "start": 9749,
+      "end": 9750,
+      "token": 125
+    },
+    {
+      "start": 9773,
+      "end": 9774,
+      "token": 125
+    },
+    {
+      "start": 9795,
+      "end": 9796,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 9796,
+      "end": 9797,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 9818,
+      "end": 9828,
+      "token": "IDENT"
+    },
+    {
+      "start": 9828,
+      "end": 9829,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9830,
+      "end": 9833,
+      "token": "ICONST"
+    },
+    {
+      "start": 9852,
+      "end": 9853,
+      "token": 125
+    },
+    {
+      "start": 9870,
+      "end": 9871,
+      "token": 125
+    },
+    {
+      "start": 9871,
+      "end": 9872,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 9889,
+      "end": 9899,
+      "token": "IDENT"
+    },
+    {
+      "start": 9899,
+      "end": 9900,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9901,
+      "end": 9904,
+      "token": "ICONST"
+    },
+    {
+      "start": 9919,
+      "end": 9920,
+      "token": 125
+    },
+    {
+      "start": 9933,
+      "end": 9934,
+      "token": 125
+    },
+    {
+      "start": 9945,
+      "end": 9946,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 9946,
+      "end": 9947,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 9958,
+      "end": 9970,
+      "token": "IDENT"
+    },
+    {
+      "start": 9970,
+      "end": 9971,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 9972,
+      "end": 9973,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 9986,
+      "end": 9987,
+      "token": 123
+    },
+    {
+      "start": 10002,
+      "end": 10012,
+      "token": "IDENT"
+    },
+    {
+      "start": 10012,
+      "end": 10013,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10014,
+      "end": 10015,
+      "token": 123
+    },
+    {
+      "start": 10032,
+      "end": 10041,
+      "token": "IDENT"
+    },
+    {
+      "start": 10041,
+      "end": 10042,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10043,
+      "end": 10046,
+      "token": "IDENT"
+    },
+    {
+      "start": 10046,
+      "end": 10047,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10064,
+      "end": 10069,
+      "token": "IDENT"
+    },
+    {
+      "start": 10069,
+      "end": 10070,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10071,
+      "end": 10075,
+      "token": "TRUE_P",
+      "keywordKind": "RESERVED_KEYWORD"
+    },
+    {
+      "start": 10075,
+      "end": 10076,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10093,
+      "end": 10109,
+      "token": "IDENT"
+    },
+    {
+      "start": 10109,
+      "end": 10110,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10111,
+      "end": 10114,
+      "token": "IDENT"
+    },
+    {
+      "start": 10114,
+      "end": 10115,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10132,
+      "end": 10142,
+      "token": "IDENT"
+    },
+    {
+      "start": 10142,
+      "end": 10143,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10144,
+      "end": 10147,
+      "token": "ICONST"
+    },
+    {
+      "start": 10162,
+      "end": 10163,
+      "token": 125
+    },
+    {
+      "start": 10176,
+      "end": 10177,
+      "token": 125
+    },
+    {
+      "start": 10188,
+      "end": 10189,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 10189,
+      "end": 10190,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10201,
+      "end": 10214,
+      "token": "IDENT"
+    },
+    {
+      "start": 10214,
+      "end": 10215,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10216,
+      "end": 10238,
+      "token": "IDENT"
+    },
+    {
+      "start": 10238,
+      "end": 10239,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10250,
+      "end": 10254,
+      "token": "IDENT"
+    },
+    {
+      "start": 10254,
+      "end": 10255,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10256,
+      "end": 10268,
+      "token": "IDENT"
+    },
+    {
+      "start": 10277,
+      "end": 10278,
+      "token": 125
+    },
+    {
+      "start": 10285,
+      "end": 10286,
+      "token": 125
+    },
+    {
+      "start": 10286,
+      "end": 10287,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10294,
+      "end": 10309,
+      "token": "IDENT"
+    },
+    {
+      "start": 10309,
+      "end": 10310,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10311,
+      "end": 10314,
+      "token": "ICONST"
+    },
+    {
+      "start": 10314,
+      "end": 10315,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10322,
+      "end": 10332,
+      "token": "IDENT"
+    },
+    {
+      "start": 10332,
+      "end": 10333,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10334,
+      "end": 10337,
+      "token": "ICONST"
+    },
+    {
+      "start": 10342,
+      "end": 10343,
+      "token": 125
+    },
+    {
+      "start": 10343,
+      "end": 10344,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10349,
+      "end": 10350,
+      "token": 123
+    },
+    {
+      "start": 10357,
+      "end": 10363,
+      "token": "IDENT"
+    },
+    {
+      "start": 10363,
+      "end": 10364,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10365,
+      "end": 10366,
+      "token": 123
+    },
+    {
+      "start": 10375,
+      "end": 10387,
+      "token": "IDENT"
+    },
+    {
+      "start": 10387,
+      "end": 10388,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10389,
+      "end": 10390,
+      "token": 123
+    },
+    {
+      "start": 10401,
+      "end": 10413,
+      "token": "IDENT"
+    },
+    {
+      "start": 10413,
+      "end": 10414,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10415,
+      "end": 10416,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 10429,
+      "end": 10430,
+      "token": 123
+    },
+    {
+      "start": 10445,
+      "end": 10456,
+      "token": "IDENT"
+    },
+    {
+      "start": 10456,
+      "end": 10457,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10458,
+      "end": 10459,
+      "token": 123
+    },
+    {
+      "start": 10476,
+      "end": 10481,
+      "token": "IDENT"
+    },
+    {
+      "start": 10481,
+      "end": 10482,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10483,
+      "end": 10484,
+      "token": 123
+    },
+    {
+      "start": 10503,
+      "end": 10514,
+      "token": "IDENT"
+    },
+    {
+      "start": 10514,
+      "end": 10515,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10516,
+      "end": 10517,
+      "token": 123
+    },
+    {
+      "start": 10538,
+      "end": 10546,
+      "token": "IDENT"
+    },
+    {
+      "start": 10546,
+      "end": 10547,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10548,
+      "end": 10549,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 10572,
+      "end": 10573,
+      "token": 123
+    },
+    {
+      "start": 10598,
+      "end": 10606,
+      "token": "IDENT"
+    },
+    {
+      "start": 10606,
+      "end": 10607,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10608,
+      "end": 10609,
+      "token": 123
+    },
+    {
+      "start": 10609,
+      "end": 10610,
+      "token": 125
+    },
+    {
+      "start": 10633,
+      "end": 10634,
+      "token": 125
+    },
+    {
+      "start": 10655,
+      "end": 10656,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 10656,
+      "end": 10657,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10678,
+      "end": 10688,
+      "token": "IDENT"
+    },
+    {
+      "start": 10688,
+      "end": 10689,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10690,
+      "end": 10693,
+      "token": "ICONST"
+    },
+    {
+      "start": 10712,
+      "end": 10713,
+      "token": 125
+    },
+    {
+      "start": 10730,
+      "end": 10731,
+      "token": 125
+    },
+    {
+      "start": 10731,
+      "end": 10732,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10749,
+      "end": 10759,
+      "token": "IDENT"
+    },
+    {
+      "start": 10759,
+      "end": 10760,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10761,
+      "end": 10764,
+      "token": "ICONST"
+    },
+    {
+      "start": 10779,
+      "end": 10780,
+      "token": 125
+    },
+    {
+      "start": 10793,
+      "end": 10794,
+      "token": 125
+    },
+    {
+      "start": 10805,
+      "end": 10806,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 10806,
+      "end": 10807,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10818,
+      "end": 10830,
+      "token": "IDENT"
+    },
+    {
+      "start": 10830,
+      "end": 10831,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10832,
+      "end": 10833,
+      "token": "ASCII_91"
+    },
+    {
+      "start": 10846,
+      "end": 10847,
+      "token": 123
+    },
+    {
+      "start": 10862,
+      "end": 10872,
+      "token": "IDENT"
+    },
+    {
+      "start": 10872,
+      "end": 10873,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10874,
+      "end": 10875,
+      "token": 123
+    },
+    {
+      "start": 10892,
+      "end": 10901,
+      "token": "IDENT"
+    },
+    {
+      "start": 10901,
+      "end": 10902,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10903,
+      "end": 10906,
+      "token": "IDENT"
+    },
+    {
+      "start": 10906,
+      "end": 10907,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10924,
+      "end": 10929,
+      "token": "IDENT"
+    },
+    {
+      "start": 10929,
+      "end": 10930,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10931,
+      "end": 10935,
+      "token": "TRUE_P",
+      "keywordKind": "RESERVED_KEYWORD"
+    },
+    {
+      "start": 10935,
+      "end": 10936,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10953,
+      "end": 10969,
+      "token": "IDENT"
+    },
+    {
+      "start": 10969,
+      "end": 10970,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 10971,
+      "end": 10974,
+      "token": "IDENT"
+    },
+    {
+      "start": 10974,
+      "end": 10975,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 10992,
+      "end": 11002,
+      "token": "IDENT"
+    },
+    {
+      "start": 11002,
+      "end": 11003,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 11004,
+      "end": 11007,
+      "token": "ICONST"
+    },
+    {
+      "start": 11022,
+      "end": 11023,
+      "token": 125
+    },
+    {
+      "start": 11036,
+      "end": 11037,
+      "token": 125
+    },
+    {
+      "start": 11048,
+      "end": 11049,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 11049,
+      "end": 11050,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 11061,
+      "end": 11074,
+      "token": "IDENT"
+    },
+    {
+      "start": 11074,
+      "end": 11075,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 11076,
+      "end": 11098,
+      "token": "IDENT"
+    },
+    {
+      "start": 11098,
+      "end": 11099,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 11110,
+      "end": 11114,
+      "token": "IDENT"
+    },
+    {
+      "start": 11114,
+      "end": 11115,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 11116,
+      "end": 11128,
+      "token": "IDENT"
+    },
+    {
+      "start": 11137,
+      "end": 11138,
+      "token": 125
+    },
+    {
+      "start": 11145,
+      "end": 11146,
+      "token": 125
+    },
+    {
+      "start": 11146,
+      "end": 11147,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 11154,
+      "end": 11169,
+      "token": "IDENT"
+    },
+    {
+      "start": 11169,
+      "end": 11170,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 11171,
+      "end": 11174,
+      "token": "ICONST"
+    },
+    {
+      "start": 11174,
+      "end": 11175,
+      "token": "ASCII_44"
+    },
+    {
+      "start": 11182,
+      "end": 11192,
+      "token": "IDENT"
+    },
+    {
+      "start": 11192,
+      "end": 11193,
+      "token": "ASCII_58"
+    },
+    {
+      "start": 11194,
+      "end": 11196,
+      "token": "ICONST"
+    },
+    {
+      "start": 11201,
+      "end": 11202,
+      "token": 125
+    },
+    {
+      "start": 11205,
+      "end": 11206,
+      "token": "ASCII_93"
+    },
+    {
+      "start": 11207,
+      "end": 11208,
       "token": 125
     }
   ]

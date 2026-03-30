@@ -103,11 +103,11 @@ CREATE TABLE p_pbx_voicemail (
 
 CREATE TABLE p_pbx_route (
 	pbx_route_id uuid PRIMARY KEY,
-	type pg_catalog.varchar NOT NULL,
-	extension pg_catalog.varchar,
+	type pg_catalog.varchar NOT NULL, -- ivr, prompt, schedule, group, queue, voicemail, forwarding
+	extension pg_catalog.varchar, -- external if it starts with a + (pattern: /^\+?[0-9]+$/)
 	name pg_catalog.varchar,
 	suffix pg_catalog.varchar,
-	call_display pg_catalog.varchar,
+	call_display pg_catalog.varchar, -- "next" is added below in an ALTER TABLE because circular references
 	pbx_user_id uuid REFERENCES p_pbx_user ON DELETE SET NULL,
 	pbx_prompt_id uuid REFERENCES p_pbx_prompt ON DELETE SET NULL,
 	pbx_voicemail_id uuid REFERENCES p_pbx_voicemail ON DELETE SET NULL,
@@ -137,8 +137,8 @@ CREATE TABLE p_pbx_route_schedule (
 	pbx_schedule_id uuid PRIMARY KEY,
 	pbx_route_id uuid NOT NULL REFERENCES p_pbx_route ON DELETE CASCADE,
 	name pg_catalog.varchar,
-	type pg_catalog.varchar NOT NULL,
-	index pg_catalog.int4 NOT NULL,
+	type pg_catalog.varchar NOT NULL, -- weekly, daily, monthly, yearly, other
+	index pg_catalog.int4 NOT NULL, -- sequential number per route (0 = "default", highest is "first")
 	recurrence_mon bool,
 	recurrence_tue bool,
 	recurrence_wed bool,
@@ -166,7 +166,7 @@ CREATE TABLE p_pbx_route_queue (
 
 CREATE TABLE p_pbx_route_menu (
 	pbx_route_id uuid NOT NULL REFERENCES p_pbx_route ON DELETE CASCADE,
-	type pg_catalog.varchar NOT NULL,
+	type pg_catalog.varchar NOT NULL, -- 1,2,3,4,5,6,7,8,9,0,#,*
 	next uuid REFERENCES p_pbx_route (pbx_route_id) ON DELETE SET NULL,
 	created_at pg_catalog.timestamptz NOT NULL,
 	updated_at pg_catalog.timestamptz NOT NULL,
@@ -232,9 +232,9 @@ CREATE TABLE p_pbx_prompt_callback (
 CREATE TABLE p_pbx_voicemail_recording (
 	pbx_voicemail_recording_id uuid PRIMARY KEY,
 	pbx_voicemail_id uuid NOT NULL REFERENCES p_pbx_voicemail ON DELETE CASCADE,
-	url pg_catalog.varchar NOT NULL,
+	url pg_catalog.varchar NOT NULL, -- to .wav on s3
 	content_type pg_catalog.varchar,
-	msisdn pg_catalog.varchar,
+	msisdn pg_catalog.varchar, -- called phone number
 	duration pg_catalog.int8,
 	label pg_catalog.varchar,
 	recorded_at pg_catalog.timestamptz NOT NULL,
@@ -516,7 +516,7 @@ COMMIT;
 DROP FUNCTION IF EXISTS pbx_callprofile_select(uuid[]);
 
 -- if return type is changed
-CREATE OR REPLACE FUNCTION pbx_callprofile_select(call_profile_ids uuid[])
+CREATE OR REPLACE FUNCTION pbx_callprofile_select(call_profile_ids uuid[]) -- old user per route settings connected/disconnected
 RETURNS TABLE (
 	pbx_call_profile_id uuid,
 	pbx_user_id uuid,
