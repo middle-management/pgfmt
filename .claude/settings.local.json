@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(CGO_CFLAGS=\"-Wno-error=incompatible-pointer-types -Wno-error\" go build -o pgfmt-lsp ./cmd/pgfmt-lsp)",
+      "Bash(go list:*)",
+      "Bash(go get:*)",
+      "Bash(go test:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(timeout 2 /tmp/pgfmt-lsp)",
+      "Bash(go env:*)",
+      "Read(//Users/robert/go/**)",
+      "Read(//Users/robert/.local/share/mise/installs/go/**)",
+      "Bash(go install:*)"
+    ]
+  }
+}

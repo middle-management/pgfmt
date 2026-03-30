@@ -14,3 +14,4 @@ pgfmt
 
 # Go workspace file
 go.work
+pgfmt-lsp

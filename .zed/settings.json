@@ -1,0 +1,13 @@
+{
+  "languages": {
+    "SQL": {
+      "formatter": {
+        "external": {
+          "command": "/Users/robert/go/bin/pgfmt",
+          "arguments": []
+        }
+      },
+      "format_on_save": "on"
+    }
+  }
+}
