@@ -197,25 +197,7 @@ func (s *Server) publishDiagnostics(uri, content string) {
 
 // formatSQL formats SQL content using the pgfmt printer.
 func formatSQL(content string) (string, error) {
-	result, err := pg_query.Parse(content)
-	if err != nil {
-		return "", err
-	}
-
-	var out strings.Builder
-	for i, stmt := range result.Stmts {
-		b := &strings.Builder{}
-		p := &printer.Printer{Builder: b}
-		p.Print(stmt.Stmt)
-		out.WriteString(b.String())
-		out.WriteString(";")
-		if i < len(result.Stmts)-1 {
-			out.WriteString("\n\n")
-		} else {
-			out.WriteString("\n")
-		}
-	}
-	return out.String(), nil
+	return printer.Format(content)
 }
 
 // endPosition returns the Position of the end of the given text.

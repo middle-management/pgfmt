@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/middle-management/pgfmt/printer"
-	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
 
 func main() {
@@ -28,20 +26,11 @@ func print(input io.Reader, output io.Writer) error {
 		return err
 	}
 
-	result, err := pg_query.Parse(string(buffer))
+	formatted, err := printer.Format(string(buffer))
 	if err != nil {
 		return err
 	}
 
-	for _, stmt := range result.Stmts {
-		b := &strings.Builder{}
-		p := &printer.Printer{Builder: b}
-		p.Print(stmt.Stmt)
-		_, err := io.WriteString(output, b.String()+";\n\n")
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	_, err = io.WriteString(output, formatted)
+	return err
 }

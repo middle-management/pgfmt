@@ -119,6 +119,8 @@ CREATE TABLE p_pbx_route (
 
 CREATE INDEX ON p_pbx_route USING btree (organisation_id);
 
+-- must be added after unique index or we get
+-- errors about it missing
 ALTER TABLE p_pbx_route
 	ADD COLUMN next uuid REFERENCES p_pbx_route (pbx_route_id) ON DELETE SET NULL;
 
@@ -268,6 +270,7 @@ CREATE TABLE p_pbx_customer (
 
 CREATE UNIQUE INDEX ON p_pbx_customer USING btree (organisation_id);
 
+-- pbx_route_select selects all fields that we want for a pbx route
 CREATE OR REPLACE FUNCTION pbx_route_select(route_id uuid[])
 RETURNS TABLE (
 	pbx_route_id uuid,
@@ -512,6 +515,7 @@ COMMIT;
 
 DROP FUNCTION IF EXISTS pbx_callprofile_select(uuid[]);
 
+-- if return type is changed
 CREATE OR REPLACE FUNCTION pbx_callprofile_select(call_profile_ids uuid[])
 RETURNS TABLE (
 	pbx_call_profile_id uuid,
