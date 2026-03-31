@@ -2418,7 +2418,11 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 		}
 	case pg_query.SetOperation_SETOP_UNION, pg_query.SetOperation_SETOP_INTERSECT, pg_query.SetOperation_SETOP_EXCEPT:
 		output.Builder.WriteString("(")
+		output.indent++
+		output.writeNewlineIndent()
 		output.writeSelectStmt(stmt.Larg)
+		output.indent--
+		output.writeNewlineIndent()
 		output.Builder.WriteString(")")
 
 		output.writeNewlineIndent()
@@ -2439,7 +2443,11 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 
 		output.writeNewlineIndent()
 		output.Builder.WriteString("(")
+		output.indent++
+		output.writeNewlineIndent()
 		output.writeSelectStmt(stmt.Rarg)
+		output.indent--
+		output.writeNewlineIndent()
 		output.Builder.WriteString(")")
 	}
 

@@ -90,24 +90,28 @@ FROM
 -- Recursive CTE
 WITH RECURSIVE 
 tree AS (
-	(SELECT
-		id,
-		name,
-		parent_id,
-		0 AS depth
-	FROM
-		categories
-	WHERE
-		parent_id IS NULL)
+	(
+		SELECT
+			id,
+			name,
+			parent_id,
+			0 AS depth
+		FROM
+			categories
+		WHERE
+			parent_id IS NULL
+	)
 	UNION ALL
-	(SELECT
-		c.id,
-		c.name,
-		c.parent_id,
-		t.depth + 1
-	FROM
-		categories AS c
-		JOIN tree AS t ON c.parent_id = t.id)
+	(
+		SELECT
+			c.id,
+			c.name,
+			c.parent_id,
+			t.depth + 1
+		FROM
+			categories AS c
+			JOIN tree AS t ON c.parent_id = t.id
+	)
 )
 SELECT
 	id,
