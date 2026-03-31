@@ -29,18 +29,11 @@ There is no Makefile; use `go` commands directly.
 - CI verifies golden files are up to date via `git diff --exit-code testdata/fixtures/golden/`
 - When adding new SQL formatting support, add both unit tests and fixture coverage
 
-## Missing / Unsupported Constructs
+## Deparse Fallback
 
-The following SQL constructs are parsed by `pg_query_go` but not yet handled by the printer:
-
-### Expression nodes
-- **XmlExpr** — XML functions (`XMLPARSE`, `XMLROOT`, `XMLELEMENT`, etc.)
-
-### DDL not yet handled
-- **ALTER SEQUENCE**
-- **CREATE TRIGGER**
-- **CREATE DOMAIN**
-- **REINDEX / CLUSTER**
+Any SQL statement type not explicitly handled by the printer falls back to
+`pg_query.Deparse`, which emits valid (but unformatted/canonical) SQL. This
+ensures pgfmt never produces empty output for valid SQL.
 
 ## Code Conventions
 

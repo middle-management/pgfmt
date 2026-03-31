@@ -29,6 +29,7 @@ type Printer struct {
 	comments       []comment // inline comments for the current statement
 	commentIdx     int       // next inline comment to process
 	lastNodeEndPos int       // output position after last node with a source location
+	RawStmt        *pg_query.RawStmt // set by Format to enable deparse fallback
 }
 
 func (output *Printer) Print(node *pg_query.Node) {
@@ -1846,10 +1847,228 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeRangeVar(n.VacuumRelation.Relation)
 		}
 
+	case *pg_query.Node_CreateTrigStmt:
+		output.Builder.WriteString("CREATE ")
+		if n.CreateTrigStmt.Isconstraint {
+			output.Builder.WriteString("CONSTRAINT ")
+		}
+		output.Builder.WriteString("TRIGGER ")
+		output.Builder.WriteString(n.CreateTrigStmt.Trigname)
+		// Timing: BEFORE=2, AFTER=0 (default), INSTEAD OF=64
+		switch {
+		case n.CreateTrigStmt.Timing&64 != 0:
+			output.Builder.WriteString("\nINSTEAD OF ")
+		case n.CreateTrigStmt.Timing&2 != 0:
+			output.Builder.WriteString("\nBEFORE ")
+		default:
+			output.Builder.WriteString("\nAFTER ")
+		}
+		// Events: INSERT=4, DELETE=8, UPDATE=16, TRUNCATE=32
+		events := []string{}
+		if n.CreateTrigStmt.Events&4 != 0 {
+			events = append(events, "INSERT")
+		}
+		if n.CreateTrigStmt.Events&8 != 0 {
+			events = append(events, "DELETE")
+		}
+		if n.CreateTrigStmt.Events&16 != 0 {
+			events = append(events, "UPDATE")
+		}
+		if n.CreateTrigStmt.Events&32 != 0 {
+			events = append(events, "TRUNCATE")
+		}
+		output.Builder.WriteString(strings.Join(events, " OR "))
+		output.Builder.WriteString(" ON ")
+		output.writeRangeVar(n.CreateTrigStmt.Relation)
+		if n.CreateTrigStmt.Row {
+			output.Builder.WriteString("\nFOR EACH ROW")
+		} else {
+			output.Builder.WriteString("\nFOR EACH STATEMENT")
+		}
+		if n.CreateTrigStmt.WhenClause != nil {
+			output.Builder.WriteString("\nWHEN (")
+			output.writeNode(n.CreateTrigStmt.WhenClause)
+			output.Builder.WriteString(")")
+		}
+		output.Builder.WriteString("\nEXECUTE FUNCTION ")
+		output.writeListWithSeparator(n.CreateTrigStmt.Funcname, ".")
+		output.Builder.WriteString("(")
+		output.writeCommaSeparatedList(n.CreateTrigStmt.Args)
+		output.Builder.WriteString(")")
+
+	case *pg_query.Node_CreateDomainStmt:
+		output.Builder.WriteString("CREATE DOMAIN ")
+		output.writeListWithSeparator(n.CreateDomainStmt.Domainname, ".")
+		output.Builder.WriteString(" AS ")
+		output.writeTypeName(n.CreateDomainStmt.TypeName)
+		for _, c := range n.CreateDomainStmt.Constraints {
+			output.Builder.WriteString(" ")
+			output.writeNode(c)
+		}
+
+	case *pg_query.Node_AlterSeqStmt:
+		output.Builder.WriteString("ALTER SEQUENCE ")
+		if n.AlterSeqStmt.MissingOk {
+			output.Builder.WriteString("IF EXISTS ")
+		}
+		output.writeRangeVar(n.AlterSeqStmt.Sequence)
+		for _, opt := range n.AlterSeqStmt.Options {
+			de := opt.GetDefElem()
+			if de == nil {
+				continue
+			}
+			switch de.Defname {
+			case "restart":
+				output.Builder.WriteString(" RESTART")
+				if de.Arg != nil {
+					output.Builder.WriteString(" WITH ")
+					output.writeNode(de.Arg)
+				}
+			case "start":
+				output.Builder.WriteString(" START WITH ")
+				output.writeNode(de.Arg)
+			case "increment":
+				output.Builder.WriteString(" INCREMENT BY ")
+				output.writeNode(de.Arg)
+			case "minvalue":
+				if de.Arg != nil {
+					output.Builder.WriteString(" MINVALUE ")
+					output.writeNode(de.Arg)
+				} else {
+					output.Builder.WriteString(" NO MINVALUE")
+				}
+			case "maxvalue":
+				if de.Arg != nil {
+					output.Builder.WriteString(" MAXVALUE ")
+					output.writeNode(de.Arg)
+				} else {
+					output.Builder.WriteString(" NO MAXVALUE")
+				}
+			case "cache":
+				output.Builder.WriteString(" CACHE ")
+				output.writeNode(de.Arg)
+			case "cycle":
+				if de.Arg != nil && de.Arg.GetBoolean().GetBoolval() {
+					output.Builder.WriteString(" CYCLE")
+				} else {
+					output.Builder.WriteString(" NO CYCLE")
+				}
+			case "owned_by":
+				output.Builder.WriteString(" OWNED BY ")
+				if l := de.Arg.GetList(); l != nil {
+					output.writeListWithSeparator(l.Items, ".")
+				} else {
+					output.writeNode(de.Arg)
+				}
+			}
+		}
+
+	case *pg_query.Node_ReindexStmt:
+		output.Builder.WriteString("REINDEX ")
+		switch n.ReindexStmt.Kind {
+		case pg_query.ReindexObjectType_REINDEX_OBJECT_INDEX:
+			output.Builder.WriteString("INDEX ")
+		case pg_query.ReindexObjectType_REINDEX_OBJECT_TABLE:
+			output.Builder.WriteString("TABLE ")
+		case pg_query.ReindexObjectType_REINDEX_OBJECT_SCHEMA:
+			output.Builder.WriteString("SCHEMA ")
+		case pg_query.ReindexObjectType_REINDEX_OBJECT_SYSTEM:
+			output.Builder.WriteString("SYSTEM ")
+		case pg_query.ReindexObjectType_REINDEX_OBJECT_DATABASE:
+			output.Builder.WriteString("DATABASE ")
+		}
+		if n.ReindexStmt.Relation != nil {
+			output.writeRangeVar(n.ReindexStmt.Relation)
+		} else if n.ReindexStmt.Name != "" {
+			output.Builder.WriteString(n.ReindexStmt.Name)
+		}
+
+	case *pg_query.Node_ClusterStmt:
+		output.Builder.WriteString("CLUSTER ")
+		if n.ClusterStmt.Relation != nil {
+			output.writeRangeVar(n.ClusterStmt.Relation)
+		}
+		if n.ClusterStmt.Indexname != "" {
+			output.Builder.WriteString(" USING ")
+			output.Builder.WriteString(n.ClusterStmt.Indexname)
+		}
+
+	case *pg_query.Node_XmlExpr:
+		switch n.XmlExpr.Op {
+		case pg_query.XmlExprOp_IS_XMLCONCAT:
+			output.Builder.WriteString("XMLCONCAT(")
+			output.writeCommaSeparatedList(n.XmlExpr.Args)
+			output.Builder.WriteString(")")
+		case pg_query.XmlExprOp_IS_XMLELEMENT:
+			output.Builder.WriteString("XMLELEMENT(NAME ")
+			output.Builder.WriteString(n.XmlExpr.Name)
+			if len(n.XmlExpr.NamedArgs) > 0 {
+				output.Builder.WriteString(", XMLATTRIBUTES(")
+				output.writeCommaSeparatedList(n.XmlExpr.NamedArgs)
+				output.Builder.WriteString(")")
+			}
+			if len(n.XmlExpr.Args) > 0 {
+				output.Builder.WriteString(", ")
+				output.writeCommaSeparatedList(n.XmlExpr.Args)
+			}
+			output.Builder.WriteString(")")
+		case pg_query.XmlExprOp_IS_XMLFOREST:
+			output.Builder.WriteString("XMLFOREST(")
+			output.writeCommaSeparatedList(n.XmlExpr.NamedArgs)
+			output.Builder.WriteString(")")
+		case pg_query.XmlExprOp_IS_XMLPARSE:
+			output.Builder.WriteString("XMLPARSE(")
+			if n.XmlExpr.Xmloption == pg_query.XmlOptionType_XMLOPTION_DOCUMENT {
+				output.Builder.WriteString("DOCUMENT ")
+			} else {
+				output.Builder.WriteString("CONTENT ")
+			}
+			output.writeCommaSeparatedList(n.XmlExpr.Args)
+			output.Builder.WriteString(")")
+		case pg_query.XmlExprOp_IS_XMLPI:
+			output.Builder.WriteString("XMLPI(NAME ")
+			output.Builder.WriteString(n.XmlExpr.Name)
+			if len(n.XmlExpr.Args) > 0 {
+				output.Builder.WriteString(", ")
+				output.writeCommaSeparatedList(n.XmlExpr.Args)
+			}
+			output.Builder.WriteString(")")
+		case pg_query.XmlExprOp_IS_XMLROOT:
+			output.Builder.WriteString("XMLROOT(")
+			output.writeCommaSeparatedList(n.XmlExpr.Args)
+			output.Builder.WriteString(")")
+		case pg_query.XmlExprOp_IS_XMLSERIALIZE:
+			output.Builder.WriteString("XMLSERIALIZE(")
+			if n.XmlExpr.Xmloption == pg_query.XmlOptionType_XMLOPTION_DOCUMENT {
+				output.Builder.WriteString("DOCUMENT ")
+			} else {
+				output.Builder.WriteString("CONTENT ")
+			}
+			output.writeCommaSeparatedList(n.XmlExpr.Args)
+			output.Builder.WriteString(")")
+		case pg_query.XmlExprOp_IS_DOCUMENT:
+			if len(n.XmlExpr.Args) > 0 {
+				output.writeNode(n.XmlExpr.Args[0])
+			}
+			output.Builder.WriteString(" IS DOCUMENT")
+		default:
+			warn("unsupported xml expr op: %s", n.XmlExpr.Op.String())
+		}
+
 	case nil:
 		// nothing
 
 	default:
+		// Fallback: deparse the entire statement if possible
+		if output.RawStmt != nil {
+			deparsed, err := pg_query.Deparse(&pg_query.ParseResult{
+				Stmts: []*pg_query.RawStmt{output.RawStmt},
+			})
+			if err == nil {
+				output.Builder.WriteString(deparsed)
+				return
+			}
+		}
 		warn("unexpected node: %T", n)
 	}
 }

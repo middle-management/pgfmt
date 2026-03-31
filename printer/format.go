@@ -77,7 +77,7 @@ func formatOne(sql string) (string, error) {
 
 		// Format the statement, passing inline comments to the printer
 		b := &strings.Builder{}
-		p := &Printer{Builder: b, comments: inlineComments}
+		p := &Printer{Builder: b, comments: inlineComments, RawStmt: stmt}
 		p.Print(stmt.Stmt)
 		out.WriteString(b.String())
 		out.WriteString(";\n\n")
