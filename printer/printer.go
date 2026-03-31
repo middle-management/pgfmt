@@ -1137,9 +1137,19 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if n.DropStmt.MissingOk {
 			output.Builder.WriteString("IF EXISTS ")
 		}
+		isTrigger := n.DropStmt.RemoveType == pg_query.ObjectType_OBJECT_TRIGGER
 		for i, obj := range n.DropStmt.Objects {
-			if l := obj.GetList(); l != nil {
-				output.writeListWithSeparator(l.Items, ".")
+			if tn := obj.GetTypeName(); tn != nil {
+				output.writeListWithSeparator(tn.Names, ".")
+			} else if l := obj.GetList(); l != nil {
+				if isTrigger && len(l.Items) == 2 {
+					// DROP TRIGGER: list is [table, trigger] → "trigger ON table"
+					output.writeNode(l.Items[1])
+					output.Builder.WriteString(" ON ")
+					output.writeNode(l.Items[0])
+				} else {
+					output.writeListWithSeparator(l.Items, ".")
+				}
 			} else {
 				output.writeNode(obj)
 			}
@@ -1164,25 +1174,13 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("ROLLBACK")
 		case pg_query.TransactionStmtKind_TRANS_STMT_SAVEPOINT:
 			output.Builder.WriteString("SAVEPOINT ")
-			for _, opt := range n.TransactionStmt.Options {
-				if s := opt.GetDefElem(); s != nil && s.Defname == "savepoint_name" {
-					output.Builder.WriteString(s.Arg.GetString_().GetSval())
-				}
-			}
+			output.Builder.WriteString(n.TransactionStmt.SavepointName)
 		case pg_query.TransactionStmtKind_TRANS_STMT_RELEASE:
 			output.Builder.WriteString("RELEASE SAVEPOINT ")
-			for _, opt := range n.TransactionStmt.Options {
-				if s := opt.GetDefElem(); s != nil && s.Defname == "savepoint_name" {
-					output.Builder.WriteString(s.Arg.GetString_().GetSval())
-				}
-			}
+			output.Builder.WriteString(n.TransactionStmt.SavepointName)
 		case pg_query.TransactionStmtKind_TRANS_STMT_ROLLBACK_TO:
 			output.Builder.WriteString("ROLLBACK TO SAVEPOINT ")
-			for _, opt := range n.TransactionStmt.Options {
-				if s := opt.GetDefElem(); s != nil && s.Defname == "savepoint_name" {
-					output.Builder.WriteString(s.Arg.GetString_().GetSval())
-				}
-			}
+			output.Builder.WriteString(n.TransactionStmt.SavepointName)
 		default:
 			warn("unsupported transaction kind: %s", n.TransactionStmt.Kind.String())
 		}
@@ -1399,6 +1397,454 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 	case *pg_query.Node_WindowDef:
 		output.writeWindowDef(n.WindowDef)
+
+	case *pg_query.Node_CaseExpr:
+		output.Builder.WriteString("CASE")
+		if n.CaseExpr.Arg != nil {
+			output.Builder.WriteString(" ")
+			output.writeNode(n.CaseExpr.Arg)
+		}
+		for _, w := range n.CaseExpr.Args {
+			cw := w.GetCaseWhen()
+			if cw == nil {
+				continue
+			}
+			output.Builder.WriteString(" WHEN ")
+			output.writeNode(cw.Expr)
+			output.Builder.WriteString(" THEN ")
+			output.writeNode(cw.Result)
+		}
+		if n.CaseExpr.Defresult != nil {
+			output.Builder.WriteString(" ELSE ")
+			output.writeNode(n.CaseExpr.Defresult)
+		}
+		output.Builder.WriteString(" END")
+
+	case *pg_query.Node_MinMaxExpr:
+		switch n.MinMaxExpr.Op {
+		case pg_query.MinMaxOp_IS_GREATEST:
+			output.Builder.WriteString("GREATEST(")
+		case pg_query.MinMaxOp_IS_LEAST:
+			output.Builder.WriteString("LEAST(")
+		}
+		output.writeCommaSeparatedList(n.MinMaxExpr.Args)
+		output.Builder.WriteString(")")
+
+	case *pg_query.Node_SqlvalueFunction:
+		switch n.SqlvalueFunction.Op {
+		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_DATE:
+			output.Builder.WriteString("CURRENT_DATE")
+		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_TIME:
+			output.Builder.WriteString("CURRENT_TIME")
+		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_TIME_N:
+			output.Builder.WriteString("CURRENT_TIME")
+		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_TIMESTAMP:
+			output.Builder.WriteString("CURRENT_TIMESTAMP")
+		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_TIMESTAMP_N:
+			output.Builder.WriteString("CURRENT_TIMESTAMP")
+		case pg_query.SQLValueFunctionOp_SVFOP_LOCALTIME:
+			output.Builder.WriteString("LOCALTIME")
+		case pg_query.SQLValueFunctionOp_SVFOP_LOCALTIME_N:
+			output.Builder.WriteString("LOCALTIME")
+		case pg_query.SQLValueFunctionOp_SVFOP_LOCALTIMESTAMP:
+			output.Builder.WriteString("LOCALTIMESTAMP")
+		case pg_query.SQLValueFunctionOp_SVFOP_LOCALTIMESTAMP_N:
+			output.Builder.WriteString("LOCALTIMESTAMP")
+		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_ROLE:
+			output.Builder.WriteString("CURRENT_ROLE")
+		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_USER:
+			output.Builder.WriteString("CURRENT_USER")
+		case pg_query.SQLValueFunctionOp_SVFOP_USER:
+			output.Builder.WriteString("USER")
+		case pg_query.SQLValueFunctionOp_SVFOP_SESSION_USER:
+			output.Builder.WriteString("SESSION_USER")
+		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_CATALOG:
+			output.Builder.WriteString("CURRENT_CATALOG")
+		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_SCHEMA:
+			output.Builder.WriteString("CURRENT_SCHEMA")
+		default:
+			warn("unsupported sqlvalue function: %s", n.SqlvalueFunction.Op.String())
+		}
+
+	case *pg_query.Node_GroupingFunc:
+		output.Builder.WriteString("GROUPING(")
+		output.writeCommaSeparatedList(n.GroupingFunc.Args)
+		output.Builder.WriteString(")")
+
+	case *pg_query.Node_SetToDefault:
+		output.Builder.WriteString("DEFAULT")
+
+	case *pg_query.Node_GroupingSet:
+		switch n.GroupingSet.Kind {
+		case pg_query.GroupingSetKind_GROUPING_SET_ROLLUP:
+			output.Builder.WriteString("ROLLUP(")
+			output.writeCommaSeparatedList(n.GroupingSet.Content)
+			output.Builder.WriteString(")")
+		case pg_query.GroupingSetKind_GROUPING_SET_CUBE:
+			output.Builder.WriteString("CUBE(")
+			output.writeCommaSeparatedList(n.GroupingSet.Content)
+			output.Builder.WriteString(")")
+		case pg_query.GroupingSetKind_GROUPING_SET_SETS:
+			output.Builder.WriteString("GROUPING SETS (")
+			output.writeCommaSeparatedList(n.GroupingSet.Content)
+			output.Builder.WriteString(")")
+		case pg_query.GroupingSetKind_GROUPING_SET_EMPTY:
+			output.Builder.WriteString("()")
+		default:
+			output.writeCommaSeparatedList(n.GroupingSet.Content)
+		}
+
+	case *pg_query.Node_TypeName:
+		output.writeTypeName(n.TypeName)
+
+	case *pg_query.Node_ViewStmt:
+		output.Builder.WriteString("CREATE ")
+		if n.ViewStmt.Replace {
+			output.Builder.WriteString("OR REPLACE ")
+		}
+		output.Builder.WriteString("VIEW ")
+		output.writeRangeVar(n.ViewStmt.View)
+		output.Builder.WriteString(" AS\n")
+		output.writeNode(n.ViewStmt.Query)
+
+	case *pg_query.Node_CreateTableAsStmt:
+		output.Builder.WriteString("CREATE ")
+		if n.CreateTableAsStmt.Objtype == pg_query.ObjectType_OBJECT_MATVIEW {
+			output.Builder.WriteString("MATERIALIZED VIEW ")
+		} else {
+			output.Builder.WriteString("TABLE ")
+		}
+		if n.CreateTableAsStmt.IfNotExists {
+			output.Builder.WriteString("IF NOT EXISTS ")
+		}
+		if n.CreateTableAsStmt.Into != nil {
+			output.writeRangeVar(n.CreateTableAsStmt.Into.Rel)
+		}
+		output.Builder.WriteString(" AS\n")
+		output.writeNode(n.CreateTableAsStmt.Query)
+
+	case *pg_query.Node_CreateSchemaStmt:
+		output.Builder.WriteString("CREATE SCHEMA ")
+		if n.CreateSchemaStmt.IfNotExists {
+			output.Builder.WriteString("IF NOT EXISTS ")
+		}
+		output.Builder.WriteString(n.CreateSchemaStmt.Schemaname)
+
+	case *pg_query.Node_CreateSeqStmt:
+		output.Builder.WriteString("CREATE SEQUENCE ")
+		output.writeRangeVar(n.CreateSeqStmt.Sequence)
+		for _, opt := range n.CreateSeqStmt.Options {
+			de := opt.GetDefElem()
+			if de == nil {
+				continue
+			}
+			switch de.Defname {
+			case "start":
+				output.Builder.WriteString(" START WITH ")
+				output.writeNode(de.Arg)
+			case "increment":
+				output.Builder.WriteString(" INCREMENT BY ")
+				output.writeNode(de.Arg)
+			case "minvalue":
+				if de.Arg != nil {
+					output.Builder.WriteString(" MINVALUE ")
+					output.writeNode(de.Arg)
+				} else {
+					output.Builder.WriteString(" NO MINVALUE")
+				}
+			case "maxvalue":
+				if de.Arg != nil {
+					output.Builder.WriteString(" MAXVALUE ")
+					output.writeNode(de.Arg)
+				} else {
+					output.Builder.WriteString(" NO MAXVALUE")
+				}
+			case "cache":
+				output.Builder.WriteString(" CACHE ")
+				output.writeNode(de.Arg)
+			case "cycle":
+				if de.Arg != nil && de.Arg.GetBoolean().GetBoolval() {
+					output.Builder.WriteString(" CYCLE")
+				} else {
+					output.Builder.WriteString(" NO CYCLE")
+				}
+			}
+		}
+
+	case *pg_query.Node_CreateExtensionStmt:
+		output.Builder.WriteString("CREATE EXTENSION ")
+		if n.CreateExtensionStmt.IfNotExists {
+			output.Builder.WriteString("IF NOT EXISTS ")
+		}
+		output.Builder.WriteString(n.CreateExtensionStmt.Extname)
+
+	case *pg_query.Node_GrantStmt:
+		if n.GrantStmt.IsGrant {
+			output.Builder.WriteString("GRANT ")
+		} else {
+			output.Builder.WriteString("REVOKE ")
+		}
+		if len(n.GrantStmt.Privileges) == 0 {
+			output.Builder.WriteString("ALL")
+		} else {
+			for i, p := range n.GrantStmt.Privileges {
+				ap := p.GetAccessPriv()
+				if ap != nil {
+					output.Builder.WriteString(strings.ToUpper(ap.PrivName))
+				}
+				if i != len(n.GrantStmt.Privileges)-1 {
+					output.Builder.WriteString(", ")
+				}
+			}
+		}
+		output.Builder.WriteString(" ON ")
+		for i, obj := range n.GrantStmt.Objects {
+			output.writeNode(obj)
+			if i != len(n.GrantStmt.Objects)-1 {
+				output.Builder.WriteString(", ")
+			}
+		}
+		if n.GrantStmt.IsGrant {
+			output.Builder.WriteString(" TO ")
+		} else {
+			output.Builder.WriteString(" FROM ")
+		}
+		for i, g := range n.GrantStmt.Grantees {
+			rs := g.GetRoleSpec()
+			if rs != nil {
+				output.Builder.WriteString(rs.Rolename)
+			}
+			if i != len(n.GrantStmt.Grantees)-1 {
+				output.Builder.WriteString(", ")
+			}
+		}
+
+	case *pg_query.Node_CommentStmt:
+		output.Builder.WriteString("COMMENT ON ")
+		switch n.CommentStmt.Objtype {
+		case pg_query.ObjectType_OBJECT_TABLE:
+			output.Builder.WriteString("TABLE ")
+		case pg_query.ObjectType_OBJECT_COLUMN:
+			output.Builder.WriteString("COLUMN ")
+		case pg_query.ObjectType_OBJECT_INDEX:
+			output.Builder.WriteString("INDEX ")
+		case pg_query.ObjectType_OBJECT_FUNCTION:
+			output.Builder.WriteString("FUNCTION ")
+		case pg_query.ObjectType_OBJECT_SCHEMA:
+			output.Builder.WriteString("SCHEMA ")
+		case pg_query.ObjectType_OBJECT_SEQUENCE:
+			output.Builder.WriteString("SEQUENCE ")
+		case pg_query.ObjectType_OBJECT_VIEW:
+			output.Builder.WriteString("VIEW ")
+		case pg_query.ObjectType_OBJECT_TYPE:
+			output.Builder.WriteString("TYPE ")
+		case pg_query.ObjectType_OBJECT_DOMAIN:
+			output.Builder.WriteString("DOMAIN ")
+		case pg_query.ObjectType_OBJECT_TRIGGER:
+			output.Builder.WriteString("TRIGGER ")
+		case pg_query.ObjectType_OBJECT_EXTENSION:
+			output.Builder.WriteString("EXTENSION ")
+		default:
+			warn("unsupported comment object type: %s", n.CommentStmt.Objtype.String())
+		}
+		if l := n.CommentStmt.Object.GetList(); l != nil {
+			output.writeListWithSeparator(l.Items, ".")
+		} else {
+			output.writeNode(n.CommentStmt.Object)
+		}
+		output.Builder.WriteString(" IS '")
+		output.Builder.WriteString(strings.ReplaceAll(n.CommentStmt.Comment, "'", "''"))
+		output.Builder.WriteString("'")
+
+	case *pg_query.Node_TruncateStmt:
+		output.Builder.WriteString("TRUNCATE TABLE ")
+		for i, rel := range n.TruncateStmt.Relations {
+			output.writeNode(rel)
+			if i != len(n.TruncateStmt.Relations)-1 {
+				output.Builder.WriteString(", ")
+			}
+		}
+		if n.TruncateStmt.RestartSeqs {
+			output.Builder.WriteString(" RESTART IDENTITY")
+		}
+		switch n.TruncateStmt.Behavior {
+		case pg_query.DropBehavior_DROP_CASCADE:
+			output.Builder.WriteString(" CASCADE")
+		case pg_query.DropBehavior_DROP_RESTRICT:
+			// default
+		}
+
+	case *pg_query.Node_ExplainStmt:
+		output.Builder.WriteString("EXPLAIN")
+		if len(n.ExplainStmt.Options) > 0 {
+			for _, opt := range n.ExplainStmt.Options {
+				de := opt.GetDefElem()
+				if de != nil && de.Defname == "analyze" {
+					output.Builder.WriteString(" ANALYZE")
+				} else if de != nil && de.Defname == "verbose" {
+					output.Builder.WriteString(" VERBOSE")
+				}
+			}
+		}
+		output.Builder.WriteString("\n")
+		output.writeNode(n.ExplainStmt.Query)
+
+	case *pg_query.Node_CopyStmt:
+		output.Builder.WriteString("COPY ")
+		if n.CopyStmt.Relation != nil {
+			output.writeRangeVar(n.CopyStmt.Relation)
+		}
+		if len(n.CopyStmt.Attlist) > 0 {
+			output.Builder.WriteString(" (")
+			output.writeCommaSeparatedList(n.CopyStmt.Attlist)
+			output.Builder.WriteString(")")
+		}
+		if n.CopyStmt.IsFrom {
+			output.Builder.WriteString(" FROM ")
+		} else {
+			output.Builder.WriteString(" TO ")
+		}
+		if n.CopyStmt.Filename != "" {
+			output.Builder.WriteString("'")
+			output.Builder.WriteString(n.CopyStmt.Filename)
+			output.Builder.WriteString("'")
+		} else {
+			output.Builder.WriteString("STDOUT")
+		}
+		if len(n.CopyStmt.Options) > 0 {
+			output.Builder.WriteString(" WITH (")
+			for i, opt := range n.CopyStmt.Options {
+				de := opt.GetDefElem()
+				if de == nil {
+					continue
+				}
+				output.Builder.WriteString(strings.ToUpper(de.Defname))
+				if de.Arg != nil {
+					output.Builder.WriteString(" ")
+					if s := de.Arg.GetString_(); s != nil {
+						output.Builder.WriteString(s.GetSval())
+					} else {
+						output.writeNode(de.Arg)
+					}
+				}
+				if i != len(n.CopyStmt.Options)-1 {
+					output.Builder.WriteString(", ")
+				}
+			}
+			output.Builder.WriteString(")")
+		}
+
+	case *pg_query.Node_ListenStmt:
+		output.Builder.WriteString("LISTEN ")
+		output.Builder.WriteString(n.ListenStmt.Conditionname)
+
+	case *pg_query.Node_NotifyStmt:
+		output.Builder.WriteString("NOTIFY ")
+		output.Builder.WriteString(n.NotifyStmt.Conditionname)
+		if n.NotifyStmt.Payload != "" {
+			output.Builder.WriteString(", '")
+			output.Builder.WriteString(strings.ReplaceAll(n.NotifyStmt.Payload, "'", "''"))
+			output.Builder.WriteString("'")
+		}
+
+	case *pg_query.Node_UnlistenStmt:
+		output.Builder.WriteString("UNLISTEN ")
+		output.Builder.WriteString(n.UnlistenStmt.Conditionname)
+
+	case *pg_query.Node_VariableSetStmt:
+		switch n.VariableSetStmt.Kind {
+		case pg_query.VariableSetKind_VAR_SET_VALUE:
+			output.Builder.WriteString("SET ")
+			output.Builder.WriteString(n.VariableSetStmt.Name)
+			output.Builder.WriteString(" TO ")
+			output.writeCommaSeparatedList(n.VariableSetStmt.Args)
+		case pg_query.VariableSetKind_VAR_SET_DEFAULT:
+			output.Builder.WriteString("SET ")
+			output.Builder.WriteString(n.VariableSetStmt.Name)
+			output.Builder.WriteString(" TO DEFAULT")
+		case pg_query.VariableSetKind_VAR_RESET:
+			output.Builder.WriteString("RESET ")
+			output.Builder.WriteString(n.VariableSetStmt.Name)
+		case pg_query.VariableSetKind_VAR_RESET_ALL:
+			output.Builder.WriteString("RESET ALL")
+		default:
+			warn("unsupported variable set kind: %s", n.VariableSetStmt.Kind.String())
+		}
+
+	case *pg_query.Node_VariableShowStmt:
+		output.Builder.WriteString("SHOW ")
+		output.Builder.WriteString(n.VariableShowStmt.Name)
+
+	case *pg_query.Node_PrepareStmt:
+		output.Builder.WriteString("PREPARE ")
+		output.Builder.WriteString(n.PrepareStmt.Name)
+		if len(n.PrepareStmt.Argtypes) > 0 {
+			output.Builder.WriteString(" (")
+			for i, at := range n.PrepareStmt.Argtypes {
+				if tn := at.GetTypeName(); tn != nil {
+					output.writeTypeName(tn)
+				} else {
+					output.writeNode(at)
+				}
+				if i != len(n.PrepareStmt.Argtypes)-1 {
+					output.Builder.WriteString(", ")
+				}
+			}
+			output.Builder.WriteString(")")
+		}
+		output.Builder.WriteString(" AS\n")
+		output.writeNode(n.PrepareStmt.Query)
+
+	case *pg_query.Node_ExecuteStmt:
+		output.Builder.WriteString("EXECUTE ")
+		output.Builder.WriteString(n.ExecuteStmt.Name)
+		if len(n.ExecuteStmt.Params) > 0 {
+			output.Builder.WriteString("(")
+			output.writeCommaSeparatedList(n.ExecuteStmt.Params)
+			output.Builder.WriteString(")")
+		}
+
+	case *pg_query.Node_DeallocateStmt:
+		output.Builder.WriteString("DEALLOCATE ")
+		output.Builder.WriteString(n.DeallocateStmt.Name)
+
+	case *pg_query.Node_VacuumStmt:
+		if n.VacuumStmt.IsVacuumcmd {
+			output.Builder.WriteString("VACUUM")
+		} else {
+			output.Builder.WriteString("ANALYZE")
+		}
+		// Check for ANALYZE option on VACUUM
+		if n.VacuumStmt.IsVacuumcmd {
+			hasOpts := false
+			for _, opt := range n.VacuumStmt.Options {
+				de := opt.GetDefElem()
+				if de != nil && (de.Defname == "analyze" || de.Defname == "verbose") {
+					if !hasOpts {
+						output.Builder.WriteString(" (")
+						hasOpts = true
+					} else {
+						output.Builder.WriteString(", ")
+					}
+					output.Builder.WriteString(strings.ToUpper(de.Defname))
+				}
+			}
+			if hasOpts {
+				output.Builder.WriteString(")")
+			}
+		}
+		for _, rel := range n.VacuumStmt.Rels {
+			vr := rel.GetVacuumRelation()
+			if vr != nil && vr.Relation != nil {
+				output.Builder.WriteString(" ")
+				output.writeRangeVar(vr.Relation)
+			}
+		}
+
+	case *pg_query.Node_VacuumRelation:
+		if n.VacuumRelation.Relation != nil {
+			output.writeRangeVar(n.VacuumRelation.Relation)
+		}
 
 	case nil:
 		// nothing
@@ -1675,8 +2121,16 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 
 		output.Builder.WriteString("SELECT")
 		if stmt.DistinctClause != nil {
+			// Plain DISTINCT has a single nil node; DISTINCT ON has real column refs
+			hasDistinctOn := false
+			for _, d := range stmt.DistinctClause {
+				if d.GetNode() != nil {
+					hasDistinctOn = true
+					break
+				}
+			}
 			output.Builder.WriteString(" DISTINCT")
-			if len(stmt.DistinctClause) > 0 {
+			if hasDistinctOn {
 				output.Builder.WriteString(" ON (")
 				output.writeCommaSeparatedList(stmt.DistinctClause)
 				output.Builder.WriteString(")")
@@ -1925,30 +2379,39 @@ func (output *Printer) writeOptIndirection(l []*pg_query.Node) {
 }
 
 func (output *Printer) writeSubqueryOp(l []*pg_query.Node) {
-	if len(l) == 1 && l[0].String() == "~~" {
-		output.Builder.WriteString("LIKE")
-	} else if len(l) == 1 && l[0].String() == "!~~" {
-		output.Builder.WriteString("NOT LIKE")
-	} else if len(l) == 1 && l[0].String() == "~~*" {
-		output.Builder.WriteString("ILIKE")
-	} else if len(l) == 1 && l[0].String() == "!~~*" {
-		output.Builder.WriteString("NOT ILIKE")
-	} else if len(l) == 1 && isOp(l[0].String()) {
-		output.Builder.WriteString(l[0].String())
-	} else {
-		output.Builder.WriteString("OPERATOR(")
-		output.writeAnyOperator(l)
-		output.Builder.WriteString(")")
+	if len(l) == 1 {
+		sval := l[0].GetString_().GetSval()
+		switch sval {
+		case "~~":
+			output.Builder.WriteString("LIKE")
+			return
+		case "!~~":
+			output.Builder.WriteString("NOT LIKE")
+			return
+		case "~~*":
+			output.Builder.WriteString("ILIKE")
+			return
+		case "!~~*":
+			output.Builder.WriteString("NOT ILIKE")
+			return
+		}
+		if isOp(sval) {
+			output.Builder.WriteString(sval)
+			return
+		}
 	}
+	output.Builder.WriteString("OPERATOR(")
+	output.writeAnyOperator(l)
+	output.Builder.WriteString(")")
 }
 
 func (output *Printer) writeAnyOperator(l []*pg_query.Node) {
 	if len(l) == 2 {
-		output.Builder.WriteString(quoteIdentifier(l[0].String()))
+		output.Builder.WriteString(quoteIdentifier(l[0].GetString_().GetSval()))
 		output.Builder.WriteString(".")
-		output.Builder.WriteString(l[1].String())
+		output.Builder.WriteString(l[1].GetString_().GetSval())
 	} else if len(l) == 1 {
-		output.Builder.WriteString(l[0].String())
+		output.Builder.WriteString(l[0].GetString_().GetSval())
 	} else {
 		warn("unexpected operator")
 	}

@@ -1,17 +1,17 @@
 -- SAVEPOINT
-SAVEPOINT ;
+SAVEPOINT my_savepoint;
 
 -- RELEASE SAVEPOINT
-RELEASE SAVEPOINT ;
+RELEASE SAVEPOINT my_savepoint;
 
 -- ROLLBACK TO SAVEPOINT
-ROLLBACK TO SAVEPOINT ;
+ROLLBACK TO SAVEPOINT my_savepoint;
 
 -- DROP TYPE
-DROP TYPE IF EXISTS ;
+DROP TYPE IF EXISTS mood;
 
 -- DROP TRIGGER
-DROP TRIGGER IF EXISTS users.trg_audit;
+DROP TRIGGER IF EXISTS trg_audit ON users;
 
 -- Operator subquery: > ALL
 SELECT
@@ -19,7 +19,7 @@ SELECT
 FROM
 	products
 WHERE
-	price string:{sval:">"} ALL (
+	price > ALL (
 		SELECT
 			price
 		FROM
@@ -34,7 +34,7 @@ SELECT
 FROM
 	users
 WHERE
-	id string:{sval:"="} ANY (
+	id = ANY (
 		SELECT
 			user_id
 		FROM
