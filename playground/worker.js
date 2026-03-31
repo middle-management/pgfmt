@@ -5,6 +5,10 @@ onPgfmtReady = function () {
   postMessage({ type: "ready" });
 };
 
+onPgfmtWarn = function (msg) {
+  postMessage({ type: "warn", message: msg });
+};
+
 (async function () {
   const go = new Go();
   const result = await WebAssembly.instantiateStreaming(

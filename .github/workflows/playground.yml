@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Configure Pages
         if: github.event_name == 'push'
@@ -29,10 +31,24 @@ jobs:
       - uses: actions/setup-go@v6
 
       - name: Build WASM
-        run: GOOS=js GOARCH=wasm go build -o playground/pgfmt.wasm ./playground/wasm/
+        run: |
+          VER=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          GOOS=js GOARCH=wasm go build -ldflags "-X main.version=$VER" -o playground/pgfmt.wasm ./playground/wasm/
 
       - name: Copy wasm_exec.js
         run: cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" playground/wasm_exec.js
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Playwright
+        working-directory: playground
+        run: npm ci && npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: playground
+        run: npx playwright test
 
       - name: Upload Pages artifact
         if: github.event_name == 'push'

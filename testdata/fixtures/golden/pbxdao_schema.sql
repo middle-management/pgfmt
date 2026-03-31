@@ -42,79 +42,79 @@ DROP INDEX IF EXISTS idx_pbx_call_transfer_list;
 
 CREATE TABLE p_pbx_call_profile (
 	pbx_call_profile_id uuid PRIMARY KEY,
-	desktop_call_as_msisdn pg_catalog.varchar,
-	mobile_call_as_msisdn pg_catalog.varchar,
-	mex_call_as_msisdn pg_catalog.varchar,
-	mex_call_as pg_catalog.varchar,
-	available_by_default pg_catalog.bool NOT NULL DEFAULT true,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
-	deleted_at pg_catalog.timestamptz
+	desktop_call_as_msisdn varchar,
+	mobile_call_as_msisdn varchar,
+	mex_call_as_msisdn varchar,
+	mex_call_as varchar,
+	available_by_default boolean NOT NULL DEFAULT true,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
+	deleted_at timestamptz
 );
 
 CREATE TABLE p_pbx_call_profile_mex_accept_call (
 	pbx_call_profile_id uuid NOT NULL REFERENCES p_pbx_call_profile ON DELETE CASCADE,
 	subscription_id uuid,
-	accept_calls pg_catalog.bool NOT NULL DEFAULT true,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
+	accept_calls boolean NOT NULL DEFAULT true,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	PRIMARY KEY (pbx_call_profile_id, subscription_id)
 );
 
 CREATE TABLE p_pbx_user (
 	pbx_user_id uuid PRIMARY KEY,
-	name pg_catalog.varchar,
-	msisdn pg_catalog.varchar,
-	reason pg_catalog.varchar,
-	level pg_catalog.varchar,
-	available_at pg_catalog.timestamptz,
+	name varchar,
+	msisdn varchar,
+	reason varchar,
+	level varchar,
+	available_at timestamptz,
 	organisation_id uuid NOT NULL,
 	call_profile_available_id uuid REFERENCES p_pbx_call_profile ON DELETE SET NULL,
 	call_profile_unavailable_id uuid REFERENCES p_pbx_call_profile ON DELETE SET NULL,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
-	deleted_at pg_catalog.timestamptz
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
+	deleted_at timestamptz
 );
 
 CREATE UNIQUE INDEX ON p_pbx_user USING btree (msisdn, organisation_id) WHERE deleted_at IS NULL;
 
 CREATE TABLE p_pbx_prompt (
 	pbx_prompt_id uuid PRIMARY KEY,
-	description pg_catalog.varchar,
-	extension pg_catalog.varchar,
+	description varchar,
+	extension varchar,
 	organisation_id uuid,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
-	deleted_at pg_catalog.timestamptz
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
+	deleted_at timestamptz
 );
 
 CREATE TABLE p_pbx_voicemail (
 	pbx_voicemail_id uuid PRIMARY KEY,
-	name pg_catalog.varchar,
-	pin pg_catalog.varchar,
-	extension pg_catalog.varchar,
-	msisdn pg_catalog.varchar,
+	name varchar,
+	pin varchar,
+	extension varchar,
+	msisdn varchar,
 	pbx_prompt_id uuid REFERENCES p_pbx_prompt ON DELETE SET NULL,
 	organisation_id uuid NOT NULL,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
-	deleted_at pg_catalog.timestamptz
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
+	deleted_at timestamptz
 );
 
 CREATE TABLE p_pbx_route (
 	pbx_route_id uuid PRIMARY KEY,
-	type pg_catalog.varchar NOT NULL, -- ivr, prompt, schedule, group, queue, voicemail, forwarding
-	extension pg_catalog.varchar, -- external if it starts with a + (pattern: /^\+?[0-9]+$/)
-	name pg_catalog.varchar,
-	suffix pg_catalog.varchar,
-	call_display pg_catalog.varchar, -- "next" is added below in an ALTER TABLE because circular references
+	type varchar NOT NULL, -- ivr, prompt, schedule, group, queue, voicemail, forwarding
+	extension varchar, -- external if it starts with a + (pattern: /^\+?[0-9]+$/)
+	name varchar,
+	suffix varchar,
+	call_display varchar, -- "next" is added below in an ALTER TABLE because circular references
 	pbx_user_id uuid REFERENCES p_pbx_user ON DELETE SET NULL,
 	pbx_prompt_id uuid REFERENCES p_pbx_prompt ON DELETE SET NULL,
 	pbx_voicemail_id uuid REFERENCES p_pbx_voicemail ON DELETE SET NULL,
 	organisation_id uuid,
 	subscription_id uuid,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL
 );
 
 CREATE INDEX ON p_pbx_route USING btree (organisation_id);
@@ -127,18 +127,18 @@ ALTER TABLE p_pbx_route
 CREATE TABLE p_pbx_call_profile_route_accept_call (
 	pbx_call_profile_id uuid NOT NULL REFERENCES p_pbx_call_profile ON DELETE CASCADE,
 	pbx_route_id uuid NOT NULL REFERENCES p_pbx_route ON DELETE CASCADE,
-	accept_calls pg_catalog.bool NOT NULL,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
+	accept_calls boolean NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	PRIMARY KEY (pbx_call_profile_id, pbx_route_id)
 );
 
 CREATE TABLE p_pbx_route_schedule (
 	pbx_schedule_id uuid PRIMARY KEY,
 	pbx_route_id uuid NOT NULL REFERENCES p_pbx_route ON DELETE CASCADE,
-	name pg_catalog.varchar,
-	type pg_catalog.varchar NOT NULL, -- weekly, daily, monthly, yearly, other
-	index pg_catalog.int4 NOT NULL, -- sequential number per route (0 = "default", highest is "first")
+	name varchar,
+	type varchar NOT NULL, -- weekly, daily, monthly, yearly, other
+	index int NOT NULL, -- sequential number per route (0 = "default", highest is "first")
 	recurrence_mon bool,
 	recurrence_tue bool,
 	recurrence_wed bool,
@@ -147,29 +147,29 @@ CREATE TABLE p_pbx_route_schedule (
 	recurrence_sat bool,
 	recurrence_sun bool,
 	next uuid REFERENCES p_pbx_route (pbx_route_id) ON DELETE SET NULL,
-	start_time pg_catalog.timetz,
+	start_time timetz,
 	start_date date,
-	end_time pg_catalog.timetz,
+	end_time timetz,
 	end_date date,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL
 );
 
 CREATE INDEX ON p_pbx_route_schedule USING btree (pbx_route_id);
 
 CREATE TABLE p_pbx_route_queue (
 	pbx_route_id uuid PRIMARY KEY REFERENCES p_pbx_route ON DELETE CASCADE,
-	max_waiting_callers pg_catalog.int4 NOT NULL,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL
+	max_waiting_callers int NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL
 );
 
 CREATE TABLE p_pbx_route_menu (
 	pbx_route_id uuid NOT NULL REFERENCES p_pbx_route ON DELETE CASCADE,
-	type pg_catalog.varchar NOT NULL, -- 1,2,3,4,5,6,7,8,9,0,#,*
+	type varchar NOT NULL, -- 1,2,3,4,5,6,7,8,9,0,#,*
 	next uuid REFERENCES p_pbx_route (pbx_route_id) ON DELETE SET NULL,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	PRIMARY KEY (pbx_route_id, type)
 );
 
@@ -178,9 +178,9 @@ CREATE INDEX ON p_pbx_route_menu USING btree (pbx_route_id);
 CREATE TABLE p_pbx_route_user (
 	pbx_user_id uuid NOT NULL REFERENCES p_pbx_user ON DELETE CASCADE,
 	pbx_route_id uuid NOT NULL REFERENCES p_pbx_route ON DELETE CASCADE,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
-	connected pg_catalog.bool NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
+	connected boolean NOT NULL,
 	PRIMARY KEY (pbx_user_id, pbx_route_id)
 );
 
@@ -189,74 +189,74 @@ CREATE INDEX ON p_pbx_route_user USING btree (pbx_route_id);
 CREATE TABLE p_pbx_voicemail_user (
 	pbx_voicemail_id uuid NOT NULL REFERENCES p_pbx_voicemail ON DELETE CASCADE,
 	pbx_user_id uuid NOT NULL REFERENCES p_pbx_user ON DELETE CASCADE,
-	notify_sms pg_catalog.bool NOT NULL DEFAULT false,
-	notify_email pg_catalog.bool NOT NULL DEFAULT false,
-	email pg_catalog.varchar,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
+	notify_sms boolean NOT NULL DEFAULT false,
+	notify_email boolean NOT NULL DEFAULT false,
+	email varchar,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	PRIMARY KEY (pbx_user_id, pbx_voicemail_id)
 );
 
 CREATE TABLE p_pbx_prompt_recording (
 	pbx_prompt_recording_id uuid PRIMARY KEY,
 	pbx_prompt_id uuid NOT NULL REFERENCES p_pbx_prompt ON DELETE CASCADE,
-	url pg_catalog.varchar NOT NULL,
-	content_type pg_catalog.varchar,
-	language pg_catalog.varchar,
-	duration pg_catalog.int8,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL
+	url varchar NOT NULL,
+	content_type varchar,
+	language varchar,
+	duration bigint,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL
 );
 
 CREATE TABLE p_pbx_prompt_recording_alternative (
 	pbx_prompt_recording_id uuid REFERENCES p_pbx_prompt_recording ON DELETE CASCADE,
-	url pg_catalog.varchar NOT NULL,
-	content_type pg_catalog.varchar NOT NULL,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
+	url varchar NOT NULL,
+	content_type varchar NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	PRIMARY KEY (pbx_prompt_recording_id, content_type)
 );
 
 CREATE TABLE p_pbx_prompt_callback (
 	pbx_prompt_callback_id uuid PRIMARY KEY,
 	pbx_prompt_id uuid NOT NULL REFERENCES p_pbx_prompt ON DELETE CASCADE,
-	status pg_catalog.varchar NOT NULL,
-	language pg_catalog.varchar NOT NULL,
-	msisdn pg_catalog.varchar NOT NULL,
-	recording_id pg_catalog.varchar,
-	service_id pg_catalog.varchar,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL
+	status varchar NOT NULL,
+	language varchar NOT NULL,
+	msisdn varchar NOT NULL,
+	recording_id varchar,
+	service_id varchar,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL
 );
 
 CREATE TABLE p_pbx_voicemail_recording (
 	pbx_voicemail_recording_id uuid PRIMARY KEY,
 	pbx_voicemail_id uuid NOT NULL REFERENCES p_pbx_voicemail ON DELETE CASCADE,
-	url pg_catalog.varchar NOT NULL, -- to .wav on s3
-	content_type pg_catalog.varchar,
-	msisdn pg_catalog.varchar, -- called phone number
-	duration pg_catalog.int8,
-	label pg_catalog.varchar,
-	recorded_at pg_catalog.timestamptz NOT NULL,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL
+	url varchar NOT NULL, -- to .wav on s3
+	content_type varchar,
+	msisdn varchar, -- called phone number
+	duration bigint,
+	label varchar,
+	recorded_at timestamptz NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL
 );
 
 CREATE TABLE p_pbx_voicemail_recording_alternative (
 	pbx_voicemail_recording_id uuid REFERENCES p_pbx_voicemail_recording ON DELETE CASCADE,
-	url pg_catalog.varchar NOT NULL,
-	content_type pg_catalog.varchar NOT NULL,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
+	url varchar NOT NULL,
+	content_type varchar NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	PRIMARY KEY (pbx_voicemail_recording_id, content_type)
 );
 
 CREATE TABLE p_pbx_voicemail_user_recording_status (
 	pbx_voicemail_recording_id uuid NOT NULL REFERENCES p_pbx_voicemail_recording ON DELETE CASCADE,
 	pbx_user_id uuid NOT NULL REFERENCES p_pbx_user ON DELETE CASCADE,
-	read pg_catalog.bool NOT NULL,
-	created_at pg_catalog.timestamptz NOT NULL,
-	updated_at pg_catalog.timestamptz NOT NULL,
+	read boolean NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	PRIMARY KEY (pbx_voicemail_recording_id, pbx_user_id)
 );
 
@@ -274,10 +274,10 @@ CREATE UNIQUE INDEX ON p_pbx_customer USING btree (organisation_id);
 CREATE OR REPLACE FUNCTION pbx_route_select(route_id uuid[])
 RETURNS TABLE (
 	pbx_route_id uuid,
-	type pg_catalog.varchar,
-	name pg_catalog.varchar,
+	type varchar,
+	name varchar,
 	next uuid,
-	extension pg_catalog.varchar,
+	extension varchar,
 	pbx_user_id uuid,
 	pbx_prompt_id uuid,
 	pbx_voicemail_id uuid,
@@ -287,8 +287,8 @@ RETURNS TABLE (
 	menu pg_catalog.json,
 	schedule pg_catalog.json,
 	queue pg_catalog.json,
-	suffix pg_catalog.varchar,
-	call_display pg_catalog.varchar,
+	suffix varchar,
+	call_display varchar,
 	subscription_id uuid,
 	organisation_id uuid,
 	created_at timestamptz,
@@ -337,11 +337,11 @@ AS $$
 		r.pbx_route_id
 $$;
 
-CREATE OR REPLACE FUNCTION pbx_prompt_select(prompt_ids uuid[], contenttype pg_catalog.varchar)
+CREATE OR REPLACE FUNCTION pbx_prompt_select(prompt_ids uuid[], contenttype varchar)
 RETURNS TABLE (
 	pbx_prompt_id uuid,
-	description pg_catalog.varchar,
-	extension pg_catalog.varchar,
+	description varchar,
+	extension varchar,
 	recording jsonb,
 	modifiable bool,
 	organisation_id uuid,
@@ -391,14 +391,14 @@ $$;
 
 CREATE OR REPLACE FUNCTION pbx_voicemail_recording_select(
 	voicemail_recording_ids uuid[],
-	contenttype pg_catalog.varchar
+	contenttype varchar
 )
 RETURNS TABLE (
 	pbx_voicemail_recording_id uuid,
-	url pg_catalog.varchar,
-	content_type pg_catalog.varchar,
-	msisdn pg_catalog.varchar,
-	duration pg_catalog.int8,
+	url varchar,
+	content_type varchar,
+	msisdn varchar,
+	duration bigint,
 	read bool,
 	pbx_voicemail_id uuid,
 	recorded_at timestamptz,
@@ -433,15 +433,15 @@ $$;
 
 CREATE OR REPLACE FUNCTION pbx_voicemail_recording_with_read_select(
 	voicemail_recording_ids uuid[],
-	contenttype pg_catalog.varchar,
-	usermsisdn pg_catalog.varchar
+	contenttype varchar,
+	usermsisdn varchar
 )
 RETURNS TABLE (
 	pbx_voicemail_recording_id uuid,
-	url pg_catalog.varchar,
-	content_type pg_catalog.varchar,
-	msisdn pg_catalog.varchar,
-	duration pg_catalog.int8,
+	url varchar,
+	content_type varchar,
+	msisdn varchar,
+	duration bigint,
 	read bool,
 	pbx_voicemail_id uuid,
 	recorded_at timestamptz,
@@ -481,9 +481,9 @@ $$;
 CREATE OR REPLACE FUNCTION pbx_voicemail_select(voicemail_ids uuid[])
 RETURNS TABLE (
 	pbx_voicemail_id uuid,
-	name pg_catalog.varchar,
-	pin pg_catalog.varchar,
-	msisdn pg_catalog.varchar,
+	name varchar,
+	pin varchar,
+	msisdn varchar,
 	pbx_prompt_id uuid,
 	organisation_id uuid,
 	users jsonb,
@@ -520,10 +520,10 @@ CREATE OR REPLACE FUNCTION pbx_callprofile_select(call_profile_ids uuid[]) -- ol
 RETURNS TABLE (
 	pbx_call_profile_id uuid,
 	pbx_user_id uuid,
-	desktop_call_as_msisdn pg_catalog.varchar,
-	mobile_call_as_msisdn pg_catalog.varchar,
-	mex_call_as_msisdn pg_catalog.varchar,
-	mex_call_as pg_catalog.varchar,
+	desktop_call_as_msisdn varchar,
+	mobile_call_as_msisdn varchar,
+	mex_call_as_msisdn varchar,
+	mex_call_as varchar,
 	available_by_default bool,
 	mex_accept_call pg_catalog.json,
 	route_accept_call pg_catalog.json,

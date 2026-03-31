@@ -4,7 +4,6 @@ package printer
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -309,7 +308,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.SubLinkType_CTE_SUBLINK:
 			output.Builder.WriteString("/* UNSUPPORTED: CTE sublink */")
 		default:
-			fmt.Fprintf(os.Stderr, "unsupported sublink type: %s\n", n.SubLink.SubLinkType.String())
+			warn("unsupported sublink type: %s", n.SubLink.SubLinkType.String())
 		}
 	case *pg_query.Node_NullTest:
 		output.writeNode(n.NullTest.Arg)
@@ -591,7 +590,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.Builder.WriteString(")")
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "invalid index elem\n")
+			warn("invalid index elem")
 		}
 
 		if len(n.IndexElem.Collation) > 0 {
@@ -612,7 +611,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.SortByDir_SORTBY_DESC:
 			output.Builder.WriteString(" DESC")
 		case pg_query.SortByDir_SORTBY_USING:
-			fmt.Fprintf(os.Stderr, "SORTBY_USING not allowed in CREATE INDEX\n")
+			warn("SORTBY_USING not allowed in CREATE INDEX")
 		case pg_query.SortByDir_SORTBY_DEFAULT:
 		}
 		switch n.IndexElem.NullsOrdering {
@@ -966,6 +965,19 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.ConstrType_CONSTR_DEFAULT:
 			output.Builder.WriteString("DEFAULT ")
 			output.writeNode(n.Constraint.RawExpr)
+		case pg_query.ConstrType_CONSTR_IDENTITY:
+			output.Builder.WriteString("GENERATED ")
+			switch n.Constraint.GeneratedWhen {
+			case "d":
+				output.Builder.WriteString("BY DEFAULT ")
+			default:
+				output.Builder.WriteString("ALWAYS ")
+			}
+			output.Builder.WriteString("AS IDENTITY")
+		case pg_query.ConstrType_CONSTR_GENERATED:
+			output.Builder.WriteString("GENERATED ALWAYS AS (")
+			output.writeNode(n.Constraint.RawExpr)
+			output.Builder.WriteString(") STORED")
 		case pg_query.ConstrType_CONSTR_CHECK:
 			output.Builder.WriteString("CHECK (")
 			output.writeNode(n.Constraint.RawExpr)
@@ -1016,7 +1028,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeFkAction("ON DELETE", n.Constraint.FkDelAction, n.Constraint.FkDelSetCols)
 			output.writeFkAction("ON UPDATE", n.Constraint.FkUpdAction, nil)
 		default:
-			fmt.Fprintf(os.Stderr, "unsupported constraint type: %s\n", n.Constraint.Contype.String())
+			warn("unsupported constraint type: %s", n.Constraint.Contype.String())
 		}
 
 	case *pg_query.Node_AlterTableStmt:
@@ -1089,7 +1101,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("OWNER TO ")
 			output.writeNode(n.AlterTableCmd.Def)
 		default:
-			fmt.Fprintf(os.Stderr, "unsupported alter table cmd: %s\n", n.AlterTableCmd.Subtype.String())
+			warn("unsupported alter table cmd: %s", n.AlterTableCmd.Subtype.String())
 		}
 
 	case *pg_query.Node_DropStmt:
@@ -1120,7 +1132,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.ObjectType_OBJECT_DOMAIN:
 			output.Builder.WriteString("DOMAIN ")
 		default:
-			fmt.Fprintf(os.Stderr, "unsupported drop type: %s\n", n.DropStmt.RemoveType.String())
+			warn("unsupported drop type: %s", n.DropStmt.RemoveType.String())
 		}
 		if n.DropStmt.MissingOk {
 			output.Builder.WriteString("IF EXISTS ")
@@ -1172,7 +1184,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				}
 			}
 		default:
-			fmt.Fprintf(os.Stderr, "unsupported transaction kind: %s\n", n.TransactionStmt.Kind.String())
+			warn("unsupported transaction kind: %s", n.TransactionStmt.Kind.String())
 		}
 
 	case *pg_query.Node_DefElem:
@@ -1392,7 +1404,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		// nothing
 
 	default:
-		fmt.Fprintf(os.Stderr, "unexpected node: %T\n", n)
+		warn("unexpected node: %T", n)
 	}
 }
 
@@ -1491,8 +1503,8 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 	if stmt.Setof {
 		output.Builder.WriteString("SETOF ")
 	}
-	if len(stmt.Names) == 2 && stmt.Names[0].String() == "pg_catalog" {
-		switch stmt.Names[1].String() {
+	if len(stmt.Names) == 2 && stmt.Names[0].GetString_().GetSval() == "pg_catalog" {
+		switch stmt.Names[1].GetString_().GetSval() {
 		case "bpchar":
 			output.Builder.WriteString("char")
 		case "bool":
@@ -1508,15 +1520,14 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 		case "float8":
 			output.Builder.WriteString("double precision")
 		case "varchar", "numeric", "real", "time", "timestamp":
-			output.Builder.WriteString(stmt.Names[1].String())
+			output.Builder.WriteString(stmt.Names[1].GetString_().GetSval())
 		case "timetz", "timestamptz":
-			output.Builder.WriteString(stmt.Names[1].String())
+			output.Builder.WriteString(stmt.Names[1].GetString_().GetSval())
 			if len(stmt.Typmods) > 0 {
 				output.Builder.WriteString("(")
 				output.writeCommaSeparatedList(stmt.Typmods)
 				output.Builder.WriteString(")")
 			}
-			output.Builder.WriteString("with time zone")
 			skipTypmods = true
 		case "interval":
 			if len(stmt.Typmods) == 0 {
@@ -1552,7 +1563,7 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 					output.Builder.WriteString(" minute to second")
 				case 0x7FFF: // INTERVAL_FULL_RANGE
 				default:
-					fmt.Fprintf(os.Stderr, "invalid interval fields: %d\n", fields)
+					warn("invalid interval fields: %d", fields)
 				}
 
 				if len(stmt.Typmods) == 2 {
@@ -1564,7 +1575,7 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 			}
 		default:
 			output.Builder.WriteString("pg_catalog.")
-			output.Builder.WriteString(stmt.Names[1].String())
+			output.Builder.WriteString(stmt.Names[1].GetString_().GetSval())
 
 		}
 	} else {
@@ -1745,7 +1756,7 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 		case pg_query.SetOperation_SETOP_EXCEPT:
 			output.Builder.WriteString(" EXCEPT ")
 		default:
-			fmt.Fprintf(os.Stderr, "unexpected set operation\n")
+			warn("unexpected set operation")
 		}
 
 		if stmt.All {
@@ -1907,7 +1918,7 @@ func (output *Printer) writeOptIndirection(l []*pg_query.Node) {
 			}
 			output.Builder.WriteString("]")
 		} else {
-			fmt.Fprintf(os.Stderr, "invalid indirection type\n")
+			warn("invalid indirection type")
 		}
 		output.writeNode(dn)
 	}
@@ -1939,7 +1950,7 @@ func (output *Printer) writeAnyOperator(l []*pg_query.Node) {
 	} else if len(l) == 1 {
 		output.Builder.WriteString(l[0].String())
 	} else {
-		fmt.Fprintf(os.Stderr, "unexpected operator\n")
+		warn("unexpected operator")
 	}
 }
 
