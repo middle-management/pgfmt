@@ -20,9 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - uses: actions/setup-go@v6
 
       - name: Build WASM
         run: GOOS=js GOARCH=wasm go build -o playground/pgfmt.wasm ./playground/wasm/
