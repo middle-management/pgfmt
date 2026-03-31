@@ -222,15 +222,20 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
     }
   }
 
-  function doFormat() {
-    if (!ready) return;
+  let formatting = false;
+
+  async function doFormat() {
+    if (!ready || formatting) return;
     const sql = input.value.trim();
     if (!sql) {
       output.textContent = '';
       return;
     }
+    formatting = true;
+    formatBtn.disabled = true;
+    formatBtn.textContent = 'Formatting...';
     try {
-      const res = pgfmtFormat(sql);
+      const res = await pgfmtFormat(sql);
       if (res.error) {
         output.innerHTML = '<span class="error-text">' + escapeHtml(res.error) + '</span>';
       } else {
@@ -238,6 +243,10 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
       }
     } catch (err) {
       output.innerHTML = '<span class="error-text">' + escapeHtml(err.toString()) + '</span>';
+    } finally {
+      formatting = false;
+      formatBtn.disabled = false;
+      formatBtn.textContent = 'Format';
     }
   }
 
@@ -255,8 +264,7 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
 
   exampleBtn.addEventListener('click', function() {
     input.value = exampleSQL;
-    // Defer formatting so the browser can paint the textarea update first.
-    setTimeout(doFormat, 0);
+    doFormat();
   });
 
   input.addEventListener('keydown', function(e) {
