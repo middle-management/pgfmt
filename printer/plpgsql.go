@@ -5,10 +5,128 @@ import (
 	"strings"
 )
 
+// plComment represents a comment extracted from a PL/pgSQL body.
+type plComment struct {
+	text   string
+	lineNo int // line number in the wrapped CREATE FUNCTION statement
+}
+
+// extractPLComments scans a PL/pgSQL body string for comments, returning
+// them with line numbers relative to the wrapped statement (prefix is line 1).
+func extractPLComments(body string) []plComment {
+	var comments []plComment
+	lineNo := 1 // prefix "CREATE FUNCTION ... AS $$" is line 1
+	i := 0
+	for i < len(body) {
+		ch := body[i]
+		switch {
+		case ch == '\n':
+			lineNo++
+			i++
+		case ch == '-' && i+1 < len(body) && body[i+1] == '-':
+			start := i
+			cLine := lineNo
+			i += 2
+			for i < len(body) && body[i] != '\n' {
+				i++
+			}
+			text := strings.TrimRight(body[start:i], " \t")
+			comments = append(comments, plComment{text: text, lineNo: cLine})
+		case ch == '/' && i+1 < len(body) && body[i+1] == '*':
+			start := i
+			cLine := lineNo
+			i += 2
+			for i+1 < len(body) {
+				if body[i] == '*' && body[i+1] == '/' {
+					i += 2
+					break
+				}
+				if body[i] == '\n' {
+					lineNo++
+				}
+				i++
+			}
+			comments = append(comments, plComment{text: body[start:i], lineNo: cLine})
+		case ch == '\'':
+			// Skip single-quoted string literals.
+			i++
+			for i < len(body) {
+				if body[i] == '\'' {
+					i++
+					if i < len(body) && body[i] == '\'' {
+						i++ // escaped ''
+						continue
+					}
+					break
+				}
+				if body[i] == '\n' {
+					lineNo++
+				}
+				i++
+			}
+		case ch == '$':
+			// Skip dollar-quoted strings ($tag$...$tag$).
+			j := i + 1
+			for j < len(body) && (body[j] == '_' ||
+				(body[j] >= 'a' && body[j] <= 'z') ||
+				(body[j] >= 'A' && body[j] <= 'Z') ||
+				(body[j] >= '0' && body[j] <= '9')) {
+				j++
+			}
+			if j < len(body) && body[j] == '$' {
+				tag := body[i : j+1]
+				i = j + 1
+				for i < len(body) {
+					if body[i] == '$' && strings.HasPrefix(body[i:], tag) {
+						i += len(tag)
+						break
+					}
+					if body[i] == '\n' {
+						lineNo++
+					}
+					i++
+				}
+			} else {
+				i++
+			}
+		default:
+			i++
+		}
+	}
+	return comments
+}
+
 // plContext holds state during PL/pgSQL body formatting.
 type plContext struct {
-	printer *Printer
-	datums  []plDatum
+	printer    *Printer
+	datums     []plDatum
+	comments   []plComment
+	commentIdx int
+}
+
+// emitCommentsBeforeLine writes all pending comments with lineNo < line.
+func (ctx *plContext) emitCommentsBeforeLine(line int, ind int) {
+	for ctx.commentIdx < len(ctx.comments) && ctx.comments[ctx.commentIdx].lineNo < line {
+		ctx.newlineIndent(ind)
+		ctx.w(ctx.comments[ctx.commentIdx].text)
+		ctx.commentIdx++
+	}
+}
+
+// flushComments emits all remaining comments.
+func (ctx *plContext) flushComments(ind int) {
+	ctx.emitCommentsBeforeLine(1<<31-1, ind)
+}
+
+// skipSQLComments advances the comment index past comments that fall within
+// the line range of a SQL expression starting at startLine. This prevents
+// comments inside SQL expressions (already handled by formatSQL) from being
+// emitted again by the PL/pgSQL comment handler.
+func (ctx *plContext) skipSQLComments(startLine int, query string) {
+	endLine := startLine + strings.Count(query, "\n")
+	for ctx.commentIdx < len(ctx.comments) && ctx.comments[ctx.commentIdx].lineNo <= endLine {
+		ctx.commentIdx++
+	}
 }
 
 func (ctx *plContext) w(s string) {
@@ -28,14 +146,53 @@ func (ctx *plContext) newlineIndent(level int) {
 
 // formatSQL formats a SQL query string using the main SQL formatter.
 // Returns the original string unchanged if parsing fails.
+// Preserves inline comments when possible.
 func formatSQL(query string) string {
 	result, err := pgParse(query)
 	if err != nil || len(result.Stmts) == 0 {
 		return query
 	}
+
+	scanResult, scanErr := pgScan(query)
+	if scanErr != nil {
+		b := &strings.Builder{}
+		p := &Printer{Builder: b}
+		p.Print(result.Stmts[0].Stmt)
+		return b.String()
+	}
+
+	allComments := extractComments(query, scanResult)
+	stmt := result.Stmts[0]
+	stmtEnd := stmtEndPos(stmt, int32(len(query)))
+	realStart := firstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
+
 	b := &strings.Builder{}
-	p := &Printer{Builder: b}
-	p.Print(result.Stmts[0].Stmt)
+	ci := 0
+
+	// Emit leading comments (before the first real token).
+	for ci < len(allComments) && allComments[ci].start < realStart {
+		b.WriteString(allComments[ci].text)
+		b.WriteString("\n")
+		ci++
+	}
+
+	// Collect inline comments (within the statement body).
+	var inlineComments []comment
+	for ci < len(allComments) && allComments[ci].start < stmtEnd {
+		inlineComments = append(inlineComments, allComments[ci])
+		ci++
+	}
+
+	p := &Printer{Builder: b, comments: inlineComments}
+	p.Print(stmt.Stmt)
+
+	// Emit trailing comments (after the statement).
+	for ci < len(allComments) {
+		b.WriteString("\n")
+		b.WriteString(allComments[ci].text)
+		ci++
+	}
+
 	return b.String()
 }
 
@@ -44,14 +201,21 @@ func compactSQL(formatted string) string {
 	return strings.Join(strings.Fields(formatted), " ")
 }
 
+// hasLineComment reports whether s contains a SQL line comment (--).
+func hasLineComment(s string) bool {
+	return strings.Contains(s, "--")
+}
+
 // writeSQL formats a SQL query and writes it. Uses compact single-line form
 // if it fits within ~100 characters at the current indent level.
 func (ctx *plContext) writeSQL(query string, ind int) {
 	formatted := formatSQL(query)
-	compact := compactSQL(formatted)
-	if len(compact) <= 100-ind*4 {
-		ctx.w(compact)
-		return
+	if !hasLineComment(formatted) {
+		compact := compactSQL(formatted)
+		if len(compact) <= 100-ind*4 {
+			ctx.w(compact)
+			return
+		}
 	}
 	ctx.writeIndented(formatted, ind)
 }
@@ -109,8 +273,9 @@ func (output *Printer) formatPLpgSQLBody(body string, indentLevel int) {
 
 	fn := &parsed[0].F
 	ctx := &plContext{
-		printer: output,
-		datums:  fn.Datums,
+		printer:  output,
+		datums:   fn.Datums,
+		comments: extractPLComments(body),
 	}
 
 	ctx.writeDeclare(indentLevel)
@@ -119,20 +284,24 @@ func (output *Printer) formatPLpgSQLBody(body string, indentLevel int) {
 
 // writeDeclare emits the DECLARE section for user-declared variables.
 func (ctx *plContext) writeDeclare(ind int) {
-	var decls []string
+	type declInfo struct {
+		text   string
+		lineNo int
+	}
+	var decls []declInfo
 	for i := range ctx.datums {
 		d := &ctx.datums[i]
 		switch {
 		case d.Var != nil:
 			if decl := varDecl(d.Var); decl != "" {
-				decls = append(decls, decl)
+				decls = append(decls, declInfo{text: decl, lineNo: d.Var.LineNo})
 			}
 		case d.Rec != nil:
 			name := d.Rec.RefName
 			if name == "" || strings.HasPrefix(name, "(") || d.Rec.LineNo == 0 {
 				continue
 			}
-			decls = append(decls, name+" record")
+			decls = append(decls, declInfo{text: name + " record", lineNo: d.Rec.LineNo})
 		}
 	}
 
@@ -140,8 +309,9 @@ func (ctx *plContext) writeDeclare(ind int) {
 		ctx.newlineIndent(ind)
 		ctx.w("DECLARE")
 		for _, d := range decls {
+			ctx.emitCommentsBeforeLine(d.lineNo, ind+1)
 			ctx.newlineIndent(ind + 1)
-			ctx.w(d + ";")
+			ctx.w(d.text + ";")
 		}
 	}
 }
@@ -212,6 +382,11 @@ func (ctx *plContext) writeBlock(block *plStmtBlock, ind int, topLevel bool) {
 		}
 	}
 
+	// Emit comments between DECLARE and BEGIN.
+	if block.LineNo > 0 {
+		ctx.emitCommentsBeforeLine(block.LineNo, ind)
+	}
+
 	ctx.newlineIndent(ind)
 	if block.Label != "" {
 		ctx.w("<<" + block.Label + ">>\n")
@@ -220,6 +395,11 @@ func (ctx *plContext) writeBlock(block *plStmtBlock, ind int, topLevel bool) {
 
 	ctx.w("BEGIN")
 	ctx.writeStmts(body, ind+1)
+
+	// Flush trailing comments inside the block body (before END/EXCEPTION).
+	if topLevel {
+		ctx.flushComments(ind + 1)
+	}
 
 	if exceptions != nil {
 		ctx.newlineIndent(ind)
@@ -246,6 +426,9 @@ func (ctx *plContext) writeBlock(block *plStmtBlock, ind int, topLevel bool) {
 // writeStmts emits a list of PL/pgSQL statements.
 func (ctx *plContext) writeStmts(stmts []plStmt, ind int) {
 	for i := range stmts {
+		if ln := stmts[i].lineNo(); ln > 0 {
+			ctx.emitCommentsBeforeLine(ln, ind)
+		}
 		ctx.writeStmt(&stmts[i], ind)
 	}
 }
@@ -273,6 +456,7 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 		ctx.newlineIndent(ind)
 		ctx.w("FOR " + s.ForS.Var.name() + " IN ")
 		ctx.writeSQL(s.ForS.Query.E.Query, ind)
+		ctx.skipSQLComments(s.ForS.LineNo, s.ForS.Query.E.Query)
 		ctx.w(" LOOP")
 		ctx.writeStmts(s.ForS.Body, ind+1)
 		ctx.newlineIndent(ind)
@@ -287,6 +471,10 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 	case s.Exit != nil:
 		ctx.writeExit(s.Exit, ind)
 	case s.Return != nil:
+		// Skip implicit parser-generated bare RETURN at end of void functions.
+		if s.Return.Expr == nil && s.Return.LineNo == 0 {
+			return
+		}
 		ctx.newlineIndent(ind)
 		if s.Return.Expr != nil {
 			ctx.w("RETURN " + s.Return.Expr.E.Query + ";")
@@ -304,13 +492,16 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 		ctx.newlineIndent(ind)
 		ctx.w("RETURN QUERY ")
 		ctx.writeSQL(s.ReturnQuery.Query.query(), ind)
+		ctx.skipSQLComments(s.ReturnQuery.LineNo, s.ReturnQuery.Query.query())
 		ctx.w(";")
 	case s.Raise != nil:
 		ctx.writeRaise(s.Raise, ind)
 	case s.ExecSQL != nil:
 		ctx.writeExecSQL(s.ExecSQL, ind)
+		ctx.skipSQLComments(s.ExecSQL.LineNo, s.ExecSQL.SQLStmt.E.Query)
 	case s.Perform != nil:
 		ctx.writePerform(s.Perform, ind)
+		ctx.skipSQLComments(s.Perform.LineNo, s.Perform.Expr.E.Query)
 	case s.DynExecute != nil:
 		ctx.writeDynExecute(s.DynExecute, ind)
 	case s.Block != nil:
@@ -469,17 +660,21 @@ func (ctx *plContext) writeExecSQL(node *plStmtExecSQL, ind int) {
 
 	ctx.newlineIndent(ind)
 	if node.Into {
-		compact := insertInto(compactSQL(formatted), " ")
-		if len(compact) <= 100-ind*4 {
-			ctx.w(compact + ";")
-			return
+		if !hasLineComment(formatted) {
+			compact := insertInto(compactSQL(formatted), " ")
+			if len(compact) <= 100-ind*4 {
+				ctx.w(compact + ";")
+				return
+			}
 		}
 		formatted = insertInto(formatted, "\n")
 	} else {
-		compact := compactSQL(formatted)
-		if len(compact) <= 100-ind*4 {
-			ctx.w(compact + ";")
-			return
+		if !hasLineComment(formatted) {
+			compact := compactSQL(formatted)
+			if len(compact) <= 100-ind*4 {
+				ctx.w(compact + ";")
+				return
+			}
 		}
 	}
 
@@ -499,13 +694,16 @@ func (ctx *plContext) writePerform(node *plStmtPerform, ind int) {
 		return "PERFORM " + s
 	}
 
-	compact := swapSelectToPerform(compactSQL(formatted))
 	ctx.newlineIndent(ind)
-	if len(compact) <= 100-ind*4 {
-		ctx.w(compact)
-	} else {
-		ctx.writeIndented(swapSelectToPerform(formatted), ind)
+	if !hasLineComment(formatted) {
+		compact := swapSelectToPerform(compactSQL(formatted))
+		if len(compact) <= 100-ind*4 {
+			ctx.w(compact)
+			ctx.w(";")
+			return
+		}
 	}
+	ctx.writeIndented(swapSelectToPerform(formatted), ind)
 	ctx.w(";")
 }
 

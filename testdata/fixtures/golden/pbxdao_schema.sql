@@ -328,9 +328,9 @@ AS $$
 		r.updated_at
 	FROM
 		p_pbx_route AS r
-	LEFT JOIN p_pbx_route_user AS u USING (pbx_route_id)
-	LEFT JOIN p_pbx_route_menu AS m USING (pbx_route_id)
-	LEFT JOIN p_pbx_route_schedule AS i USING (pbx_route_id)
+		LEFT JOIN p_pbx_route_user AS u USING (pbx_route_id)
+		LEFT JOIN p_pbx_route_menu AS m USING (pbx_route_id)
+		LEFT JOIN p_pbx_route_schedule AS i USING (pbx_route_id)
 	WHERE
 		r.pbx_route_id = ANY (route_id)
 	GROUP BY
@@ -361,7 +361,7 @@ AS $$
 		p.updated_at
 	FROM
 		p_pbx_prompt AS p
-	LEFT JOIN LATERAL (
+		LEFT JOIN LATERAL (
 			SELECT
 				r.pbx_prompt_recording_id,
 				r.pbx_prompt_id,
@@ -373,7 +373,7 @@ AS $$
 				r.updated_at
 			FROM
 				p_pbx_prompt_recording AS r
-	LEFT JOIN p_pbx_prompt_recording_alternative AS a ON (a.pbx_prompt_recording_id = r.pbx_prompt_recording_id)
+				LEFT JOIN p_pbx_prompt_recording_alternative AS a ON (a.pbx_prompt_recording_id = r.pbx_prompt_recording_id)
 			AND (a.content_type = contenttype)
 			WHERE
 				(
@@ -420,7 +420,7 @@ AS $$
 		r.updated_at
 	FROM
 		p_pbx_voicemail_recording AS r
-	LEFT JOIN p_pbx_voicemail_recording_alternative AS a ON (r.pbx_voicemail_recording_id = a.pbx_voicemail_recording_id)
+		LEFT JOIN p_pbx_voicemail_recording_alternative AS a ON (r.pbx_voicemail_recording_id = a.pbx_voicemail_recording_id)
 	AND (a.content_type = contenttype)
 	WHERE
 		(r.pbx_voicemail_recording_id = ANY (voicemail_recording_ids))
@@ -463,10 +463,10 @@ AS $$
 		r.updated_at
 	FROM
 		p_pbx_voicemail_recording AS r
-	CROSS JOIN p_pbx_voicemail_user AS vu USING (pbx_voicemail_id)
-	CROSS JOIN p_pbx_user AS u USING (pbx_user_id)
-	LEFT JOIN p_pbx_voicemail_user_recording_status AS s USING (pbx_voicemail_recording_id, pbx_user_id)
-	LEFT JOIN p_pbx_voicemail_recording_alternative AS a ON (r.pbx_voicemail_recording_id = a.pbx_voicemail_recording_id)
+		CROSS JOIN p_pbx_voicemail_user AS vu USING (pbx_voicemail_id)
+		CROSS JOIN p_pbx_user AS u USING (pbx_user_id)
+		LEFT JOIN p_pbx_voicemail_user_recording_status AS s USING (pbx_voicemail_recording_id, pbx_user_id)
+		LEFT JOIN p_pbx_voicemail_recording_alternative AS a ON (r.pbx_voicemail_recording_id = a.pbx_voicemail_recording_id)
 	AND (a.content_type = contenttype)
 	WHERE
 		(r.pbx_voicemail_recording_id = ANY (voicemail_recording_ids))
@@ -504,7 +504,7 @@ AS $$
 		v.updated_at
 	FROM
 		p_pbx_voicemail AS v
-	LEFT JOIN p_pbx_voicemail_user AS u USING (pbx_voicemail_id)
+		LEFT JOIN p_pbx_voicemail_user AS u USING (pbx_voicemail_id)
 	WHERE
 		v.pbx_voicemail_id = ANY (voicemail_ids)
 	GROUP BY
@@ -550,12 +550,12 @@ AS $$
 		cp.deleted_at
 	FROM
 		p_pbx_call_profile AS cp
-	LEFT JOIN p_pbx_call_profile_mex_accept_call AS ma USING (pbx_call_profile_id)
-	LEFT JOIN p_pbx_call_profile_route_accept_call AS ra USING (pbx_call_profile_id)
-	LEFT JOIN p_pbx_user AS u ON (u.call_profile_available_id = cp.pbx_call_profile_id)
+		LEFT JOIN p_pbx_call_profile_mex_accept_call AS ma USING (pbx_call_profile_id)
+		LEFT JOIN p_pbx_call_profile_route_accept_call AS ra USING (pbx_call_profile_id)
+		LEFT JOIN p_pbx_user AS u ON (u.call_profile_available_id = cp.pbx_call_profile_id)
 	OR (u.call_profile_unavailable_id = cp.pbx_call_profile_id)
-	LEFT JOIN p_pbx_route_user AS ru ON u.pbx_user_id = ru.pbx_user_id
-	LEFT JOIN unnest(call_profile_ids) WITH ORDINALITY so(pbx_call_profile_idsort_order) ON cp.pbx_call_profile_id = so.pbx_call_profile_id
+		LEFT JOIN p_pbx_route_user AS ru ON u.pbx_user_id = ru.pbx_user_id
+		LEFT JOIN unnest(call_profile_ids) WITH ORDINALITY so(pbx_call_profile_idsort_order) ON cp.pbx_call_profile_id = so.pbx_call_profile_id
 	WHERE
 		cp.pbx_call_profile_id = ANY (call_profile_ids)
 	GROUP BY
