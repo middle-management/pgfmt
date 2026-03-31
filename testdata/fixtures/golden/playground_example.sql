@@ -19,11 +19,11 @@ ORDER BY
 LIMIT 50;
 
 CREATE TABLE IF NOT EXISTS products (
-	id pg_catalog.int8 GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 	name text NOT NULL,
 	description text,
-	price pg_catalog.numeric(10, 2) NOT NULL CHECK (price > 0),
-	category_id pg_catalog.int4 REFERENCES categories (id) ON DELETE SET NULL,
+	price numeric(10, 2) NOT NULL CHECK (price > 0),
+	category_id int REFERENCES categories (id) ON DELETE SET NULL,
 	created_at timestamptz NOT NULL DEFAULT now(),
 	updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -36,7 +36,7 @@ monthly_revenue AS (
 	FROM
 		orders AS o
 	WHERE
-		o.created_at >= (now() - '12 months'::pg_catalog.interval)
+		o.created_at >= (now() - '12 months'::interval)
 	GROUP BY
 		1
 )
