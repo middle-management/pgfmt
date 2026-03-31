@@ -2061,7 +2061,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 	default:
 		// Fallback: deparse the entire statement if possible
 		if output.RawStmt != nil {
-			deparsed, err := pg_query.Deparse(&pg_query.ParseResult{
+			deparsed, err := pgDeparse(&pg_query.ParseResult{
 				Stmts: []*pg_query.RawStmt{output.RawStmt},
 			})
 			if err == nil {

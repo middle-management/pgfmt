@@ -49,6 +49,10 @@ func pgScan(input string) (*pg_query.ScanResult, error) {
 	return result, err
 }
 
+func pgDeparse(result *pg_query.ParseResult) (string, error) {
+	return "", errors.New("deparse not available in wasm build")
+}
+
 func pgParsePlPgSqlToJSON(input string) (string, error) {
 	a := getABI()
 	defer a.release()
