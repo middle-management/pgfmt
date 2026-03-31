@@ -183,7 +183,6 @@
   <a href="https://github.com/middle-management/pgfmt" style="color:var(--accent)">GitHub</a>
 </div>
 
-<script src="wasm_exec.js"></script>
 <script>
 (function() {
   const input = document.getElementById('input');
@@ -200,29 +199,38 @@ create table if not exists products (id bigint generated always as identity prim
 with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(o.total) as revenue from orders o where o.created_at >= now() - interval '12 months' group by 1) select month, revenue, revenue - lag(revenue) over (order by month) as change from monthly_revenue order by month;`;
 
   let ready = false;
+  let formatting = false;
+  let nextId = 0;
+  let pending = null; // { resolve, reject } for the in-flight request
 
-  window.onPgfmtReady = function() {
-    ready = true;
-    status.textContent = 'Ready';
-    status.className = 'status ready';
-    formatBtn.disabled = false;
+  const worker = new Worker('worker.js');
+
+  worker.onmessage = function(e) {
+    const msg = e.data;
+    if (msg.type === 'ready') {
+      ready = true;
+      status.textContent = 'Ready';
+      status.className = 'status ready';
+      formatBtn.disabled = false;
+      return;
+    }
+    if (msg.type === 'result' && pending) {
+      pending.resolve(msg);
+      pending = null;
+    }
   };
 
-  async function loadWasm() {
-    try {
-      const go = new Go();
-      const result = await WebAssembly.instantiateStreaming(
-        fetch('pgfmt.wasm'),
-        go.importObject
-      );
-      go.run(result.instance);
-    } catch (err) {
-      status.textContent = 'Failed to load WASM: ' + err.message;
-      status.className = 'status error';
-    }
-  }
+  worker.onerror = function(err) {
+    status.textContent = 'Worker error: ' + err.message;
+    status.className = 'status error';
+  };
 
-  let formatting = false;
+  function formatSQL(sql) {
+    return new Promise(function(resolve, reject) {
+      pending = { resolve, reject };
+      worker.postMessage({ id: ++nextId, sql: sql });
+    });
+  }
 
   async function doFormat() {
     if (!ready || formatting) return;
@@ -235,7 +243,7 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
     formatBtn.disabled = true;
     formatBtn.textContent = 'Formatting...';
     try {
-      const res = await pgfmtFormat(sql);
+      const res = await formatSQL(sql);
       if (res.error) {
         output.innerHTML = '<span class="error-text">' + escapeHtml(res.error) + '</span>';
       } else {
@@ -282,8 +290,6 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
       this.selectionStart = this.selectionEnd = start + 1;
     }
   });
-
-  loadWasm();
 })();
 </script>
 </body>
