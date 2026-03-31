@@ -29,6 +29,42 @@ There is no Makefile; use `go` commands directly.
 - CI verifies golden files are up to date via `git diff --exit-code testdata/fixtures/golden/`
 - When adding new SQL formatting support, add both unit tests and fixture coverage
 
+## Missing / Unsupported Constructs
+
+The following SQL constructs are parsed by `pg_query_go` but not yet handled by the printer. They produce empty or malformed output:
+
+### Expression nodes
+- **CASE expressions** (`CaseExpr`, `CaseWhen`) — `CASE WHEN ... THEN ... ELSE ... END`
+- **GREATEST / LEAST** (`MinMaxExpr`) — `GREATEST(a, b)`, `LEAST(a, b)`
+- **SqlvalueFunction** — `CURRENT_TIMESTAMP`, `CURRENT_USER`, `CURRENT_DATE`, etc.
+- **GroupingFunc** — `GROUPING(x)` in `GROUP BY` queries
+- **SetToDefault** — `DEFAULT` keyword used as a value in `INSERT`/`UPDATE`
+- **XmlExpr** — XML functions (`XMLPARSE`, `XMLROOT`, `XMLELEMENT`, etc.)
+
+### Statement / clause gaps
+- **SAVEPOINT / RELEASE / ROLLBACK TO** — names are not emitted (empty `SAVEPOINT ;`)
+- **DROP TYPE** — type name not emitted (`DROP TYPE IF EXISTS ;`)
+- **DROP TRIGGER** — renders as `schema.trigger` instead of `trigger ON table`
+- **SELECT DISTINCT** (without `ON`) — incorrectly renders as `DISTINCT ON ()`
+- **Operator subqueries** — `> ALL (subquery)`, `= ANY (subquery)` emit raw protobuf for the operator
+
+### DDL not yet handled
+- **CREATE VIEW / CREATE MATERIALIZED VIEW**
+- **CREATE SCHEMA**
+- **CREATE SEQUENCE** / **ALTER SEQUENCE**
+- **CREATE EXTENSION**
+- **CREATE TRIGGER**
+- **CREATE DOMAIN**
+- **GRANT / REVOKE**
+- **COMMENT ON**
+- **VACUUM / ANALYZE / REINDEX / CLUSTER**
+- **COPY**
+- **TRUNCATE**
+- **LISTEN / NOTIFY / UNLISTEN**
+- **SET / SHOW / RESET** (session variables)
+- **EXPLAIN**
+- **PREPARE / EXECUTE / DEALLOCATE**
+
 ## Code Conventions
 
 - Go 1.23+
