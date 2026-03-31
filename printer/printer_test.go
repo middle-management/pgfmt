@@ -422,3 +422,46 @@ $$ LANGUAGE plpython3u;`)
 		t.Errorf("expected raw body, got: %s", got)
 	}
 }
+
+func TestDoStatement(t *testing.T) {
+	got := format(t, `DO $$
+DECLARE
+  x integer := 0;
+BEGIN
+  x := x + 1;
+  RAISE NOTICE 'x is %', x;
+END;
+$$;`)
+	if !strings.Contains(got, "DO $$") {
+		t.Errorf("expected DO $$, got: %s", got)
+	}
+	if !strings.Contains(got, "DECLARE") {
+		t.Errorf("expected DECLARE block, got: %s", got)
+	}
+	if !strings.Contains(got, "RAISE NOTICE") {
+		t.Errorf("expected RAISE NOTICE, got: %s", got)
+	}
+}
+
+func TestDoStatementWithLanguage(t *testing.T) {
+	got := format(t, `DO LANGUAGE plpgsql $$
+BEGIN
+  RAISE NOTICE 'hello';
+END;
+$$;`)
+	if !strings.Contains(got, "DO $$") {
+		t.Errorf("expected DO $$, got: %s", got)
+	}
+	if !strings.Contains(got, "RAISE NOTICE") {
+		t.Errorf("expected RAISE NOTICE, got: %s", got)
+	}
+}
+
+func TestDoStatementSQL(t *testing.T) {
+	got := format(t, `DO LANGUAGE sql $$
+  SELECT 1;
+$$;`)
+	if !strings.Contains(got, "DO LANGUAGE sql $$") {
+		t.Errorf("expected DO LANGUAGE sql, got: %s", got)
+	}
+}

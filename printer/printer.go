@@ -1176,6 +1176,45 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeNode(n.DefElem.Arg)
 		}
 
+	case *pg_query.Node_DoStmt:
+		output.Builder.WriteString("DO")
+		var lang, asBody string
+		for _, arg := range n.DoStmt.Args {
+			de := arg.GetDefElem()
+			if de == nil {
+				continue
+			}
+			switch de.Defname {
+			case "language":
+				lang = de.Arg.GetString_().GetSval()
+			case "as":
+				if s := de.Arg.GetString_(); s != nil {
+					asBody = s.GetSval()
+				} else if l := de.Arg.GetList(); l != nil && len(l.Items) > 0 {
+					asBody = l.Items[0].GetString_().GetSval()
+				}
+			}
+		}
+		if lang != "" && !strings.EqualFold(lang, "plpgsql") {
+			output.Builder.WriteString(" LANGUAGE ")
+			output.Builder.WriteString(lang)
+		}
+		if asBody != "" {
+			if strings.EqualFold(lang, "plpgsql") || lang == "" {
+				output.Builder.WriteString(" $$")
+				output.formatPLpgSQLBody(asBody, 0)
+				output.Builder.WriteString("\n$$")
+			} else if strings.EqualFold(lang, "sql") {
+				output.Builder.WriteString(" $$")
+				output.formatSQLBody(asBody, 1)
+				output.Builder.WriteString("\n$$")
+			} else {
+				output.Builder.WriteString(" $$\n")
+				output.Builder.WriteString(asBody)
+				output.Builder.WriteString("\n$$")
+			}
+		}
+
 	case *pg_query.Node_CreateFunctionStmt:
 		output.Builder.WriteString("CREATE ")
 		if n.CreateFunctionStmt.Replace {
