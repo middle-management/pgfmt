@@ -98,7 +98,9 @@ tree AS (
 	FROM
 		categories
 	WHERE
-		parent_id IS NULL) UNION ALL (SELECT
+		parent_id IS NULL)
+	UNION ALL
+	(SELECT
 		c.id,
 		c.name,
 		c.parent_id,

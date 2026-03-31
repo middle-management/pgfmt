@@ -3,7 +3,9 @@
 	id,
 	name
 FROM
-	customers) UNION (SELECT
+	customers)
+UNION
+(SELECT
 	id,
 	name
 FROM
@@ -16,7 +18,9 @@ FROM
 FROM
 	users
 WHERE
-	active = true) UNION ALL (SELECT
+	active = true)
+UNION ALL
+(SELECT
 	id,
 	email
 FROM
@@ -28,7 +32,9 @@ FROM
 FROM
 	orders
 WHERE
-	total > 100) INTERSECT (SELECT
+	total > 100)
+INTERSECT
+(SELECT
 	user_id
 FROM
 	reviews
@@ -39,7 +45,9 @@ WHERE
 (SELECT
 	id
 FROM
-	all_users) EXCEPT (SELECT
+	all_users)
+EXCEPT
+(SELECT
 	user_id
 FROM
 	banned_users);
@@ -49,11 +57,15 @@ FROM
 	id,
 	name
 FROM
-	customers) UNION ALL (SELECT
+	customers)
+UNION ALL
+(SELECT
 	id,
 	name
 FROM
-	suppliers)) EXCEPT (SELECT
+	suppliers))
+EXCEPT
+(SELECT
 	id,
 	name
 FROM

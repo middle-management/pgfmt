@@ -2421,21 +2421,23 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 		output.writeSelectStmt(stmt.Larg)
 		output.Builder.WriteString(")")
 
+		output.writeNewlineIndent()
 		switch stmt.Op {
 		case pg_query.SetOperation_SETOP_UNION:
-			output.Builder.WriteString(" UNION ")
+			output.Builder.WriteString("UNION")
 		case pg_query.SetOperation_SETOP_INTERSECT:
-			output.Builder.WriteString(" INTERSECT ")
+			output.Builder.WriteString("INTERSECT")
 		case pg_query.SetOperation_SETOP_EXCEPT:
-			output.Builder.WriteString(" EXCEPT ")
+			output.Builder.WriteString("EXCEPT")
 		default:
 			warn("unexpected set operation")
 		}
 
 		if stmt.All {
-			output.Builder.WriteString("ALL ")
+			output.Builder.WriteString(" ALL")
 		}
 
+		output.writeNewlineIndent()
 		output.Builder.WriteString("(")
 		output.writeSelectStmt(stmt.Rarg)
 		output.Builder.WriteString(")")
