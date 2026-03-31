@@ -3,10 +3,13 @@
 package main
 
 import (
+	"fmt"
 	"syscall/js"
 
 	"github.com/middle-management/pgfmt/printer"
 )
+
+var version = "dev"
 
 func format(_ js.Value, args []js.Value) any {
 	if len(args) < 1 {
@@ -22,6 +25,9 @@ func format(_ js.Value, args []js.Value) any {
 
 func main() {
 	js.Global().Set("pgfmtFormat", js.FuncOf(format))
+	js.Global().Set("pgfmtVersion", version)
+
+	fmt.Printf("pgfmt %s\n", version)
 
 	// Pre-warm: run a trivial format so the expensive libpg_query WASM
 	// compilation happens during load, not on the first user action.
