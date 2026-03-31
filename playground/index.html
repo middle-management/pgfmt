@@ -201,7 +201,7 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
   let ready = false;
   let formatting = false;
   let nextId = 0;
-  let pending = null; // { resolve, reject } for the in-flight request
+  const pending = new Map();
 
   const worker = new Worker('worker.js');
 
@@ -214,9 +214,12 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
       formatBtn.disabled = false;
       return;
     }
-    if (msg.type === 'result' && pending) {
-      pending.resolve(msg);
-      pending = null;
+    if (msg.type === 'result') {
+      const p = pending.get(msg.id);
+      if (p) {
+        pending.delete(msg.id);
+        p.resolve(msg);
+      }
     }
   };
 
@@ -226,9 +229,10 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
   };
 
   function formatSQL(sql) {
+    const id = ++nextId;
     return new Promise(function(resolve, reject) {
-      pending = { resolve, reject };
-      worker.postMessage({ id: ++nextId, sql: sql });
+      pending.set(id, { resolve, reject });
+      worker.postMessage({ id: id, sql: sql });
     });
   }
 
