@@ -1491,8 +1491,8 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 	if stmt.Setof {
 		output.Builder.WriteString("SETOF ")
 	}
-	if len(stmt.Names) == 2 && stmt.Names[0].String() == "pg_catalog" {
-		switch stmt.Names[1].String() {
+	if len(stmt.Names) == 2 && stmt.Names[0].GetString_().GetSval() == "pg_catalog" {
+		switch stmt.Names[1].GetString_().GetSval() {
 		case "bpchar":
 			output.Builder.WriteString("char")
 		case "bool":
@@ -1508,15 +1508,14 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 		case "float8":
 			output.Builder.WriteString("double precision")
 		case "varchar", "numeric", "real", "time", "timestamp":
-			output.Builder.WriteString(stmt.Names[1].String())
+			output.Builder.WriteString(stmt.Names[1].GetString_().GetSval())
 		case "timetz", "timestamptz":
-			output.Builder.WriteString(stmt.Names[1].String())
+			output.Builder.WriteString(stmt.Names[1].GetString_().GetSval())
 			if len(stmt.Typmods) > 0 {
 				output.Builder.WriteString("(")
 				output.writeCommaSeparatedList(stmt.Typmods)
 				output.Builder.WriteString(")")
 			}
-			output.Builder.WriteString("with time zone")
 			skipTypmods = true
 		case "interval":
 			if len(stmt.Typmods) == 0 {
@@ -1564,7 +1563,7 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 			}
 		default:
 			output.Builder.WriteString("pg_catalog.")
-			output.Builder.WriteString(stmt.Names[1].String())
+			output.Builder.WriteString(stmt.Names[1].GetString_().GetSval())
 
 		}
 	} else {

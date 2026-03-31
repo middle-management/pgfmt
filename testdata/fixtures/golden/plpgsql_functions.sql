@@ -1,5 +1,5 @@
 -- Simple function with DECLARE and IF/ELSE
-CREATE FUNCTION get_user_label(p_id pg_catalog.int4)
+CREATE FUNCTION get_user_label(p_id int)
 RETURNS text
 LANGUAGE plpgsql
 AS $$
@@ -41,8 +41,8 @@ END
 $$;
 
 -- Function with EXCEPTION handling
-CREATE OR REPLACE FUNCTION safe_divide(a pg_catalog.int4, b pg_catalog.int4)
-RETURNS pg_catalog.numeric
+CREATE OR REPLACE FUNCTION safe_divide(a int, b int)
+RETURNS numeric
 LANGUAGE plpgsql
 STRICT
 AS $$
@@ -60,7 +60,7 @@ END
 $$;
 
 -- Function with PERFORM, EXECUTE, CASE
-CREATE FUNCTION kitchen_sink(p_mode pg_catalog.int4)
+CREATE FUNCTION kitchen_sink(p_mode int)
 RETURNS void
 LANGUAGE plpgsql
 AS $$
