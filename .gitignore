@@ -20,3 +20,5 @@ zed-pgfmt/target/
 zed-pgfmt/extension.wasm
 playground/pgfmt.wasm
 playground/wasm_exec.js
+playground/node_modules/
+playground/test-results/
