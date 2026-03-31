@@ -1,0 +1,66 @@
+-- CREATE VIEW
+;
+
+-- CREATE OR REPLACE VIEW
+;
+
+-- CREATE MATERIALIZED VIEW
+;
+
+-- CREATE SCHEMA
+;
+
+-- CREATE SEQUENCE
+;
+
+-- CREATE EXTENSION
+;
+
+-- GRANT
+;
+
+-- REVOKE
+;
+
+-- COMMENT ON
+;
+
+;
+
+-- TRUNCATE
+;
+
+;
+
+-- EXPLAIN
+;
+
+;
+
+-- COPY
+;
+
+-- LISTEN / NOTIFY
+;
+
+;
+
+-- SET / SHOW / RESET
+;
+
+;
+
+;
+
+-- PREPARE / EXECUTE / DEALLOCATE
+;
+
+;
+
+;
+
+-- VACUUM / ANALYZE
+;
+
+;
+
