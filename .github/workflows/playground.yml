@@ -3,6 +3,8 @@ name: Deploy Playground
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -20,9 +22,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+      - name: Configure Pages
+        if: github.event_name == 'push'
+        uses: actions/configure-pages@v5
+
+      - uses: actions/setup-go@v6
 
       - name: Build WASM
         run: GOOS=js GOARCH=wasm go build -o playground/pgfmt.wasm ./playground/wasm/
@@ -31,11 +35,13 @@ jobs:
         run: cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" playground/wasm_exec.js
 
       - name: Upload Pages artifact
+        if: github.event_name == 'push'
         uses: actions/upload-pages-artifact@v3
         with:
           path: playground
 
   deploy:
+    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
     environment:
