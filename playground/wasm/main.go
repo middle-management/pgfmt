@@ -23,6 +23,10 @@ func format(_ js.Value, args []js.Value) any {
 func main() {
 	js.Global().Set("pgfmtFormat", js.FuncOf(format))
 
+	// Pre-warm: run a trivial format so the expensive libpg_query WASM
+	// compilation happens during load, not on the first user action.
+	printer.Format("select 1")
+
 	// Signal that WASM is ready.
 	if cb := js.Global().Get("onPgfmtReady"); !cb.IsUndefined() {
 		cb.Invoke()
