@@ -255,7 +255,8 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
 
   exampleBtn.addEventListener('click', function() {
     input.value = exampleSQL;
-    doFormat();
+    // Defer formatting so the browser can paint the textarea update first.
+    setTimeout(doFormat, 0);
   });
 
   input.addEventListener('keydown', function(e) {
