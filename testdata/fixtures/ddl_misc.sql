@@ -1,0 +1,54 @@
+-- DROP various object types
+DROP TABLE IF EXISTS old_data CASCADE;
+DROP INDEX IF EXISTS idx_users_email;
+DROP VIEW IF EXISTS v_active_users;
+DROP FUNCTION IF EXISTS my_func(integer, text);
+DROP SCHEMA IF EXISTS staging CASCADE;
+DROP SEQUENCE IF EXISTS order_id_seq;
+DROP EXTENSION IF EXISTS pgcrypto;
+
+-- ALTER TABLE operations
+ALTER TABLE users ADD COLUMN phone text;
+ALTER TABLE users DROP COLUMN IF EXISTS legacy_field;
+ALTER TABLE users ALTER COLUMN name SET NOT NULL;
+ALTER TABLE users ALTER COLUMN status DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN name TYPE varchar(255);
+ALTER TABLE users ALTER COLUMN score SET DEFAULT 0;
+ALTER TABLE users ALTER COLUMN score DROP DEFAULT;
+ALTER TABLE users ADD CONSTRAINT uq_email UNIQUE (email);
+ALTER TABLE users DROP CONSTRAINT IF EXISTS old_check;
+
+-- Transaction control
+BEGIN;
+COMMIT;
+
+-- CREATE TABLE with various constraints
+CREATE TABLE orders (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    total numeric(10, 2) NOT NULL CHECK (total >= 0),
+    status text NOT NULL DEFAULT 'pending',
+    metadata jsonb,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- CREATE TEMPORARY TABLE
+CREATE TEMPORARY TABLE tmp_results (
+    id serial PRIMARY KEY,
+    value text
+);
+
+-- INSERT with ON CONFLICT DO UPDATE
+INSERT INTO settings (key, value) VALUES ('theme', 'dark') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+-- INSERT with ON CONFLICT DO NOTHING
+INSERT INTO tags (name) VALUES ('new') ON CONFLICT DO NOTHING;
+
+-- SQL-language function
+CREATE FUNCTION add_numbers(a integer, b integer) RETURNS integer AS $$ SELECT a + b; $$ LANGUAGE sql STABLE;
+
+-- Function with OUT parameters
+CREATE FUNCTION get_stats(OUT min_val integer, OUT max_val integer) AS $$ SELECT min(value), max(value) FROM data; $$ LANGUAGE sql;
+
+-- Function with default parameter
+CREATE FUNCTION greet(name text DEFAULT 'World') RETURNS text AS $$ SELECT 'Hello, ' || name || '!'; $$ LANGUAGE sql;

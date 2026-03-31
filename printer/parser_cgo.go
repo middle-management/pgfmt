@@ -15,3 +15,7 @@ func pgScan(input string) (*pg_query.ScanResult, error) {
 func pgParsePlPgSqlToJSON(input string) (string, error) {
 	return pg_query.ParsePlPgSqlToJSON(input)
 }
+
+func pgDeparse(result *pg_query.ParseResult) (string, error) {
+	return pg_query.Deparse(result)
+}

@@ -49,6 +49,18 @@ func pgScan(input string) (*pg_query.ScanResult, error) {
 	return result, err
 }
 
+func pgDeparse(result *pg_query.ParseResult) (string, error) {
+	protobuf, err := proto.Marshal(result)
+	if err != nil {
+		return "", err
+	}
+
+	a := getABI()
+	defer a.release()
+
+	return a.pgQueryDeparseProtobuf(protobuf)
+}
+
 func pgParsePlPgSqlToJSON(input string) (string, error) {
 	a := getABI()
 	defer a.release()
@@ -137,6 +149,8 @@ func newABI() *wasmABI {
 		fPgQueryFreePlpgsqlParseResult:  newLazyFunction(mod, "pg_query_free_plpgsql_parse_result"),
 		fPgQueryScan:                    newLazyFunction(mod, "pg_query_scan"),
 		fPgQueryFreeScanResult:          newLazyFunction(mod, "pg_query_free_scan_result"),
+		fPgQueryDeparseProtobuf:         newLazyFunction(mod, "pg_query_deparse_protobuf"),
+		fPgQueryFreeDeparseResult:       newLazyFunction(mod, "pg_query_free_deparse_result"),
 
 		malloc: newLazyFunction(mod, "malloc"),
 		free:   newLazyFunction(mod, "free"),
@@ -174,6 +188,8 @@ type wasmABI struct {
 	fPgQueryFreePlpgsqlParseResult  lazyFunction
 	fPgQueryScan                    lazyFunction
 	fPgQueryFreeScanResult          lazyFunction
+	fPgQueryDeparseProtobuf         lazyFunction
+	fPgQueryFreeDeparseResult       lazyFunction
 
 	malloc lazyFunction
 	free   lazyFunction
@@ -251,6 +267,50 @@ func (a *wasmABI) pgQueryScanProtobuf(input cString) ([]byte, error) {
 	}
 
 	return bytes.Clone(buf), nil
+}
+
+func (a *wasmABI) pgQueryDeparseProtobuf(protobuf []byte) (string, error) {
+	ctx := wasixBackgroundContext()
+
+	// Allocate and write the protobuf data into WASM memory
+	dataPtr := uint32(a.malloc.call1(ctx, uint64(len(protobuf))))
+	defer a.free.call1(ctx, uint64(dataPtr))
+	if !a.wasmMemory.Write(dataPtr, protobuf) {
+		panic(errFailedWrite)
+	}
+
+	// Allocate PgQueryProtobuf struct { uint32 len; uint32 data; }
+	pbStructPtr := uint32(a.malloc.call1(ctx, 8))
+	defer a.free.call1(ctx, uint64(pbStructPtr))
+	lenBuf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(lenBuf, uint32(len(protobuf)))
+	if !a.wasmMemory.Write(pbStructPtr, lenBuf) {
+		panic(errFailedWrite)
+	}
+	ptrBuf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(ptrBuf, dataPtr)
+	if !a.wasmMemory.Write(pbStructPtr+4, ptrBuf) {
+		panic(errFailedWrite)
+	}
+
+	// Allocate result struct { char *query; PgQueryError *error; }
+	resPtr := a.malloc.call1(ctx, 8)
+	defer a.free.call1(ctx, resPtr)
+
+	a.fPgQueryDeparseProtobuf.call2(ctx, resPtr, uint64(pbStructPtr))
+	defer a.fPgQueryFreeDeparseResult.call1(ctx, resPtr)
+
+	resBuf, ok := a.wasmMemory.Read(uint32(resPtr), 8)
+	if !ok {
+		panic(errFailedRead)
+	}
+
+	errPtr := binary.LittleEndian.Uint32(resBuf[4:])
+	if errPtr != 0 {
+		return "", newPgQueryError(a.mod, errPtr)
+	}
+
+	return readCStringPtr(a.wasmMemory, uint32(resPtr)), nil
 }
 
 func (a *wasmABI) pgQueryParsePlPgSqlToJSON(input cString) (string, error) {

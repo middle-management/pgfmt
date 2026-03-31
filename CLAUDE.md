@@ -29,6 +29,12 @@ There is no Makefile; use `go` commands directly.
 - CI verifies golden files are up to date via `git diff --exit-code testdata/fixtures/golden/`
 - When adding new SQL formatting support, add both unit tests and fixture coverage
 
+## Deparse Fallback
+
+Any SQL statement type not explicitly handled by the printer falls back to
+`pg_query.Deparse`, which emits valid (but unformatted/canonical) SQL. This
+ensures pgfmt never produces empty output for valid SQL.
+
 ## Code Conventions
 
 - Go 1.23+
