@@ -1427,6 +1427,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("GREATEST(")
 		case pg_query.MinMaxOp_IS_LEAST:
 			output.Builder.WriteString("LEAST(")
+		default:
+			warn("unsupported min/max op: %s", n.MinMaxExpr.Op.String())
+			output.Builder.WriteString("(")
 		}
 		output.writeCommaSeparatedList(n.MinMaxExpr.Args)
 		output.Builder.WriteString(")")
@@ -1438,19 +1441,27 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_TIME:
 			output.Builder.WriteString("CURRENT_TIME")
 		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_TIME_N:
-			output.Builder.WriteString("CURRENT_TIME")
+			output.Builder.WriteString("CURRENT_TIME(")
+			output.Builder.WriteString(strconv.Itoa(int(n.SqlvalueFunction.Typmod)))
+			output.Builder.WriteString(")")
 		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_TIMESTAMP:
 			output.Builder.WriteString("CURRENT_TIMESTAMP")
 		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_TIMESTAMP_N:
-			output.Builder.WriteString("CURRENT_TIMESTAMP")
+			output.Builder.WriteString("CURRENT_TIMESTAMP(")
+			output.Builder.WriteString(strconv.Itoa(int(n.SqlvalueFunction.Typmod)))
+			output.Builder.WriteString(")")
 		case pg_query.SQLValueFunctionOp_SVFOP_LOCALTIME:
 			output.Builder.WriteString("LOCALTIME")
 		case pg_query.SQLValueFunctionOp_SVFOP_LOCALTIME_N:
-			output.Builder.WriteString("LOCALTIME")
+			output.Builder.WriteString("LOCALTIME(")
+			output.Builder.WriteString(strconv.Itoa(int(n.SqlvalueFunction.Typmod)))
+			output.Builder.WriteString(")")
 		case pg_query.SQLValueFunctionOp_SVFOP_LOCALTIMESTAMP:
 			output.Builder.WriteString("LOCALTIMESTAMP")
 		case pg_query.SQLValueFunctionOp_SVFOP_LOCALTIMESTAMP_N:
-			output.Builder.WriteString("LOCALTIMESTAMP")
+			output.Builder.WriteString("LOCALTIMESTAMP(")
+			output.Builder.WriteString(strconv.Itoa(int(n.SqlvalueFunction.Typmod)))
+			output.Builder.WriteString(")")
 		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_ROLE:
 			output.Builder.WriteString("CURRENT_ROLE")
 		case pg_query.SQLValueFunctionOp_SVFOP_CURRENT_USER:
@@ -1613,7 +1624,18 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		for i, g := range n.GrantStmt.Grantees {
 			rs := g.GetRoleSpec()
 			if rs != nil {
-				output.Builder.WriteString(rs.Rolename)
+				switch rs.Roletype {
+				case pg_query.RoleSpecType_ROLESPEC_PUBLIC:
+					output.Builder.WriteString("PUBLIC")
+				case pg_query.RoleSpecType_ROLESPEC_CURRENT_USER:
+					output.Builder.WriteString("CURRENT_USER")
+				case pg_query.RoleSpecType_ROLESPEC_SESSION_USER:
+					output.Builder.WriteString("SESSION_USER")
+				case pg_query.RoleSpecType_ROLESPEC_CURRENT_ROLE:
+					output.Builder.WriteString("CURRENT_ROLE")
+				default:
+					output.Builder.WriteString(rs.Rolename)
+				}
 			}
 			if i != len(n.GrantStmt.Grantees)-1 {
 				output.Builder.WriteString(", ")
@@ -1678,13 +1700,36 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 	case *pg_query.Node_ExplainStmt:
 		output.Builder.WriteString("EXPLAIN")
 		if len(n.ExplainStmt.Options) > 0 {
-			for _, opt := range n.ExplainStmt.Options {
-				de := opt.GetDefElem()
-				if de != nil && de.Defname == "analyze" {
-					output.Builder.WriteString(" ANALYZE")
-				} else if de != nil && de.Defname == "verbose" {
-					output.Builder.WriteString(" VERBOSE")
+			// Use shorthand for single ANALYZE or VERBOSE; parenthesized form otherwise
+			useShorthand := len(n.ExplainStmt.Options) == 1
+			if useShorthand {
+				de := n.ExplainStmt.Options[0].GetDefElem()
+				useShorthand = de != nil && (de.Defname == "analyze" || de.Defname == "verbose") && de.Arg == nil
+			}
+			if useShorthand {
+				output.Builder.WriteString(" ")
+				output.Builder.WriteString(strings.ToUpper(n.ExplainStmt.Options[0].GetDefElem().Defname))
+			} else {
+				output.Builder.WriteString(" (")
+				for i, opt := range n.ExplainStmt.Options {
+					de := opt.GetDefElem()
+					if de == nil {
+						continue
+					}
+					output.Builder.WriteString(strings.ToUpper(de.Defname))
+					if de.Arg != nil {
+						output.Builder.WriteString(" ")
+						if s := de.Arg.GetString_(); s != nil {
+							output.Builder.WriteString(s.GetSval())
+						} else {
+							output.writeNode(de.Arg)
+						}
+					}
+					if i != len(n.ExplainStmt.Options)-1 {
+						output.Builder.WriteString(", ")
+					}
 				}
+				output.Builder.WriteString(")")
 			}
 		}
 		output.Builder.WriteString("\n")
@@ -1707,8 +1752,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		if n.CopyStmt.Filename != "" {
 			output.Builder.WriteString("'")
-			output.Builder.WriteString(n.CopyStmt.Filename)
+			output.Builder.WriteString(strings.ReplaceAll(n.CopyStmt.Filename, "'", "''"))
 			output.Builder.WriteString("'")
+		} else if n.CopyStmt.IsFrom {
+			output.Builder.WriteString("STDIN")
 		} else {
 			output.Builder.WriteString("STDOUT")
 		}

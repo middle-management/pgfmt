@@ -42,6 +42,9 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- GRANT
 GRANT SELECT, INSERT ON users TO readonly_role;
 
+-- GRANT TO PUBLIC
+GRANT SELECT ON users TO PUBLIC;
+
 -- REVOKE
 REVOKE DELETE ON users FROM readonly_role;
 
@@ -71,6 +74,12 @@ FROM
 	users
 WHERE
 	active = true;
+
+EXPLAIN (ANALYZE, BUFFERS, FORMAT json)
+SELECT
+	*
+FROM
+	users;
 
 -- COPY
 COPY users (id, name, email) TO STDOUT WITH (FORMAT csv, HEADER true);
