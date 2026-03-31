@@ -4,7 +4,18 @@ DECLARE
 BEGIN
 	x := x + 1;
 	RAISE NOTICE 'x is %', x;
-	RETURN;
+END
+$$;
+
+DO $$
+DECLARE
+	-- Comment before variable.
+	x integer := 0;
+BEGIN
+	-- Comment before statement.
+	x := x + 1;
+	-- Another comment.
+	RAISE NOTICE 'x is %', x;
 END
 $$;
 
@@ -52,7 +63,6 @@ BEGIN
   ) THEN
 		RAISE EXCEPTION 'workflow_ids are out of sync';
 	END IF;
-	RETURN;
 END
 $$;
 

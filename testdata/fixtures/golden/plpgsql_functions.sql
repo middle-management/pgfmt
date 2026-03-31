@@ -37,7 +37,6 @@ BEGIN
 		CONTINUE WHEN v = 5;
 		v := v + 1;
 	END LOOP;
-	RETURN;
 END
 $$;
 
@@ -85,7 +84,6 @@ BEGIN
 		ELSE
 			RAISE DEBUG 'non-positive';
 	END CASE;
-	RETURN;
 END
 $$;
 
@@ -105,7 +103,6 @@ BEGIN
 	FOREACH v IN ARRAY arr LOOP
 		RAISE NOTICE 'val=%', v;
 	END LOOP;
-	RETURN;
 END
 $$;
 
@@ -115,7 +112,6 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
 	PERFORM pg_notify('cache', 'refresh');
-	RETURN;
 END
 $$;
 
@@ -127,7 +123,6 @@ STABLE
 AS $$
 BEGIN
 	RETURN QUERY SELECT id, name FROM users WHERE active = true;
-	RETURN;
 END
 $$;
 

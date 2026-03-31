@@ -9,6 +9,18 @@ $$;
 
 DO $$
 DECLARE
+  -- Comment before variable.
+  x integer := 0;
+BEGIN
+  -- Comment before statement.
+  x := x + 1;
+  -- Another comment.
+  RAISE NOTICE 'x is %', x;
+END;
+$$;
+
+DO $$
+DECLARE
   source_trigger_row RECORD;
   new_workflow_id uuid;
   migrated_count integer := 0;

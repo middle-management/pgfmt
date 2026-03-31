@@ -726,18 +726,24 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			if n.JoinExpr.IsNatural {
 				output.Builder.WriteString(" NATURAL JOIN ")
 			} else if n.JoinExpr.Quals != nil {
-				output.Builder.WriteString("\n\tJOIN ")
+				output.writeNewlineIndent()
+				output.Builder.WriteString("\tJOIN ")
 			} else {
-				output.Builder.WriteString("\n\tCROSS JOIN ")
+				output.writeNewlineIndent()
+				output.Builder.WriteString("\tCROSS JOIN ")
 			}
 		case pg_query.JoinType_JOIN_LEFT:
-			output.Builder.WriteString("\n\tLEFT JOIN ")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\tLEFT JOIN ")
 		case pg_query.JoinType_JOIN_FULL:
-			output.Builder.WriteString("\n\tFULL JOIN ")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\tFULL JOIN ")
 		case pg_query.JoinType_JOIN_RIGHT:
-			output.Builder.WriteString("\n\tRIGHT JOIN ")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\tRIGHT JOIN ")
 		default:
-			output.Builder.WriteString("\n\tJOIN ")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\tJOIN ")
 		}
 		output.writeNode(n.JoinExpr.Rarg)
 		if n.JoinExpr.Quals != nil {
