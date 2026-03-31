@@ -299,6 +299,14 @@ func TestForUpdateSkipLocked(t *testing.T) {
 	}
 }
 
+func TestJoinIndentInSubquery(t *testing.T) {
+	got := format(t, `SELECT * FROM a WHERE EXISTS (SELECT 1 FROM x JOIN y ON x.id = y.id)`)
+	// JOINs inside subqueries should be indented relative to the subquery, not column 0
+	if strings.Contains(got, "\n\tJOIN") && !strings.Contains(got, "\t\t\tJOIN") {
+		t.Errorf("expected JOINs indented inside subquery, got:\n%s", got)
+	}
+}
+
 func TestNoPanics(t *testing.T) {
 	// These should not panic even if output is imperfect
 	sqls := []string{
@@ -454,6 +462,38 @@ $$;`)
 	}
 	if !strings.Contains(got, "RAISE NOTICE") {
 		t.Errorf("expected RAISE NOTICE, got: %s", got)
+	}
+}
+
+func TestDoStatementNoSpuriousReturn(t *testing.T) {
+	got := format(t, `DO $$
+DECLARE
+  x integer := 0;
+BEGIN
+  x := x + 1;
+END;
+$$;`)
+	if strings.Contains(got, "RETURN;") {
+		t.Errorf("should not contain implicit RETURN, got: %s", got)
+	}
+}
+
+func TestPLpgSQLCommentsPreserved(t *testing.T) {
+	got := format(t, `DO $$
+DECLARE
+  x integer := 0;
+BEGIN
+  -- This comment should be preserved.
+  x := x + 1;
+  -- Another comment.
+  RAISE NOTICE 'x is %', x;
+END;
+$$;`)
+	if !strings.Contains(got, "-- This comment should be preserved.") {
+		t.Errorf("expected first comment preserved, got: %s", got)
+	}
+	if !strings.Contains(got, "-- Another comment.") {
+		t.Errorf("expected second comment preserved, got: %s", got)
 	}
 }
 

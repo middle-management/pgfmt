@@ -321,6 +321,46 @@ type plStmt struct {
 	Block       *plStmtBlock
 }
 
+func (s *plStmt) lineNo() int {
+	switch {
+	case s.Assign != nil:
+		return s.Assign.LineNo
+	case s.If != nil:
+		return s.If.LineNo
+	case s.Case != nil:
+		return s.Case.LineNo
+	case s.Loop != nil:
+		return s.Loop.LineNo
+	case s.While != nil:
+		return s.While.LineNo
+	case s.ForI != nil:
+		return s.ForI.LineNo
+	case s.ForS != nil:
+		return s.ForS.LineNo
+	case s.ForEachA != nil:
+		return s.ForEachA.LineNo
+	case s.Exit != nil:
+		return s.Exit.LineNo
+	case s.Return != nil:
+		return s.Return.LineNo
+	case s.ReturnNext != nil:
+		return s.ReturnNext.LineNo
+	case s.ReturnQuery != nil:
+		return s.ReturnQuery.LineNo
+	case s.Raise != nil:
+		return s.Raise.LineNo
+	case s.ExecSQL != nil:
+		return s.ExecSQL.LineNo
+	case s.Perform != nil:
+		return s.Perform.LineNo
+	case s.DynExecute != nil:
+		return s.DynExecute.LineNo
+	case s.Block != nil:
+		return s.Block.LineNo
+	}
+	return 0
+}
+
 func (s *plStmt) UnmarshalJSON(data []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
