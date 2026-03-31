@@ -3,12 +3,18 @@
 package main
 
 import (
+	"fmt"
 	"syscall/js"
 
 	"github.com/middle-management/pgfmt/printer"
 )
 
-func format(_ js.Value, args []js.Value) any {
+func format(_ js.Value, args []js.Value) (result any) {
+	defer func() {
+		if r := recover(); r != nil {
+			result = map[string]any{"error": fmt.Sprintf("internal error: %v", r)}
+		}
+	}()
 	if len(args) < 1 {
 		return map[string]any{"error": "missing SQL argument"}
 	}
