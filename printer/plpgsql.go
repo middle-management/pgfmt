@@ -3,8 +3,6 @@ package printer
 import (
 	"encoding/json"
 	"strings"
-
-	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
 
 // plContext holds state during PL/pgSQL body formatting.
@@ -31,7 +29,7 @@ func (ctx *plContext) newlineIndent(level int) {
 // formatSQL formats a SQL query string using the main SQL formatter.
 // Returns the original string unchanged if parsing fails.
 func formatSQL(query string) string {
-	result, err := pg_query.Parse(query)
+	result, err := pgParse(query)
 	if err != nil || len(result.Stmts) == 0 {
 		return query
 	}
@@ -91,7 +89,7 @@ func (output *Printer) formatPLpgSQLBody(body string, indentLevel int) {
 	var err error
 	for _, prefix := range wrappers {
 		stmt := prefix + body + "\n$$ LANGUAGE plpgsql;"
-		jsonResult, err = pg_query.ParsePlPgSqlToJSON(stmt)
+		jsonResult, err = pgParsePlPgSqlToJSON(stmt)
 		if err == nil {
 			break
 		}

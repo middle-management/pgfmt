@@ -15,12 +15,12 @@ type comment struct {
 
 // Format parses and formats a SQL string, preserving inter-statement comments.
 func Format(sql string) (string, error) {
-	parseResult, err := pg_query.Parse(sql)
+	parseResult, err := pgParse(sql)
 	if err != nil {
 		return "", err
 	}
 
-	scanResult, err := pg_query.Scan(sql)
+	scanResult, err := pgScan(sql)
 	if err != nil {
 		return "", err
 	}

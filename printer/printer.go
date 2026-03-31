@@ -1776,7 +1776,7 @@ func (output *Printer) writeAlias(a *pg_query.Alias) {
 }
 
 func (output *Printer) formatSQLBody(body string, indentLevel int) {
-	result, err := pg_query.Parse(body)
+	result, err := pgParse(body)
 	if err != nil {
 		// If we can't parse it, emit raw
 		output.Builder.WriteString(body)
