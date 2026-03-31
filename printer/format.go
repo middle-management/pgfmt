@@ -15,6 +15,31 @@ type comment struct {
 
 // Format parses and formats a SQL string, preserving inter-statement comments.
 func Format(sql string) (string, error) {
+	stmts, err := splitStatements(sql)
+	if err != nil {
+		return "", err
+	}
+
+	// Format each statement independently. This avoids passing large
+	// multi-statement strings to pgParse, which can hang in WASM.
+	if len(stmts) > 1 {
+		var out strings.Builder
+		for _, s := range stmts {
+			result, err := formatOne(s)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(result)
+		}
+		return out.String(), nil
+	}
+
+	return formatOne(sql)
+}
+
+// formatOne formats a single SQL string (which may still contain multiple
+// statements, but typically contains one or few).
+func formatOne(sql string) (string, error) {
 	parseResult, err := pgParse(sql)
 	if err != nil {
 		return "", err
@@ -66,6 +91,38 @@ func Format(sql string) (string, error) {
 	}
 
 	return out.String(), nil
+}
+
+// splitStatements splits SQL input into individual statements using the
+// scanner to find semicolon boundaries. Each returned string includes
+// any leading comments/whitespace and the trailing semicolon.
+func splitStatements(sql string) ([]string, error) {
+	scanResult, err := pgScan(sql)
+	if err != nil {
+		return nil, err
+	}
+
+	var stmts []string
+	start := 0
+	for _, tok := range scanResult.Tokens {
+		if tok.Token == pg_query.Token_ASCII_59 { // ';'
+			stmt := sql[start:tok.End]
+			if strings.TrimSpace(stmt) != ";" && strings.TrimSpace(stmt) != "" {
+				stmts = append(stmts, stmt)
+			}
+			start = int(tok.End)
+		}
+	}
+
+	// Handle trailing text after last semicolon (comments or a statement without ';')
+	if start < len(sql) {
+		trailing := sql[start:]
+		if strings.TrimSpace(trailing) != "" {
+			stmts = append(stmts, trailing)
+		}
+	}
+
+	return stmts, nil
 }
 
 // stmtEndPos returns the end byte position for a statement.

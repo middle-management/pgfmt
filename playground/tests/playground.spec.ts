@@ -66,9 +66,9 @@ test("shows error for invalid SQL", async ({ page }) => {
   await expect(page.locator("#output .error-text")).toBeVisible({ timeout: 15_000 });
 });
 
-// TODO: the full 3-statement example hangs in WASM (works via CLI).
-// Each statement formats individually; the hang occurs only with all three combined.
-test.fixme("formats the full playground example", async ({ page }) => {
+// The full 3-statement example previously hung in WASM. Fixed by splitting
+// multi-statement input before parsing (splitStatements in format.go).
+test("formats the full playground example", async ({ page }) => {
   await page.locator("#exampleBtn").click();
   await page.locator("#formatBtn").click();
   await expect(page.locator("#output")).toContainText("GENERATED ALWAYS AS IDENTITY", {
