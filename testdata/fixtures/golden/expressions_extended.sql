@@ -32,6 +32,13 @@ SELECT
 	LOCALTIME,
 	LOCALTIMESTAMP;
 
+-- SqlvalueFunction with precision
+SELECT
+	CURRENT_TIMESTAMP(3),
+	CURRENT_TIME(0),
+	LOCALTIME(6),
+	LOCALTIMESTAMP(2);
+
 -- GROUPING function
 SELECT
 	department,
