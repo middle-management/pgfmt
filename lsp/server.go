@@ -54,7 +54,7 @@ func (s *Server) Run() error {
 					TextDocumentSync:           1, // Full
 					DocumentFormattingProvider: true,
 				},
-				ServerInfo: ServerInfo{Name: "pgfmt-lsp", Version: "0.1.0"},
+				ServerInfo: ServerInfo{Name: "pgfmt-lsp", Version: "0.1.3"},
 			})
 
 		case "initialized":
