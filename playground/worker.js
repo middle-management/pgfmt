@@ -28,18 +28,55 @@ globalThis.pgfmtParse = (sql) => {
   }
 };
 
+// Pure JS scanner — finds comments and semicolons without calling Emscripten.
+// pg-query-emscripten's scan() uses ALLOC_STACK which overflows on large inputs,
+// and returns Emscripten vectors that crash when accessed.
 globalThis.pgfmtScan = (sql) => {
   try {
-    const result = pgQuery.scan(sql);
-    if (result.error) {
-      return { error: result.error.message };
-    }
-    // pg-query-emscripten returns an Emscripten vector, convert to plain array.
     const tokens = [];
-    for (let i = 0; i < result.tokens.size(); i++) {
-      tokens.push(result.tokens.get(i));
+    let i = 0;
+    while (i < sql.length) {
+      const ch = sql[i];
+      if (ch === "-" && sql[i + 1] === "-") {
+        const start = i;
+        i += 2;
+        while (i < sql.length && sql[i] !== "\n") i++;
+        tokens.push([start, i, "SQL_COMMENT", "NO_KEYWORD"]);
+      } else if (ch === "/" && sql[i + 1] === "*") {
+        const start = i;
+        i += 2;
+        while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/"))
+          i++;
+        if (i + 1 < sql.length) i += 2;
+        tokens.push([start, i, "C_COMMENT", "NO_KEYWORD"]);
+      } else if (ch === "'") {
+        i++;
+        while (i < sql.length) {
+          if (sql[i] === "'") {
+            if (sql[i + 1] === "'") i += 2;
+            else {
+              i++;
+              break;
+            }
+          } else i++;
+        }
+      } else if (ch === "$") {
+        let j = i + 1;
+        while (j < sql.length && /[a-zA-Z0-9_]/.test(sql[j])) j++;
+        if (j < sql.length && sql[j] === "$") {
+          const tag = sql.substring(i, j + 1);
+          i = j + 1;
+          const end = sql.indexOf(tag, i);
+          i = end >= 0 ? end + tag.length : sql.length;
+        } else i++;
+      } else if (ch === ";") {
+        tokens.push([i, i + 1, "ASCII_59", "NO_KEYWORD"]);
+        i++;
+      } else {
+        i++;
+      }
     }
-    return { tokens };
+    return { result: JSON.stringify(tokens) };
   } catch (err) {
     return { error: err.toString() };
   }
@@ -77,7 +114,12 @@ onmessage = (e) => {
       postMessage({ type: "result", id, error: "printer crashed" });
       return;
     }
-    postMessage({ type: "result", id, result: result.result, error: result.error });
+    postMessage({
+      type: "result",
+      id,
+      result: result.result,
+      error: result.error,
+    });
   } catch (err) {
     postMessage({ type: "result", id, error: err.toString() });
   }

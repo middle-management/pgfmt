@@ -3,6 +3,7 @@
 package printer
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"syscall/js"
@@ -43,17 +44,23 @@ func pgScan(input string) (*pg_query.ScanResult, error) {
 	if errStr := res.Get("error").String(); errStr != "" && errStr != "<undefined>" {
 		return nil, errors.New(errStr)
 	}
-	// Build ScanResult from JS scan tokens.
-	tokens := res.Get("tokens")
-	length := tokens.Length()
+	// Parse JSON array of [start, end, token_kind, keyword_kind] tuples.
+	jsonStr := res.Get("result").String()
+	var rawTokens [][4]any
+	if err := json.Unmarshal([]byte(jsonStr), &rawTokens); err != nil {
+		return nil, err
+	}
 	scanResult := &pg_query.ScanResult{}
-	for i := 0; i < length; i++ {
-		tok := tokens.Index(i)
+	for _, t := range rawTokens {
+		start, _ := t[0].(float64)
+		end, _ := t[1].(float64)
+		tokenKind, _ := t[2].(string)
+		keywordKind, _ := t[3].(string)
 		scanResult.Tokens = append(scanResult.Tokens, &pg_query.ScanToken{
-			Start:   int32(tok.Get("start").Int()),
-			End:     int32(tok.Get("end").Int()),
-			Token:       pg_query.Token(tokenKindToEnum(tok.Get("token_kind").String())),
-			KeywordKind: pg_query.KeywordKind(keywordKindToEnum(tok.Get("keyword_kind").String())),
+			Start:       int32(start),
+			End:         int32(end),
+			Token:       pg_query.Token(tokenKindToEnum(tokenKind)),
+			KeywordKind: pg_query.KeywordKind(keywordKindToEnum(keywordKind)),
 		})
 	}
 	return scanResult, nil
