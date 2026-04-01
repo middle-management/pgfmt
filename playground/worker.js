@@ -17,7 +17,6 @@ globalThis.onPgfmtWarn = (msg) => console.warn("[pgfmt]", msg);
 
 // Expose parsing to Go via JS callbacks.
 globalThis.pgfmtParse = (sql) => {
-  // Guard against Emscripten ALLOC_STACK overflow on very large statements.
   if (sql.length > 100000) {
     return { error: "statement too large for browser parsing" };
   }
@@ -86,21 +85,12 @@ globalThis.pgfmtScan = (sql) => {
   }
 };
 
-globalThis.pgfmtParsePlPgSQL = (sql) => {
-  // Skip PL/pgSQL parsing for very large functions to avoid Emscripten
-  // ALLOC_STACK overflow which hangs instead of crashing.
-  if (sql.length > 50000) {
-    return { error: "function body too large for browser PL/pgSQL parsing" };
-  }
-  try {
-    const result = pgQuery.parsePlpgsql(sql);
-    if (result.error) {
-      return { error: result.error.message || String(result.error) };
-    }
-    return { result: JSON.stringify(result.plpgsql_funcs) };
-  } catch (err) {
-    return { error: err.toString() };
-  }
+// PL/pgSQL body parsing is disabled in the playground. Emscripten's
+// setjmp/longjmp handling corrupts state after repeated parsePlpgsql
+// calls, causing hangs or crashes on schemas with many functions.
+// Function signatures are still formatted; only $$ bodies pass through.
+globalThis.pgfmtParsePlPgSQL = () => {
+  return { error: "plpgsql body formatting disabled in playground" };
 };
 
 // Load pg-query-emscripten.
@@ -176,38 +166,29 @@ onmessage = (e) => {
       return;
     }
 
-    // For large inputs, format each statement separately with yields
-    // between batches so the browser stays responsive.
-    const parts = [];
-    const batchSize = 10;
-    function formatBatch(start) {
-      const end = Math.min(start + batchSize, stmts.length);
-      for (let i = start; i < end; i++) {
-        try {
-          const result = pgfmtFormat(stmts[i]);
-          if (result === undefined) {
-            // Printer crashed — skip this statement, use raw text
-            parts.push(stmts[i].trim() + "\n\n");
-            continue;
-          }
-          if (result.error) {
-            // Parse/format error — use raw text fallback
-            parts.push(stmts[i].trim() + "\n\n");
-            continue;
-          }
-          parts.push(result.result);
-        } catch (err) {
-          // Emscripten crash — use raw text fallback
-          parts.push(stmts[i].trim() + "\n\n");
-        }
+    // Parse the entire input in a single pgQuery.parse() call, then
+    // send the pre-parsed result to Go for formatting. This avoids
+    // repeated Emscripten parse calls which degrade over time.
+    try {
+      const parsed = pgQuery.parse(sql);
+      if (parsed.error) {
+        postMessage({ type: "result", id, error: parsed.error.message });
+        return;
       }
-      if (end < stmts.length) {
-        setTimeout(() => formatBatch(end), 0);
-      } else {
-        postMessage({ type: "result", id, result: parts.join("") });
+      const scanned = pgfmtScan(sql);
+      const result = pgfmtFormatParsed(
+        JSON.stringify(parsed.parse_tree),
+        scanned.result,
+        sql,
+      );
+      if (result === undefined) {
+        postMessage({ type: "result", id, error: "printer crashed" });
+        return;
       }
+      postMessage({ type: "result", id, result: result.result, error: result.error });
+    } catch (err) {
+      postMessage({ type: "result", id, error: err.toString() });
     }
-    formatBatch(0);
   } catch (err) {
     postMessage({ type: "result", id, error: err.toString() });
   }
