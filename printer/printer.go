@@ -2241,6 +2241,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			}
 			if start >= 0 && int(end) <= len(output.OriginalSQL) {
 				raw := strings.TrimRight(output.OriginalSQL[start:end], "; \t\n")
+				warn("unsupported node %T, using original SQL", n)
 				output.Builder.WriteString(raw)
 				return
 			}
@@ -2724,7 +2725,7 @@ func (output *Printer) writeAlias(a *pg_query.Alias) {
 func (output *Printer) formatSQLBody(body string, indentLevel int) {
 	result, err := pgParse(body)
 	if err != nil {
-		// If we can't parse it, emit raw
+		warn("failed to parse SQL function body: %v", err)
 		output.Builder.WriteString(body)
 		return
 	}
