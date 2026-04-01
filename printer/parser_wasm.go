@@ -125,6 +125,15 @@ var (
 
 func newABI() *wasmABI {
 	ctx := context.Background()
+	ctx = experimental.WithMemoryAllocator(ctx, experimental.MemoryAllocatorFunc(func(cap, max uint64) experimental.LinearMemory {
+		// Cap maximum at 256MB to avoid OOM in js/wasm environments where
+		// the default 4GB max causes runtime.makeslice to fail.
+		const maxCap = 256 << 20
+		if max > maxCap {
+			max = maxCap
+		}
+		return &sliceBuffer{buf: make([]byte, 0, cap), max: max}
+	}))
 
 	rt, code := newRT()
 	// Use io.Discard instead of os.Stdout/os.Stderr to avoid stat /dev/stdout
@@ -425,4 +434,29 @@ func readCStringPtr(mem api.Memory, ptrptr uint32) string {
 	}
 	return string(buf)
 }
+
+// sliceBuffer is a memory allocator for wazero that pre-allocates at max
+// capacity to avoid reallocations. Moving the backing array would panic
+// with "shared memory cannot move" when wazero holds slices into it.
+type sliceBuffer struct {
+	buf []byte
+	max uint64
+}
+
+func (b *sliceBuffer) Reallocate(size uint64) []byte {
+	if size > b.max {
+		return nil
+	}
+	if uint64(cap(b.buf)) >= size {
+		b.buf = b.buf[:size]
+		return b.buf
+	}
+	// Allocate at max capacity so the buffer never needs to move.
+	newBuf := make([]byte, size, b.max)
+	copy(newBuf, b.buf)
+	b.buf = newBuf
+	return b.buf
+}
+
+func (b *sliceBuffer) Free() {}
 
