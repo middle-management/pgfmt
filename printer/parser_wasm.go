@@ -4,12 +4,14 @@ package printer
 
 import (
 	"bytes"
+	"container/list"
 	"context"
 	"embed"
 	"encoding/binary"
 	"errors"
 	"io"
 	"runtime"
+	"sync"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/tetratelabs/wazero"
@@ -174,8 +176,21 @@ func newABI() *wasmABI {
 	return res
 }
 
+var (
+	abiPool   = list.New()
+	abiPoolMu sync.Mutex
+)
+
 func getABI() *wasmABI {
-	return newABI()
+	abiPoolMu.Lock()
+	e := abiPool.Front()
+	if e == nil {
+		abiPoolMu.Unlock()
+		return newABI()
+	}
+	abiPool.Remove(e)
+	abiPoolMu.Unlock()
+	return e.Value.(*wasmABI)
 }
 
 type wasmABI struct {
@@ -198,10 +213,9 @@ type wasmABI struct {
 }
 
 func (a *wasmABI) release() {
-	// Close the wazero runtime instead of pooling. Reusing ABI instances
-	// causes inner WASM memory to accumulate (allocator fragmentation in
-	// libpg_query), eventually hitting the memory cap.
-	a.rt.Close(context.Background())
+	abiPoolMu.Lock()
+	abiPool.PushBack(a)
+	abiPoolMu.Unlock()
 }
 
 func (a *wasmABI) pgQueryInit() {
