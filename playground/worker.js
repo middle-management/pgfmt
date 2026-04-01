@@ -12,6 +12,9 @@ globalThis.onPgfmtReady = () => {
   if (pgQuery) postMessage({ type: "ready" });
 };
 
+// Forward warnings from Go printer to console.
+globalThis.onPgfmtWarn = (msg) => console.warn("[pgfmt]", msg);
+
 // Expose PL/pgSQL parsing to Go printer via JS callback.
 globalThis.pgfmtParsePlPgSQL = (sql) => {
   try {
