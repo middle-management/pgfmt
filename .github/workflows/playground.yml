@@ -42,12 +42,6 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies and build pg_query_lib.js
-        working-directory: playground
-        run: |
-          npm ci
-          sed 's/export default pgQuery;//' node_modules/pg-query-emscripten/pg_query_wasm.js > pg_query_lib.js
-
       - name: Install Playwright
         working-directory: playground
         run: npx playwright install --with-deps chromium

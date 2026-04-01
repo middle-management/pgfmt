@@ -203,7 +203,7 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
   let nextId = 0;
   const pending = new Map();
 
-  const worker = new Worker('worker.js');
+  const worker = new Worker('worker.js', { type: 'module' });
 
   worker.onmessage = function(e) {
     const msg = e.data;
