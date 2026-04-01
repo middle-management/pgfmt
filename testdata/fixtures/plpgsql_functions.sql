@@ -103,6 +103,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Non-plpgsql language should preserve raw body
+CREATE FUNCTION test_py() RETURNS void AS $$
+import sys
+print("hello")
+$$ LANGUAGE plpython3u;
+
 -- Function with RETURN QUERY
 CREATE FUNCTION get_active_users() RETURNS SETOF record AS $$
 BEGIN
