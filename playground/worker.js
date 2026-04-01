@@ -36,6 +36,7 @@ var result = await WebAssembly.instantiateStreaming(
 );
 go.run(result.instance);
 
+// biome-ignore lint/suspicious/noGlobalAssign: we want it
 onmessage = (e) => {
   var id = e.data.id;
   try {
