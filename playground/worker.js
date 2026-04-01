@@ -1,39 +1,15 @@
-// Web Worker that loads pg-query-emscripten for parsing and TinyGo WASM for printing.
+// Web Worker: pg-query-emscripten parses SQL, Go WASM prints it.
 importScripts("wasm_exec.js");
 
 var pgQuery;
 var printerReady = false;
 
-// Called by TinyGo WASM when the printer is loaded.
 onPgfmtReady = function () {
   printerReady = true;
-  checkReady();
+  if (pgQuery) postMessage({ type: "ready" });
 };
 
-function checkReady() {
-  if (pgQuery && printerReady) {
-    postMessage({ type: "ready" });
-  }
-}
-
-// Initialize pg-query-emscripten.
-(async function () {
-  importScripts("pg_query_lib.js");
-  pgQuery = await new pgQuery();
-  checkReady();
-})();
-
-// Load TinyGo WASM printer.
-(async function () {
-  const go = new Go();
-  const result = await WebAssembly.instantiateStreaming(
-    fetch("pgfmt.wasm"),
-    go.importObject
-  );
-  go.run(result.instance);
-})();
-
-// Expose PL/pgSQL parsing to Go via JS callback.
+// Expose PL/pgSQL parsing to Go printer via JS callback.
 pgfmtParsePlPgSQL = function (sql) {
   try {
     var result = pgQuery.parsePlpgsql(sql);
@@ -46,110 +22,40 @@ pgfmtParsePlPgSQL = function (sql) {
   }
 };
 
-// Split SQL on top-level semicolons, handling strings, dollar-quotes, comments.
-function splitStatements(sql) {
-  var stmts = [];
-  var start = 0;
-  var i = 0;
-  while (i < sql.length) {
-    var ch = sql[i];
-    if (ch === "-" && sql[i + 1] === "-") {
-      i += 2;
-      while (i < sql.length && sql[i] !== "\n") i++;
-    } else if (ch === "/" && sql[i + 1] === "*") {
-      i += 2;
-      while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/"))
-        i++;
-      if (i + 1 < sql.length) i += 2;
-    } else if (ch === "'") {
-      i++;
-      while (i < sql.length) {
-        if (sql[i] === "'") {
-          if (sql[i + 1] === "'") {
-            i += 2;
-          } else {
-            i++;
-            break;
-          }
-        } else {
-          i++;
-        }
-      }
-    } else if (ch === "$") {
-      var j = i + 1;
-      while (j < sql.length && /[a-zA-Z0-9_]/.test(sql[j])) j++;
-      if (j < sql.length && sql[j] === "$") {
-        var tag = sql.substring(i, j + 1);
-        i = j + 1;
-        var end = sql.indexOf(tag, i);
-        i = end >= 0 ? end + tag.length : sql.length;
-      } else {
-        i++;
-      }
-    } else if (ch === ";") {
-      var stmt = sql.substring(start, i + 1).trim();
-      if (stmt && stmt !== ";") stmts.push(sql.substring(start, i + 1));
-      start = i + 1;
-      i++;
-    } else {
-      i++;
-    }
-  }
-  if (start < sql.length) {
-    var trailing = sql.substring(start).trim();
-    if (trailing) stmts.push(sql.substring(start));
-  }
-  return stmts;
-}
+// Load pg-query-emscripten (Emscripten-compiled libpg_query).
+(async function () {
+  importScripts("pg_query_lib.js");
+  pgQuery = await new pgQuery();
+  if (printerReady) postMessage({ type: "ready" });
+})();
+
+// Load Go WASM (printer only).
+(async function () {
+  var go = new Go();
+  var result = await WebAssembly.instantiateStreaming(
+    fetch("pgfmt.wasm"),
+    go.importObject
+  );
+  go.run(result.instance);
+})();
 
 onmessage = function (e) {
   var id = e.data.id;
-  var sql = e.data.sql;
   try {
-    var stmts = splitStatements(sql);
-    var batchSize = 50;
-
-    function formatBatch(start, parts) {
-      var end = Math.min(start + batchSize, stmts.length);
-      for (var i = start; i < end; i++) {
-        // Parse with pg-query-emscripten.
-        var parsed = pgQuery.parse(stmts[i]);
-        if (parsed.error) {
-          postMessage({
-            type: "result",
-            id: id,
-            error: parsed.error.message || String(parsed.error),
-          });
-          return;
-        }
-
-        // Print with Go WASM. Pass the parse tree as JSON string.
-        var parseJSON = JSON.stringify(parsed.parse_tree);
-        var printed = pgfmtPrintParseResult(parseJSON);
-        if (printed === undefined) {
-          postMessage({
-            type: "result",
-            id: id,
-            error: "printer crashed",
-          });
-          return;
-        }
-        if (printed.error) {
-          postMessage({ type: "result", id: id, error: printed.error });
-          return;
-        }
-        parts.push(printed.result);
-      }
-      if (end < stmts.length) {
-        setTimeout(function () {
-          formatBatch(end, parts);
-        }, 0);
-      } else {
-        postMessage({ type: "result", id: id, result: parts.join("") });
-      }
+    // Parse SQL with pg-query-emscripten.
+    var parsed = pgQuery.parse(e.data.sql);
+    if (parsed.error) {
+      postMessage({ type: "result", id: id, error: parsed.error.message });
+      return;
     }
 
-    formatBatch(0, []);
+    // Format with Go WASM printer.
+    var printed = pgfmtPrintParseResult(JSON.stringify(parsed.parse_tree));
+    if (printed === undefined) {
+      postMessage({ type: "result", id: id, error: "printer crashed" });
+      return;
+    }
+    postMessage({ type: "result", id: id, result: printed.result, error: printed.error });
   } catch (err) {
     postMessage({ type: "result", id: id, error: err.toString() });
   }

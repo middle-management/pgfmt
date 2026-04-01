@@ -214,10 +214,6 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
       formatBtn.disabled = false;
       return;
     }
-    if (msg.type === 'warn') {
-      console.warn('[pgfmt]', msg.message);
-      return;
-    }
     if (msg.type === 'result') {
       const p = pending.get(msg.id);
       if (p) {
