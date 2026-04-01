@@ -1,14 +1,29 @@
-// Web Worker that loads Go WASM and runs pgfmt off the main thread.
+// Web Worker that loads pg-query-emscripten for parsing and TinyGo WASM for printing.
 importScripts("wasm_exec.js");
 
+var pgQuery;
+var printerReady = false;
+
+// Called by TinyGo WASM when the printer is loaded.
 onPgfmtReady = function () {
-  postMessage({ type: "ready" });
+  printerReady = true;
+  checkReady();
 };
 
-onPgfmtWarn = function (msg) {
-  postMessage({ type: "warn", message: msg });
-};
+function checkReady() {
+  if (pgQuery && printerReady) {
+    postMessage({ type: "ready" });
+  }
+}
 
+// Initialize pg-query-emscripten.
+(async function () {
+  importScripts("pg_query_lib.js");
+  pgQuery = await new pgQuery();
+  checkReady();
+})();
+
+// Load TinyGo WASM printer.
 (async function () {
   const go = new Go();
   const result = await WebAssembly.instantiateStreaming(
@@ -18,8 +33,20 @@ onPgfmtWarn = function (msg) {
   go.run(result.instance);
 })();
 
-// Split SQL on top-level semicolons, skipping semicolons inside string
-// literals, dollar-quoted strings, and comments.
+// Expose PL/pgSQL parsing to Go via JS callback.
+pgfmtParsePlPgSQL = function (sql) {
+  try {
+    var result = pgQuery.parsePlpgsql(sql);
+    if (result.error) {
+      return { error: result.error.message || String(result.error) };
+    }
+    return { result: JSON.stringify(result.plpgsql_funcs) };
+  } catch (err) {
+    return { error: err.toString() };
+  }
+};
+
+// Split SQL on top-level semicolons, handling strings, dollar-quotes, comments.
 function splitStatements(sql) {
   var stmts = [];
   var start = 0;
@@ -27,17 +54,14 @@ function splitStatements(sql) {
   while (i < sql.length) {
     var ch = sql[i];
     if (ch === "-" && sql[i + 1] === "-") {
-      // single-line comment
       i += 2;
       while (i < sql.length && sql[i] !== "\n") i++;
     } else if (ch === "/" && sql[i + 1] === "*") {
-      // block comment
       i += 2;
       while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/"))
         i++;
       if (i + 1 < sql.length) i += 2;
     } else if (ch === "'") {
-      // string literal
       i++;
       while (i < sql.length) {
         if (sql[i] === "'") {
@@ -52,7 +76,6 @@ function splitStatements(sql) {
         }
       }
     } else if (ch === "$") {
-      // dollar-quoted string
       var j = i + 1;
       while (j < sql.length && /[a-zA-Z0-9_]/.test(sql[j])) j++;
       if (j < sql.length && sql[j] === "$") {
@@ -84,36 +107,49 @@ onmessage = function (e) {
   var sql = e.data.sql;
   try {
     var stmts = splitStatements(sql);
-    if (stmts.length <= 1) {
-      var res = pgfmtFormat(sql);
-      postMessage({ type: "result", id: id, result: res.result, error: res.error });
-      return;
-    }
-    // Format statements in batches, yielding between batches so the
-    // Go GC can run (js/wasm GC can't run during synchronous callbacks).
-    var parts = [];
     var batchSize = 50;
-    function formatBatch(start) {
+
+    function formatBatch(start, parts) {
       var end = Math.min(start + batchSize, stmts.length);
       for (var i = start; i < end; i++) {
-        var res = pgfmtFormat(stmts[i]);
-        if (res === undefined) {
-          postMessage({ type: "result", id: id, error: "internal error: formatter crashed" });
+        // Parse with pg-query-emscripten.
+        var parsed = pgQuery.parse(stmts[i]);
+        if (parsed.error) {
+          postMessage({
+            type: "result",
+            id: id,
+            error: parsed.error.message || String(parsed.error),
+          });
           return;
         }
-        if (res.error) {
-          postMessage({ type: "result", id: id, error: res.error });
+
+        // Print with Go WASM. Pass the parse tree as JSON string.
+        var parseJSON = JSON.stringify(parsed.parse_tree);
+        var printed = pgfmtPrintParseResult(parseJSON);
+        if (printed === undefined) {
+          postMessage({
+            type: "result",
+            id: id,
+            error: "printer crashed",
+          });
           return;
         }
-        parts.push(res.result);
+        if (printed.error) {
+          postMessage({ type: "result", id: id, error: printed.error });
+          return;
+        }
+        parts.push(printed.result);
       }
       if (end < stmts.length) {
-        setTimeout(function () { formatBatch(end); }, 0);
+        setTimeout(function () {
+          formatBatch(end, parts);
+        }, 0);
       } else {
         postMessage({ type: "result", id: id, result: parts.join("") });
       }
     }
-    formatBatch(0);
+
+    formatBatch(0, []);
   } catch (err) {
     postMessage({ type: "result", id: id, error: err.toString() });
   }

@@ -6,5 +6,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0"
+  },
+  "dependencies": {
+    "pg-query-emscripten": "^5.1.0"
   }
 }
