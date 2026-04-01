@@ -107,6 +107,10 @@ func nodeLocation(node *pg_query.Node) int32 {
 		return n.GroupingFunc.GetLocation()
 	case *pg_query.Node_SetToDefault:
 		return n.SetToDefault.GetLocation()
+	case *pg_query.Node_AArrayExpr:
+		return n.AArrayExpr.GetLocation()
+	case *pg_query.Node_RowExpr:
+		return n.RowExpr.GetLocation()
 	default:
 		return -1
 	}
@@ -1101,6 +1105,13 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.AlterTableType_AT_ChangeOwner:
 			output.Builder.WriteString("OWNER TO ")
 			output.writeNode(n.AlterTableCmd.Def)
+		case pg_query.AlterTableType_AT_AddIdentity:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(" ADD ")
+			output.writeNode(n.AlterTableCmd.Def)
+		case pg_query.AlterTableType_AT_EnableRowSecurity:
+			output.Builder.WriteString("ENABLE ROW LEVEL SECURITY")
 		default:
 			warn("unsupported alter table cmd: %s", n.AlterTableCmd.Subtype.String())
 		}
@@ -1667,10 +1678,19 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("TRIGGER ")
 		case pg_query.ObjectType_OBJECT_EXTENSION:
 			output.Builder.WriteString("EXTENSION ")
+		case pg_query.ObjectType_OBJECT_TABCONSTRAINT:
+			output.Builder.WriteString("CONSTRAINT ")
 		default:
 			warn("unsupported comment object type: %s", n.CommentStmt.Objtype.String())
 		}
-		if l := n.CommentStmt.Object.GetList(); l != nil {
+		if n.CommentStmt.Objtype == pg_query.ObjectType_OBJECT_TABCONSTRAINT {
+			// COMMENT ON CONSTRAINT constraint_name ON table_name
+			if l := n.CommentStmt.Object.GetList(); l != nil && len(l.Items) == 2 {
+				output.writeNode(l.Items[1]) // constraint name
+				output.Builder.WriteString(" ON ")
+				output.writeNode(l.Items[0]) // table name
+			}
+		} else if l := n.CommentStmt.Object.GetList(); l != nil {
 			output.writeListWithSeparator(l.Items, ".")
 		} else {
 			output.writeNode(n.CommentStmt.Object)
@@ -2100,6 +2120,50 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(" IS DOCUMENT")
 		default:
 			warn("unsupported xml expr op: %s", n.XmlExpr.Op.String())
+		}
+
+	case *pg_query.Node_AArrayExpr:
+		output.Builder.WriteString("ARRAY[")
+		output.writeCommaSeparatedList(n.AArrayExpr.Elements)
+		output.Builder.WriteString("]")
+
+	case *pg_query.Node_AIndirection:
+		// Parentheses are needed around the arg when the first indirection
+		// element is a field access (String_), to distinguish from
+		// schema-qualified column references. Array subscripts don't need them.
+		needsParens := false
+		if len(n.AIndirection.Indirection) > 0 && n.AIndirection.Indirection[0].GetString_() != nil {
+			needsParens = true
+		}
+		if needsParens {
+			output.Builder.WriteString("(")
+		}
+		output.writeNode(n.AIndirection.Arg)
+		if needsParens {
+			output.Builder.WriteString(")")
+		}
+		output.writeOptIndirection(n.AIndirection.Indirection)
+
+	case *pg_query.Node_RowExpr:
+		if n.RowExpr.RowFormat == pg_query.CoercionForm_COERCE_EXPLICIT_CALL {
+			output.Builder.WriteString("ROW(")
+		} else {
+			output.Builder.WriteString("(")
+		}
+		output.writeCommaSeparatedList(n.RowExpr.Args)
+		output.Builder.WriteString(")")
+
+	case *pg_query.Node_ConstraintsSetStmt:
+		output.Builder.WriteString("SET CONSTRAINTS ")
+		if len(n.ConstraintsSetStmt.Constraints) == 0 {
+			output.Builder.WriteString("ALL")
+		} else {
+			output.writeCommaSeparatedList(n.ConstraintsSetStmt.Constraints)
+		}
+		if n.ConstraintsSetStmt.Deferred {
+			output.Builder.WriteString(" DEFERRED")
+		} else {
+			output.Builder.WriteString(" IMMEDIATE")
 		}
 
 	case nil:
@@ -2650,7 +2714,6 @@ func (output *Printer) writeOptIndirection(l []*pg_query.Node) {
 		} else {
 			warn("invalid indirection type")
 		}
-		output.writeNode(dn)
 	}
 }
 
