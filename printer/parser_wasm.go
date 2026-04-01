@@ -125,9 +125,6 @@ var (
 
 func newABI() *wasmABI {
 	ctx := context.Background()
-	ctx = experimental.WithMemoryAllocator(ctx, experimental.MemoryAllocatorFunc(func(cap, max uint64) experimental.LinearMemory {
-		return &sliceBuffer{buf: make([]byte, 0, cap), max: max}
-	}))
 
 	rt, code := newRT()
 	// Use io.Discard instead of os.Stdout/os.Stderr to avoid stat /dev/stdout
@@ -429,28 +426,3 @@ func readCStringPtr(mem api.Memory, ptrptr uint32) string {
 	return string(buf)
 }
 
-// sliceBuffer is a fixed-capacity memory allocator for wazero.
-// It allocates the full capacity upfront to avoid reallocations, which
-// would panic with "shared memory cannot move" when wazero has handed
-// out slices of the underlying buffer.
-type sliceBuffer struct {
-	buf []byte
-	max uint64
-}
-
-func (b *sliceBuffer) Reallocate(size uint64) []byte {
-	if size > b.max {
-		return nil
-	}
-	if uint64(cap(b.buf)) >= size {
-		b.buf = b.buf[:size]
-		return b.buf
-	}
-	// Allocate at max capacity so we never need to move the buffer.
-	newBuf := make([]byte, size, b.max)
-	copy(newBuf, b.buf)
-	b.buf = newBuf
-	return b.buf
-}
-
-func (b *sliceBuffer) Free() {}
