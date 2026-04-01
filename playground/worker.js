@@ -28,20 +28,50 @@ globalThis.pgfmtParse = (sql) => {
   }
 };
 
+// Scan SQL tokens in pure JS. We avoid pg-query-emscripten's scan() because
+// its Emscripten vector binding crashes on large inputs. The Go printer only
+// needs comment token positions and semicolons for statement splitting.
 globalThis.pgfmtScan = (sql) => {
   try {
-    const result = pgQuery.scan(sql);
-    if (result.error) {
-      return { error: result.error.message };
-    }
-    // Convert Emscripten vector to JSON string. Accessing Emscripten-bound
-    // C++ objects (VectorToken) can fail if the underlying memory is freed,
-    // so we serialize everything in one shot and pass as a string to Go.
-    const size = result.tokens.size();
-    const tokens = new Array(size);
-    for (let i = 0; i < size; i++) {
-      const t = result.tokens.get(i);
-      tokens[i] = [t.start, t.end, t.token_kind, t.keyword_kind];
+    const tokens = [];
+    let i = 0;
+    while (i < sql.length) {
+      const ch = sql[i];
+      if (ch === "-" && sql[i + 1] === "-") {
+        const start = i;
+        i += 2;
+        while (i < sql.length && sql[i] !== "\n") i++;
+        tokens.push([start, i, "SQL_COMMENT", "NO_KEYWORD"]);
+      } else if (ch === "/" && sql[i + 1] === "*") {
+        const start = i;
+        i += 2;
+        while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/"))
+          i++;
+        if (i + 1 < sql.length) i += 2;
+        tokens.push([start, i, "C_COMMENT", "NO_KEYWORD"]);
+      } else if (ch === "'") {
+        i++;
+        while (i < sql.length) {
+          if (sql[i] === "'") {
+            if (sql[i + 1] === "'") i += 2;
+            else { i++; break; }
+          } else i++;
+        }
+      } else if (ch === "$") {
+        let j = i + 1;
+        while (j < sql.length && /[a-zA-Z0-9_]/.test(sql[j])) j++;
+        if (j < sql.length && sql[j] === "$") {
+          const tag = sql.substring(i, j + 1);
+          i = j + 1;
+          const end = sql.indexOf(tag, i);
+          i = end >= 0 ? end + tag.length : sql.length;
+        } else i++;
+      } else if (ch === ";") {
+        tokens.push([i, i + 1, "ASCII_59", "NO_KEYWORD"]);
+        i++;
+      } else {
+        i++;
+      }
     }
     return { result: JSON.stringify(tokens) };
   } catch (err) {
