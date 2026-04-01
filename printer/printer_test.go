@@ -497,6 +497,70 @@ $$;`)
 	}
 }
 
+func TestAArrayExpr(t *testing.T) {
+	got := format(t, `SELECT ARRAY[1, 2, 3]`)
+	expected := "SELECT\n\tARRAY[1, 2, 3]"
+	if got != expected {
+		t.Errorf("expected:\n%s\ngot:\n%s", expected, got)
+	}
+}
+
+func TestAIndirection(t *testing.T) {
+	got := format(t, `SELECT (my_row).field_name`)
+	if !strings.Contains(got, "(my_row).field_name") {
+		t.Errorf("expected indirection with parens, got: %s", got)
+	}
+}
+
+func TestAIndirectionArraySubscript(t *testing.T) {
+	got := format(t, `SELECT arr[1]`)
+	if !strings.Contains(got, "arr[1]") {
+		t.Errorf("expected array subscript, got: %s", got)
+	}
+}
+
+func TestRowExpr(t *testing.T) {
+	got := format(t, `SELECT ROW(1, 2, 3)`)
+	if !strings.Contains(got, "ROW(1, 2, 3)") {
+		t.Errorf("expected ROW expression, got: %s", got)
+	}
+}
+
+func TestConstraintsSetStmt(t *testing.T) {
+	got := format(t, `SET CONSTRAINTS ALL DEFERRED`)
+	if got != "SET CONSTRAINTS ALL DEFERRED" {
+		t.Errorf("expected SET CONSTRAINTS ALL DEFERRED, got: %s", got)
+	}
+}
+
+func TestConstraintsSetStmtNamed(t *testing.T) {
+	got := format(t, `SET CONSTRAINTS my_fk IMMEDIATE`)
+	if got != "SET CONSTRAINTS my_fk IMMEDIATE" {
+		t.Errorf("expected SET CONSTRAINTS my_fk IMMEDIATE, got: %s", got)
+	}
+}
+
+func TestAlterTableAddIdentity(t *testing.T) {
+	got := format(t, `ALTER TABLE t ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY`)
+	if !strings.Contains(got, "ADD GENERATED ALWAYS AS IDENTITY") {
+		t.Errorf("expected ADD GENERATED ALWAYS AS IDENTITY, got: %s", got)
+	}
+}
+
+func TestAlterTableEnableRowSecurity(t *testing.T) {
+	got := format(t, `ALTER TABLE t ENABLE ROW LEVEL SECURITY`)
+	if !strings.Contains(got, "ENABLE ROW LEVEL SECURITY") {
+		t.Errorf("expected ENABLE ROW LEVEL SECURITY, got: %s", got)
+	}
+}
+
+func TestCommentOnConstraint(t *testing.T) {
+	got := format(t, `COMMENT ON CONSTRAINT my_constraint ON my_table IS 'hello'`)
+	if !strings.Contains(got, "CONSTRAINT my_constraint ON my_table") {
+		t.Errorf("expected COMMENT ON CONSTRAINT ... ON ..., got: %s", got)
+	}
+}
+
 func TestDoStatementSQL(t *testing.T) {
 	got := format(t, `DO LANGUAGE sql $$
   SELECT 1;
