@@ -66,3 +66,47 @@ SELECT DISTINCT
 FROM
 	users;
 
+-- IN with literal list
+SELECT
+	1
+WHERE
+	x IN (1, 2, 3);
+
+-- NOT IN with literal list
+SELECT
+	1
+WHERE
+	x NOT IN (1, 2, 3);
+
+-- NOT BETWEEN
+SELECT
+	1
+WHERE
+	x NOT BETWEEN 1 AND 10;
+
+-- NULLIF
+SELECT
+	NULLIF(a, b);
+
+-- IS DISTINCT FROM
+SELECT
+	1
+WHERE
+	a IS DISTINCT FROM b;
+
+-- ARRAY expression
+SELECT
+	ARRAY[1, 2, 3];
+
+-- Row field indirection
+SELECT
+	(my_row).field_name;
+
+-- Array subscript
+SELECT
+	arr[1];
+
+-- ROW expression
+SELECT
+	ROW(1, 2, 3);
+

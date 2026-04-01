@@ -19,6 +19,11 @@ BEGIN
 END
 $$;
 
+DO LANGUAGE sql $$
+	SELECT
+		1
+$$;
+
 DO $$
 DECLARE
 	source_trigger_row record;
