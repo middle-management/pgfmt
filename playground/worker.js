@@ -15,7 +15,36 @@ globalThis.onPgfmtReady = () => {
 // Forward warnings from Go printer to console.
 globalThis.onPgfmtWarn = (msg) => console.warn("[pgfmt]", msg);
 
-// Expose PL/pgSQL parsing to Go printer via JS callback.
+// Expose parsing to Go via JS callbacks.
+globalThis.pgfmtParse = (sql) => {
+  try {
+    const result = pgQuery.parse(sql);
+    if (result.error) {
+      return { error: result.error.message };
+    }
+    return { result: JSON.stringify(result.parse_tree) };
+  } catch (err) {
+    return { error: err.toString() };
+  }
+};
+
+globalThis.pgfmtScan = (sql) => {
+  try {
+    const result = pgQuery.scan(sql);
+    if (result.error) {
+      return { error: result.error.message };
+    }
+    // pg-query-emscripten returns an Emscripten vector, convert to plain array.
+    const tokens = [];
+    for (let i = 0; i < result.tokens.size(); i++) {
+      tokens.push(result.tokens.get(i));
+    }
+    return { tokens };
+  } catch (err) {
+    return { error: err.toString() };
+  }
+};
+
 globalThis.pgfmtParsePlPgSQL = (sql) => {
   try {
     const result = pgQuery.parsePlpgsql(sql);
@@ -32,34 +61,24 @@ globalThis.pgfmtParsePlPgSQL = (sql) => {
 pgQuery = await new pgQueryInit();
 if (printerReady) postMessage({ type: "ready" });
 
-var go = new globalThis.Go();
-var result = await WebAssembly.instantiateStreaming(
+// Load Go WASM printer.
+const go = new globalThis.Go();
+const { instance } = await WebAssembly.instantiateStreaming(
   fetch("pgfmt.wasm"),
   go.importObject,
 );
-go.run(result.instance);
+go.run(instance);
 
-// biome-ignore lint/suspicious/noGlobalAssign: we want it
 onmessage = (e) => {
-  var id = e.data.id;
+  const { id, sql } = e.data;
   try {
-    const parsed = pgQuery.parse(e.data.sql);
-    if (parsed.error) {
-      postMessage({ type: "result", id: id, error: parsed.error.message });
+    const result = pgfmtFormat(sql);
+    if (result === undefined) {
+      postMessage({ type: "result", id, error: "printer crashed" });
       return;
     }
-    const printed = pgfmtPrintParseResult(JSON.stringify(parsed.parse_tree));
-    if (printed === undefined) {
-      postMessage({ type: "result", id: id, error: "printer crashed" });
-      return;
-    }
-    postMessage({
-      type: "result",
-      id: id,
-      result: printed.result,
-      error: printed.error,
-    });
+    postMessage({ type: "result", id, result: result.result, error: result.error });
   } catch (err) {
-    postMessage({ type: "result", id: id, error: err.toString() });
+    postMessage({ type: "result", id, error: err.toString() });
   }
 };
