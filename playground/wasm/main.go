@@ -20,8 +20,7 @@ func format(_ js.Value, args []js.Value) (ret any) {
 	if len(args) < 1 {
 		return map[string]any{"error": "missing SQL argument"}
 	}
-	sql := args[0].String()
-	result, err := printer.Format(sql)
+	result, err := printer.Format(args[0].String())
 	if err != nil {
 		return map[string]any{"error": err.Error()}
 	}
@@ -34,15 +33,9 @@ func main() {
 
 	fmt.Printf("pgfmt %s\n", version)
 
-	// Pre-warm: run a trivial format so the expensive libpg_query WASM
-	// compilation happens during load, not on the first user action.
-	printer.Format("select 1")
-
-	// Signal that WASM is ready.
 	if cb := js.Global().Get("onPgfmtReady"); !cb.IsUndefined() {
 		cb.Invoke()
 	}
 
-	// Block forever.
 	select {}
 }

@@ -3,63 +3,76 @@
 package printer
 
 import (
-	"bytes"
-	"container/list"
-	"context"
-	"embed"
-	"encoding/binary"
 	"errors"
-	"io"
-	"runtime"
 	"strings"
-	"sync"
+	"syscall/js"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
-	"github.com/tetratelabs/wazero"
-	"github.com/tetratelabs/wazero/api"
-	"github.com/tetratelabs/wazero/experimental"
-	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
-//go:embed wasm/libpg_query.wasm
-var libPGQueryFS embed.FS
+// In the emscripten playground architecture, parsing is done in JavaScript
+// using pg-query-emscripten. These functions call back to JS and unmarshal
+// the JSON results into protobuf types.
 
-var (
-	errFailedWrite = errors.New("failed to write to wasm memory")
-	errFailedRead  = errors.New("failed to read from wasm memory")
-)
+var jsonOpts = protojson.UnmarshalOptions{DiscardUnknown: true}
 
 func pgParse(input string) (*pg_query.ParseResult, error) {
-	protobufTree, err := parseToProtobuf(input)
-	if err != nil {
+	fn := js.Global().Get("pgfmtParse")
+	if fn.IsUndefined() {
+		return nil, errors.New("pgfmtParse not defined in JS")
+	}
+	res := fn.Invoke(input)
+	if errStr := res.Get("error").String(); errStr != "" && errStr != "<undefined>" {
+		return nil, errors.New(errStr)
+	}
+	jsonStr := res.Get("result").String()
+	result := &pg_query.ParseResult{}
+	if err := jsonOpts.Unmarshal([]byte(jsonStr), result); err != nil {
 		return nil, err
 	}
-	tree := &pg_query.ParseResult{}
-	err = proto.Unmarshal(protobufTree, tree)
-	return tree, err
+	return result, nil
 }
 
 func pgScan(input string) (*pg_query.ScanResult, error) {
-	protobufScan, err := scanToProtobuf(input)
-	if err != nil {
-		return nil, err
+	fn := js.Global().Get("pgfmtScan")
+	if fn.IsUndefined() {
+		return nil, errors.New("pgfmtScan not defined in JS")
 	}
-	result := &pg_query.ScanResult{}
-	err = proto.Unmarshal(protobufScan, result)
-	return result, err
+	res := fn.Invoke(input)
+	if errStr := res.Get("error").String(); errStr != "" && errStr != "<undefined>" {
+		return nil, errors.New(errStr)
+	}
+	// Build ScanResult from JS scan tokens.
+	tokens := res.Get("tokens")
+	length := tokens.Length()
+	scanResult := &pg_query.ScanResult{}
+	for i := 0; i < length; i++ {
+		tok := tokens.Index(i)
+		scanResult.Tokens = append(scanResult.Tokens, &pg_query.ScanToken{
+			Start:   int32(tok.Get("start").Int()),
+			End:     int32(tok.Get("end").Int()),
+			Token:       pg_query.Token(tokenKindToEnum(tok.Get("token_kind").String())),
+			KeywordKind: pg_query.KeywordKind(keywordKindToEnum(tok.Get("keyword_kind").String())),
+		})
+	}
+	return scanResult, nil
 }
 
-func pgDeparse(result *pg_query.ParseResult) (string, error) {
-	protobuf, err := proto.Marshal(result)
-	if err != nil {
-		return "", err
+func pgParsePlPgSqlToJSON(input string) (string, error) {
+	fn := js.Global().Get("pgfmtParsePlPgSQL")
+	if fn.IsUndefined() {
+		return "", errors.New("pgfmtParsePlPgSQL not defined in JS")
 	}
+	result := fn.Invoke(input)
+	if errStr := result.Get("error").String(); errStr != "" && errStr != "<undefined>" {
+		return "", errors.New(errStr)
+	}
+	return result.Get("result").String(), nil
+}
 
-	a := getABI()
-	defer a.release()
-
-	return a.pgQueryDeparseProtobuf(protobuf)
+func pgDeparse(_ *pg_query.ParseResult) (string, error) {
+	return "", errors.New("pgDeparse not available in WASM")
 }
 
 func splitStatements(sql string) ([]string, error) {
@@ -79,421 +92,26 @@ func splitStatements(sql string) ([]string, error) {
 			start = int(tok.End)
 		}
 	}
-
 	if start < len(sql) {
 		trailing := sql[start:]
 		if strings.TrimSpace(trailing) != "" {
 			stmts = append(stmts, trailing)
 		}
 	}
-
 	return stmts, nil
 }
 
-func pgParsePlPgSqlToJSON(input string) (string, error) {
-	a := getABI()
-	defer a.release()
-
-	inputC := a.newCString(input)
-	defer inputC.close()
-
-	return a.pgQueryParsePlPgSqlToJSON(inputC)
+// tokenKindToEnum maps pg-query-emscripten token_kind strings to pg_query.Token enum values.
+func tokenKindToEnum(kind string) int32 {
+	if v, ok := pg_query.Token_value[kind]; ok {
+		return v
+	}
+	return 0
 }
 
-func parseToProtobuf(input string) ([]byte, error) {
-	a := getABI()
-	defer a.release()
-
-	inputC := a.newCString(input)
-	defer inputC.close()
-
-	return a.pgQueryParseProtobuf(inputC)
+func keywordKindToEnum(kind string) int32 {
+	if v, ok := pg_query.KeywordKind_value[kind]; ok {
+		return v
+	}
+	return 0
 }
-
-func scanToProtobuf(input string) ([]byte, error) {
-	a := getABI()
-	defer a.release()
-
-	inputC := a.newCString(input)
-	defer inputC.close()
-
-	return a.pgQueryScanProtobuf(inputC)
-}
-
-// wazero runtime and compiled module setup
-
-func newRT() (wazero.Runtime, wazero.CompiledModule) {
-	ctx := context.Background()
-
-	rt := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().
-		WithCompilationCache(wazero.NewCompilationCache()).
-		WithCoreFeatures(api.CoreFeaturesV2|experimental.CoreFeaturesThreads).
-		// Cap WASM memory to avoid OOM in js/wasm environments where the
-		// default 4GB max exceeds the Go heap limit.
-		WithMemoryLimitPages(wasmMemoryPages))
-
-	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
-	mustInstantiateWasix(ctx, rt)
-
-	wasmBytes, err := libPGQueryFS.ReadFile("wasm/libpg_query.wasm")
-	if err != nil {
-		panic(err)
-	}
-
-	code, err := rt.CompileModule(ctx, wasmBytes)
-	if err != nil {
-		panic(err)
-	}
-
-	return rt, code
-}
-
-
-func newABI() *wasmABI {
-	ctx := context.Background()
-	// Use a custom allocator that pre-allocates 64MB. The inner WASM module
-	// declares shared memory which prevents buffer relocation, so we must
-	// allocate enough upfront. 64MB handles most SQL inputs; larger ones
-	// will get a graceful error via recover().
-	ctx = experimental.WithMemoryAllocator(ctx, experimental.MemoryAllocatorFunc(func(cap, max uint64) experimental.LinearMemory {
-		const preallocCap = 64 << 20 // 64MB
-		if cap < preallocCap {
-			cap = preallocCap
-		}
-		if cap > max {
-			cap = max
-		}
-		return &fixedBuffer{buf: make([]byte, 0, cap), max: max}
-	}))
-
-	rt, code := newRT()
-	// Use io.Discard instead of os.Stdout/os.Stderr to avoid stat /dev/stdout
-	// which panics in js/wasm environments.
-	cfg := wazero.NewModuleConfig().
-		WithSysNanotime().
-		WithStdout(io.Discard).
-		WithStderr(io.Discard).
-		WithStartFunctions("_initialize")
-	mod, err := rt.InstantiateModule(ctx, code, cfg)
-	if err != nil {
-		panic(err)
-	}
-	res := &wasmABI{
-		fPgQueryInit:                    newLazyFunction(mod, "pg_query_init"),
-		fPgQueryParseProtobuf:           newLazyFunction(mod, "pg_query_parse_protobuf"),
-		fPgQueryFreeProtobufParseResult: newLazyFunction(mod, "pg_query_free_protobuf_parse_result"),
-		fPgQueryParsePlpgsql:            newLazyFunction(mod, "pg_query_parse_plpgsql"),
-		fPgQueryFreePlpgsqlParseResult:  newLazyFunction(mod, "pg_query_free_plpgsql_parse_result"),
-		fPgQueryScan:                    newLazyFunction(mod, "pg_query_scan"),
-		fPgQueryFreeScanResult:          newLazyFunction(mod, "pg_query_free_scan_result"),
-		fPgQueryDeparseProtobuf:         newLazyFunction(mod, "pg_query_deparse_protobuf"),
-		fPgQueryFreeDeparseResult:       newLazyFunction(mod, "pg_query_free_deparse_result"),
-
-		malloc: newLazyFunction(mod, "malloc"),
-		free:   newLazyFunction(mod, "free"),
-
-		mod:        mod,
-		wasmMemory: mod.Memory(),
-		rt:         rt,
-	}
-
-	res.pgQueryInit()
-	runtime.SetFinalizer(res, func(r *wasmABI) {
-		r.rt.Close(context.Background())
-	})
-
-	return res
-}
-
-var (
-	abiPool   = list.New()
-	abiPoolMu sync.Mutex
-)
-
-func getABI() *wasmABI {
-	abiPoolMu.Lock()
-	e := abiPool.Front()
-	if e == nil {
-		abiPoolMu.Unlock()
-		return newABI()
-	}
-	abiPool.Remove(e)
-	abiPoolMu.Unlock()
-	return e.Value.(*wasmABI)
-}
-
-type wasmABI struct {
-	fPgQueryInit                    lazyFunction
-	fPgQueryParseProtobuf           lazyFunction
-	fPgQueryFreeProtobufParseResult lazyFunction
-	fPgQueryParsePlpgsql            lazyFunction
-	fPgQueryFreePlpgsqlParseResult  lazyFunction
-	fPgQueryScan                    lazyFunction
-	fPgQueryFreeScanResult          lazyFunction
-	fPgQueryDeparseProtobuf         lazyFunction
-	fPgQueryFreeDeparseResult       lazyFunction
-
-	malloc lazyFunction
-	free   lazyFunction
-
-	wasmMemory api.Memory
-	mod        api.Module
-	rt         wazero.Runtime
-}
-
-func (a *wasmABI) release() {
-	abiPoolMu.Lock()
-	abiPool.PushBack(a)
-	abiPoolMu.Unlock()
-}
-
-func (a *wasmABI) pgQueryInit() {
-	a.fPgQueryInit.call0(context.Background())
-}
-
-func (a *wasmABI) pgQueryParseProtobuf(input cString) ([]byte, error) {
-	ctx := wasixBackgroundContext()
-
-	resPtr := a.malloc.call1(ctx, 16)
-	defer a.free.call1(ctx, resPtr)
-
-	a.fPgQueryParseProtobuf.call2(ctx, resPtr, uint64(input.ptr))
-	defer a.fPgQueryFreeProtobufParseResult.call1(ctx, resPtr)
-
-	resBuf, ok := a.wasmMemory.Read(uint32(resPtr), 16)
-	if !ok {
-		panic(errFailedRead)
-	}
-
-	errPtr := binary.LittleEndian.Uint32(resBuf[12:])
-	if errPtr != 0 {
-		return nil, newPgQueryError(a.mod, errPtr)
-	}
-
-	pgQueryProtobufLen := binary.LittleEndian.Uint32(resBuf)
-	pgQueryProtobufData := binary.LittleEndian.Uint32(resBuf[4:])
-
-	buf, ok := a.wasmMemory.Read(pgQueryProtobufData, pgQueryProtobufLen)
-	if !ok {
-		panic(errFailedRead)
-	}
-
-	return bytes.Clone(buf), nil
-}
-
-func (a *wasmABI) pgQueryScanProtobuf(input cString) ([]byte, error) {
-	ctx := wasixBackgroundContext()
-
-	resPtr := a.malloc.call1(ctx, 16)
-	defer a.free.call1(ctx, resPtr)
-
-	a.fPgQueryScan.call2(ctx, resPtr, uint64(input.ptr))
-	defer a.fPgQueryFreeScanResult.call1(ctx, resPtr)
-
-	resBuf, ok := a.wasmMemory.Read(uint32(resPtr), 16)
-	if !ok {
-		panic(errFailedRead)
-	}
-
-	errPtr := binary.LittleEndian.Uint32(resBuf[12:])
-	if errPtr != 0 {
-		return nil, newPgQueryError(a.mod, errPtr)
-	}
-
-	pgQueryProtobufLen := binary.LittleEndian.Uint32(resBuf)
-	pgQueryProtobufData := binary.LittleEndian.Uint32(resBuf[4:])
-
-	buf, ok := a.wasmMemory.Read(pgQueryProtobufData, pgQueryProtobufLen)
-	if !ok {
-		panic(errFailedRead)
-	}
-
-	return bytes.Clone(buf), nil
-}
-
-func (a *wasmABI) pgQueryDeparseProtobuf(protobuf []byte) (string, error) {
-	ctx := wasixBackgroundContext()
-
-	// Allocate and write the protobuf data into WASM memory
-	dataPtr := uint32(a.malloc.call1(ctx, uint64(len(protobuf))))
-	defer a.free.call1(ctx, uint64(dataPtr))
-	if !a.wasmMemory.Write(dataPtr, protobuf) {
-		panic(errFailedWrite)
-	}
-
-	// Allocate PgQueryProtobuf struct { uint32 len; uint32 data; }
-	pbStructPtr := uint32(a.malloc.call1(ctx, 8))
-	defer a.free.call1(ctx, uint64(pbStructPtr))
-	lenBuf := make([]byte, 4)
-	binary.LittleEndian.PutUint32(lenBuf, uint32(len(protobuf)))
-	if !a.wasmMemory.Write(pbStructPtr, lenBuf) {
-		panic(errFailedWrite)
-	}
-	ptrBuf := make([]byte, 4)
-	binary.LittleEndian.PutUint32(ptrBuf, dataPtr)
-	if !a.wasmMemory.Write(pbStructPtr+4, ptrBuf) {
-		panic(errFailedWrite)
-	}
-
-	// Allocate result struct { char *query; PgQueryError *error; }
-	resPtr := a.malloc.call1(ctx, 8)
-	defer a.free.call1(ctx, resPtr)
-
-	a.fPgQueryDeparseProtobuf.call2(ctx, resPtr, uint64(pbStructPtr))
-	defer a.fPgQueryFreeDeparseResult.call1(ctx, resPtr)
-
-	resBuf, ok := a.wasmMemory.Read(uint32(resPtr), 8)
-	if !ok {
-		panic(errFailedRead)
-	}
-
-	errPtr := binary.LittleEndian.Uint32(resBuf[4:])
-	if errPtr != 0 {
-		return "", newPgQueryError(a.mod, errPtr)
-	}
-
-	return readCStringPtr(a.wasmMemory, uint32(resPtr)), nil
-}
-
-func (a *wasmABI) pgQueryParsePlPgSqlToJSON(input cString) (string, error) {
-	ctx := wasixBackgroundContext()
-
-	resPtr := a.malloc.call1(ctx, 8)
-	defer a.free.call1(ctx, resPtr)
-
-	a.fPgQueryParsePlpgsql.call2(ctx, resPtr, uint64(input.ptr))
-	defer a.fPgQueryFreePlpgsqlParseResult.call1(ctx, resPtr)
-
-	resBuf, ok := a.wasmMemory.Read(uint32(resPtr), 8)
-	if !ok {
-		panic(errFailedRead)
-	}
-
-	errPtr := binary.LittleEndian.Uint32(resBuf[4:])
-	if errPtr != 0 {
-		return "", newPgQueryError(a.mod, errPtr)
-	}
-
-	return readCStringPtr(a.wasmMemory, uint32(resPtr)), nil
-}
-
-// cString helpers
-
-type cString struct {
-	ptr    uint32
-	length int
-	a      *wasmABI
-}
-
-func (a *wasmABI) newCString(s string) cString {
-	ptr := uint32(a.malloc.call1(context.Background(), uint64(len(s)+1)))
-	if !a.wasmMemory.WriteString(ptr, s) {
-		panic(errFailedWrite)
-	}
-	if !a.wasmMemory.WriteByte(ptr+uint32(len(s)), 0) {
-		panic(errFailedWrite)
-	}
-	return cString{ptr: ptr, length: len(s), a: a}
-}
-
-func (s cString) close() {
-	s.a.free.call1(context.Background(), uint64(s.ptr))
-}
-
-// lazy function wrapper
-
-type lazyFunction struct {
-	f    api.Function
-	name string
-	mod  api.Module
-}
-
-func newLazyFunction(mod api.Module, name string) lazyFunction {
-	return lazyFunction{mod: mod, name: name}
-}
-
-func (f *lazyFunction) call0(ctx context.Context) uint64 {
-	var callStack [1]uint64
-	return f.callWithStack(ctx, callStack[:])
-}
-
-func (f *lazyFunction) call1(ctx context.Context, arg1 uint64) uint64 {
-	var callStack [1]uint64
-	callStack[0] = arg1
-	return f.callWithStack(ctx, callStack[:])
-}
-
-func (f *lazyFunction) call2(ctx context.Context, arg1 uint64, arg2 uint64) uint64 {
-	var callStack [2]uint64
-	callStack[0] = arg1
-	callStack[1] = arg2
-	return f.callWithStack(ctx, callStack[:])
-}
-
-func (f *lazyFunction) callWithStack(ctx context.Context, callStack []uint64) uint64 {
-	if f.f == nil {
-		f.f = f.mod.ExportedFunction(f.name)
-	}
-	if err := f.f.CallWithStack(ctx, callStack); err != nil {
-		panic(err)
-	}
-	return callStack[0]
-}
-
-// error and string helpers
-
-func newPgQueryError(mod api.Module, errPtr uint32) error {
-	message := readCStringPtr(mod.Memory(), errPtr)
-	return errors.New(message)
-}
-
-func readCStringPtr(mem api.Memory, ptrptr uint32) string {
-	ptr, ok := mem.ReadUint32Le(ptrptr)
-	if !ok {
-		panic(errFailedRead)
-	}
-	if ptr == 0 {
-		return ""
-	}
-	endPtr := ptr
-	for {
-		if b, ok := mem.ReadByte(endPtr); !ok {
-			panic(errFailedRead)
-		} else if b == 0 {
-			break
-		}
-		endPtr++
-	}
-	buf, ok := mem.Read(ptr, endPtr-ptr)
-	if !ok {
-		panic(errFailedRead)
-	}
-	return string(buf)
-}
-
-const wasmMemoryPages = 2048 // 128MB (each page = 64KB)
-
-// fixedBuffer is a memory allocator for wazero that refuses to move.
-// The inner WASM module uses shared memory, which requires the backing
-// buffer to never be relocated. We pre-allocate enough capacity upfront
-// and return nil if a grow would exceed it.
-type fixedBuffer struct {
-	buf []byte
-	max uint64
-}
-
-func (b *fixedBuffer) Reallocate(size uint64) []byte {
-	if size > b.max {
-		return nil
-	}
-	if uint64(cap(b.buf)) >= size {
-		b.buf = b.buf[:size]
-		return b.buf
-	}
-	// Can't move — return nil to signal allocation failure.
-	return nil
-}
-
-func (b *fixedBuffer) Free() {}
-
-

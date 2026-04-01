@@ -4,6 +4,5 @@ go 1.23
 
 require (
 	github.com/pganalyze/pg_query_go/v6 v6.2.2
-	github.com/tetratelabs/wazero v1.9.0
 	google.golang.org/protobuf v1.36.10
 )

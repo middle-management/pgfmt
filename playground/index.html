@@ -1,303 +1,351 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>pgfmt playground</title>
-<style>
-  :root {
-    --bg: #1e1e2e;
-    --surface: #181825;
-    --border: #313244;
-    --text: #cdd6f4;
-    --subtext: #a6adc8;
-    --accent: #89b4fa;
-    --green: #a6e3a1;
-    --red: #f38ba8;
-    --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, monospace;
-  }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>pgfmt playground</title>
+        <style>
+            :root {
+                --bg: #1e1e2e;
+                --surface: #181825;
+                --border: #313244;
+                --text: #cdd6f4;
+                --subtext: #a6adc8;
+                --accent: #89b4fa;
+                --green: #a6e3a1;
+                --red: #f38ba8;
+                --font-mono:
+                    "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono",
+                    Menlo, monospace;
+            }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
 
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    sans-serif;
+                background: var(--bg);
+                color: var(--text);
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+            }
 
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 20px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
+            header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 12px 20px;
+                border-bottom: 1px solid var(--border);
+                flex-shrink: 0;
+            }
 
-  header h1 {
-    font-size: 18px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-  }
+            header h1 {
+                font-size: 18px;
+                font-weight: 600;
+                letter-spacing: -0.02em;
+            }
 
-  header h1 span { color: var(--accent); }
+            header h1 span {
+                color: var(--accent);
+            }
 
-  .status {
-    font-size: 13px;
-    color: var(--subtext);
-  }
-  .status.ready { color: var(--green); }
-  .status.error { color: var(--red); }
+            .status {
+                font-size: 13px;
+                color: var(--subtext);
+            }
+            .status.ready {
+                color: var(--green);
+            }
+            .status.error {
+                color: var(--red);
+            }
 
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 20px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
+            .toolbar {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 20px;
+                border-bottom: 1px solid var(--border);
+                flex-shrink: 0;
+            }
 
-  button {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    padding: 6px 16px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity 0.15s;
-  }
-  button:hover { opacity: 0.85; }
-  button:disabled { opacity: 0.4; cursor: not-allowed; }
+            button {
+                background: var(--accent);
+                color: var(--bg);
+                border: none;
+                padding: 6px 16px;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: opacity 0.15s;
+            }
+            button:hover {
+                opacity: 0.85;
+            }
+            button:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
 
-  .btn-secondary {
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border);
-  }
+            .btn-secondary {
+                background: var(--surface);
+                color: var(--text);
+                border: 1px solid var(--border);
+            }
 
-  .editor-wrap {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-  }
+            .editor-wrap {
+                display: flex;
+                flex: 1;
+                min-height: 0;
+            }
 
-  .pane {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
+            .pane {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
 
-  .pane + .pane { border-left: 1px solid var(--border); }
+            .pane + .pane {
+                border-left: 1px solid var(--border);
+            }
 
-  .pane-header {
-    padding: 8px 16px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--subtext);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
+            .pane-header {
+                padding: 8px 16px;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                color: var(--subtext);
+                border-bottom: 1px solid var(--border);
+                flex-shrink: 0;
+            }
 
-  textarea, .output {
-    flex: 1;
-    background: var(--surface);
-    color: var(--text);
-    border: none;
-    padding: 16px;
-    font-family: var(--font-mono);
-    font-size: 14px;
-    line-height: 1.6;
-    resize: none;
-    outline: none;
-    tab-size: 4;
-    white-space: pre;
-    overflow: auto;
-  }
+            textarea,
+            .output {
+                flex: 1;
+                background: var(--surface);
+                color: var(--text);
+                border: none;
+                padding: 16px;
+                font-family: var(--font-mono);
+                font-size: 14px;
+                line-height: 1.6;
+                resize: none;
+                outline: none;
+                tab-size: 4;
+                white-space: pre;
+                overflow: auto;
+            }
 
-  .output { background: var(--bg); }
+            .output {
+                background: var(--bg);
+            }
 
-  .error-text {
-    color: var(--red);
-    font-style: italic;
-  }
+            .error-text {
+                color: var(--red);
+                font-style: italic;
+            }
 
-  .hint {
-    padding: 8px 20px;
-    font-size: 12px;
-    color: var(--subtext);
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-  }
+            .hint {
+                padding: 8px 20px;
+                font-size: 12px;
+                color: var(--subtext);
+                border-top: 1px solid var(--border);
+                flex-shrink: 0;
+            }
 
-  kbd {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 1px 5px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-  }
+            kbd {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 3px;
+                padding: 1px 5px;
+                font-family: var(--font-mono);
+                font-size: 11px;
+            }
 
-  @media (max-width: 700px) {
-    .editor-wrap { flex-direction: column; }
-    .pane + .pane { border-left: none; border-top: 1px solid var(--border); }
-  }
-</style>
-</head>
-<body>
+            @media (max-width: 700px) {
+                .editor-wrap {
+                    flex-direction: column;
+                }
+                .pane + .pane {
+                    border-left: none;
+                    border-top: 1px solid var(--border);
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1><span>pgfmt</span> playground</h1>
+            <span class="status" id="status">Loading WASM...</span>
+        </header>
 
-<header>
-  <h1><span>pgfmt</span> playground</h1>
-  <span class="status" id="status">Loading WASM...</span>
-</header>
+        <div class="toolbar">
+            <button type="button" id="formatBtn" disabled>Format</button>
+            <button type="button" class="btn-secondary" id="clearBtn">
+                Clear
+            </button>
+            <button type="button" class="btn-secondary" id="exampleBtn">
+                Load Example
+            </button>
+        </div>
 
-<div class="toolbar">
-  <button id="formatBtn" disabled>Format</button>
-  <button class="btn-secondary" id="clearBtn">Clear</button>
-  <button class="btn-secondary" id="exampleBtn">Load Example</button>
-</div>
+        <div class="editor-wrap">
+            <div class="pane">
+                <div class="pane-header">Input SQL</div>
+                <textarea
+                    id="input"
+                    spellcheck="false"
+                    placeholder="Paste your SQL here..."
+                ></textarea>
+            </div>
+            <div class="pane">
+                <div class="pane-header">Formatted Output</div>
+                <pre class="output" id="output"></pre>
+            </div>
+        </div>
 
-<div class="editor-wrap">
-  <div class="pane">
-    <div class="pane-header">Input SQL</div>
-    <textarea id="input" spellcheck="false" placeholder="Paste your SQL here..."></textarea>
-  </div>
-  <div class="pane">
-    <div class="pane-header">Formatted Output</div>
-    <pre class="output" id="output"></pre>
-  </div>
-</div>
+        <div class="hint">
+            <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to format &middot; Runs entirely in
+            your browser via WebAssembly &middot;
+            <a
+                href="https://github.com/middle-management/pgfmt"
+                style="color: var(--accent)"
+                >GitHub</a
+            >
+        </div>
 
-<div class="hint">
-  <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to format &middot;
-  Runs entirely in your browser via WebAssembly &middot;
-  <a href="https://github.com/middle-management/pgfmt" style="color:var(--accent)">GitHub</a>
-</div>
+        <script>
+            (() => {
+                const input = document.getElementById("input");
+                const output = document.getElementById("output");
+                const status = document.getElementById("status");
+                const formatBtn = document.getElementById("formatBtn");
+                const clearBtn = document.getElementById("clearBtn");
+                const exampleBtn = document.getElementById("exampleBtn");
 
-<script>
-(function() {
-  const input = document.getElementById('input');
-  const output = document.getElementById('output');
-  const status = document.getElementById('status');
-  const formatBtn = document.getElementById('formatBtn');
-  const clearBtn = document.getElementById('clearBtn');
-  const exampleBtn = document.getElementById('exampleBtn');
-
-  const exampleSQL = `select u.id, u.name, u.email, count(o.id) as order_count, sum(o.total) as total_spent from users u left join orders o on o.user_id = u.id where u.created_at >= '2024-01-01' and u.status = 'active' group by u.id, u.name, u.email having count(o.id) > 0 order by total_spent desc limit 50;
+                const exampleSQL = `select u.id, u.name, u.email, count(o.id) as order_count, sum(o.total) as total_spent from users u left join orders o on o.user_id = u.id where u.created_at >= '2024-01-01' and u.status = 'active' group by u.id, u.name, u.email having count(o.id) > 0 order by total_spent desc limit 50;
 
 create table if not exists products (id bigint generated always as identity primary key, name text not null, description text, price numeric(10, 2) not null check (price > 0), category_id integer references categories(id) on delete set null, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
 
 with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(o.total) as revenue from orders o where o.created_at >= now() - interval '12 months' group by 1) select month, revenue, revenue - lag(revenue) over (order by month) as change from monthly_revenue order by month;`;
 
-  let ready = false;
-  let formatting = false;
-  let nextId = 0;
-  const pending = new Map();
+                let ready = false;
+                let formatting = false;
+                let nextId = 0;
+                const pending = new Map();
 
-  const worker = new Worker('worker.js');
+                const worker = new Worker("worker.js", { type: "module" });
 
-  worker.onmessage = function(e) {
-    const msg = e.data;
-    if (msg.type === 'ready') {
-      ready = true;
-      status.textContent = 'Ready';
-      status.className = 'status ready';
-      formatBtn.disabled = false;
-      return;
-    }
-    if (msg.type === 'warn') {
-      console.warn('[pgfmt]', msg.message);
-      return;
-    }
-    if (msg.type === 'result') {
-      const p = pending.get(msg.id);
-      if (p) {
-        pending.delete(msg.id);
-        p.resolve(msg);
-      }
-    }
-  };
+                worker.onmessage = (e) => {
+                    const msg = e.data;
+                    if (msg.type === "ready") {
+                        ready = true;
+                        status.textContent = "Ready";
+                        status.className = "status ready";
+                        formatBtn.disabled = false;
+                        return;
+                    }
+                    if (msg.type === "result") {
+                        const p = pending.get(msg.id);
+                        if (p) {
+                            pending.delete(msg.id);
+                            p.resolve(msg);
+                        }
+                    }
+                };
 
-  worker.onerror = function(err) {
-    status.textContent = 'Worker error: ' + err.message;
-    status.className = 'status error';
-  };
+                worker.onerror = (err) => {
+                    status.textContent = `Worker error: ${err.message}`;
+                    status.className = "status error";
+                };
 
-  function formatSQL(sql) {
-    const id = ++nextId;
-    return new Promise(function(resolve, reject) {
-      pending.set(id, { resolve, reject });
-      worker.postMessage({ id: id, sql: sql });
-    });
-  }
+                function formatSQL(sql) {
+                    const id = ++nextId;
+                    return new Promise((resolve, reject) => {
+                        pending.set(id, { resolve, reject });
+                        worker.postMessage({ id: id, sql: sql });
+                    });
+                }
 
-  async function doFormat() {
-    if (!ready || formatting) return;
-    const sql = input.value.trim();
-    if (!sql) {
-      output.textContent = '';
-      return;
-    }
-    formatting = true;
-    formatBtn.disabled = true;
-    formatBtn.textContent = 'Formatting...';
-    try {
-      const res = await formatSQL(sql);
-      if (res.error) {
-        output.innerHTML = '<span class="error-text">' + escapeHtml(res.error) + '</span>';
-      } else {
-        output.textContent = res.result;
-      }
-    } catch (err) {
-      output.innerHTML = '<span class="error-text">' + escapeHtml(err.toString()) + '</span>';
-    } finally {
-      formatting = false;
-      formatBtn.disabled = false;
-      formatBtn.textContent = 'Format';
-    }
-  }
+                async function doFormat() {
+                    if (!ready || formatting) return;
+                    const sql = input.value.trim();
+                    if (!sql) {
+                        output.textContent = "";
+                        return;
+                    }
+                    formatting = true;
+                    formatBtn.disabled = true;
+                    formatBtn.textContent = "Formatting...";
+                    try {
+                        const res = await formatSQL(sql);
+                        if (res.error) {
+                            output.innerHTML =
+                                '<span class="error-text">' +
+                                escapeHtml(res.error) +
+                                "</span>";
+                        } else {
+                            output.textContent = res.result;
+                        }
+                    } catch (err) {
+                        output.innerHTML =
+                            '<span class="error-text">' +
+                            escapeHtml(err.toString()) +
+                            "</span>";
+                    } finally {
+                        formatting = false;
+                        formatBtn.disabled = false;
+                        formatBtn.textContent = "Format";
+                    }
+                }
 
-  function escapeHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
+                function escapeHtml(s) {
+                    return s
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;");
+                }
 
-  formatBtn.addEventListener('click', doFormat);
+                formatBtn.addEventListener("click", doFormat);
 
-  clearBtn.addEventListener('click', function() {
-    input.value = '';
-    output.textContent = '';
-    input.focus();
-  });
+                clearBtn.addEventListener("click", () => {
+                    input.value = "";
+                    output.textContent = "";
+                    input.focus();
+                });
 
-  exampleBtn.addEventListener('click', function() {
-    input.value = exampleSQL;
-    input.focus();
-  });
+                exampleBtn.addEventListener("click", () => {
+                    input.value = exampleSQL;
+                    input.focus();
+                });
 
-  input.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      doFormat();
-    }
-    // Allow Tab to insert a tab character.
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const start = this.selectionStart;
-      const end = this.selectionEnd;
-      this.value = this.value.substring(0, start) + '\t' + this.value.substring(end);
-      this.selectionStart = this.selectionEnd = start + 1;
-    }
-  });
-})();
-</script>
-</body>
+                input.addEventListener("keydown", function (e) {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        doFormat();
+                    }
+                    // Allow Tab to insert a tab character.
+                    if (e.key === "Tab") {
+                        e.preventDefault();
+                        const start = this.selectionStart;
+                        const end = this.selectionEnd;
+                        this.value =
+                            this.value.substring(0, start) +
+                            "\t" +
+                            this.value.substring(end);
+                        this.selectionStart = this.selectionEnd = start + 1;
+                    }
+                });
+            })();
+        </script>
+    </body>
 </html>

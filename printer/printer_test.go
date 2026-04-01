@@ -4,8 +4,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-
-	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
 
 // normalizeDeparseForCompare strips $$ function bodies and reorderable
@@ -25,7 +23,7 @@ func normalizeDeparseForCompare(s string) string {
 
 func format(t *testing.T, sql string) string {
 	t.Helper()
-	result, err := pg_query.Parse(sql)
+	result, err := pgParse(sql)
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
@@ -40,15 +38,15 @@ func format(t *testing.T, sql string) string {
 
 	// Verify the formatted output is semantically identical to the input
 	// by comparing deparsed (canonical) forms of both parse trees.
-	inputCanonical, err := pg_query.Deparse(result)
+	inputCanonical, err := pgDeparse(result)
 	if err != nil {
 		t.Fatalf("deparse input error: %v", err)
 	}
-	outputTree, err := pg_query.Parse(formatted)
+	outputTree, err := pgParse(formatted)
 	if err != nil {
 		t.Fatalf("formatted output failed to parse: %v\nformatted:\n%s", err, formatted)
 	}
-	outputCanonical, err := pg_query.Deparse(outputTree)
+	outputCanonical, err := pgDeparse(outputTree)
 	if err != nil {
 		t.Fatalf("deparse output error: %v", err)
 	}
