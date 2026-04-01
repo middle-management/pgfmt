@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"strings"
 	"sync"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
@@ -59,6 +60,34 @@ func pgDeparse(result *pg_query.ParseResult) (string, error) {
 	defer a.release()
 
 	return a.pgQueryDeparseProtobuf(protobuf)
+}
+
+func splitStatements(sql string) ([]string, error) {
+	scanResult, err := pgScan(sql)
+	if err != nil {
+		return nil, err
+	}
+
+	var stmts []string
+	start := 0
+	for _, tok := range scanResult.Tokens {
+		if tok.Token == pg_query.Token_ASCII_59 { // ';'
+			stmt := sql[start:tok.End]
+			if strings.TrimSpace(stmt) != ";" && strings.TrimSpace(stmt) != "" {
+				stmts = append(stmts, stmt)
+			}
+			start = int(tok.End)
+		}
+	}
+
+	if start < len(sql) {
+		trailing := sql[start:]
+		if strings.TrimSpace(trailing) != "" {
+			stmts = append(stmts, trailing)
+		}
+	}
+
+	return stmts, nil
 }
 
 func pgParsePlPgSqlToJSON(input string) (string, error) {

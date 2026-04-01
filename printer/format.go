@@ -15,6 +15,14 @@ type comment struct {
 
 // Format parses and formats a SQL string, preserving inter-statement comments.
 func Format(sql string) (string, error) {
+	// Fast path: skip the scanner-based split for single statements.
+	// This avoids a redundant pgScan call when the input was already
+	// split by the caller (e.g. the JS worker).
+	trimmed := strings.TrimSpace(sql)
+	if idx := strings.IndexByte(trimmed, ';'); idx == -1 || idx == len(trimmed)-1 {
+		return formatOne(sql)
+	}
+
 	stmts, err := splitStatements(sql)
 	if err != nil {
 		return "", err
@@ -22,19 +30,15 @@ func Format(sql string) (string, error) {
 
 	// Format each statement independently. This avoids passing large
 	// multi-statement strings to pgParse, which can hang in WASM.
-	if len(stmts) > 1 {
-		var out strings.Builder
-		for _, s := range stmts {
-			result, err := formatOne(s)
-			if err != nil {
-				return "", err
-			}
-			out.WriteString(result)
+	var out strings.Builder
+	for _, s := range stmts {
+		result, err := formatOne(s)
+		if err != nil {
+			return "", err
 		}
-		return out.String(), nil
+		out.WriteString(result)
 	}
-
-	return formatOne(sql)
+	return out.String(), nil
 }
 
 // formatOne formats a single SQL string (which may still contain multiple
@@ -91,38 +95,6 @@ func formatOne(sql string) (string, error) {
 	}
 
 	return out.String(), nil
-}
-
-// splitStatements splits SQL input into individual statements using the
-// scanner to find semicolon boundaries. Each returned string includes
-// any leading comments/whitespace and the trailing semicolon.
-func splitStatements(sql string) ([]string, error) {
-	scanResult, err := pgScan(sql)
-	if err != nil {
-		return nil, err
-	}
-
-	var stmts []string
-	start := 0
-	for _, tok := range scanResult.Tokens {
-		if tok.Token == pg_query.Token_ASCII_59 { // ';'
-			stmt := sql[start:tok.End]
-			if strings.TrimSpace(stmt) != ";" && strings.TrimSpace(stmt) != "" {
-				stmts = append(stmts, stmt)
-			}
-			start = int(tok.End)
-		}
-	}
-
-	// Handle trailing text after last semicolon (comments or a statement without ';')
-	if start < len(sql) {
-		trailing := sql[start:]
-		if strings.TrimSpace(trailing) != "" {
-			stmts = append(stmts, trailing)
-		}
-	}
-
-	return stmts, nil
 }
 
 // stmtEndPos returns the end byte position for a statement.
