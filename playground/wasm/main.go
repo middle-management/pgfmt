@@ -48,7 +48,7 @@ func formatParsed(_ js.Value, args []js.Value) (ret any) {
 	scanJSON := args[1].String()
 	originalSQL := args[2].String()
 
-	// Unmarshal parse result.
+	// Unmarshal parse result (pg-query-emscripten PascalCase keys work with protojson).
 	parseResult := &pg_query.ParseResult{}
 	if err := jsonOpts.Unmarshal([]byte(parseJSON), parseResult); err != nil {
 		return map[string]any{"error": fmt.Sprintf("parse unmarshal: %v", err)}
