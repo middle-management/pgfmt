@@ -429,8 +429,10 @@ func readCStringPtr(mem api.Memory, ptrptr uint32) string {
 	return string(buf)
 }
 
-// sliceBuffer is a growing memory allocator for wazero.
-// It starts with a small initial capacity and grows on demand up to max.
+// sliceBuffer is a fixed-capacity memory allocator for wazero.
+// It allocates the full capacity upfront to avoid reallocations, which
+// would panic with "shared memory cannot move" when wazero has handed
+// out slices of the underlying buffer.
 type sliceBuffer struct {
 	buf []byte
 	max uint64
@@ -444,15 +446,8 @@ func (b *sliceBuffer) Reallocate(size uint64) []byte {
 		b.buf = b.buf[:size]
 		return b.buf
 	}
-	// Grow: allocate a new buffer and copy existing data.
-	newCap := uint64(cap(b.buf)) * 2
-	if newCap < size {
-		newCap = size
-	}
-	if newCap > b.max {
-		newCap = b.max
-	}
-	newBuf := make([]byte, size, newCap)
+	// Allocate at max capacity so we never need to move the buffer.
+	newBuf := make([]byte, size, b.max)
 	copy(newBuf, b.buf)
 	b.buf = newBuf
 	return b.buf
