@@ -166,28 +166,49 @@ onmessage = (e) => {
       return;
     }
 
-    // Parse the entire input in a single pgQuery.parse() call, then
-    // send the pre-parsed result to Go for formatting. This avoids
-    // repeated Emscripten parse calls which degrade over time.
+    // Try parsing the entire input at once — one Emscripten call, one Go call.
+    let fullParseFailed = false;
     try {
       const parsed = pgQuery.parse(sql);
-      if (parsed.error) {
-        postMessage({ type: "result", id, error: parsed.error.message });
-        return;
+      if (parsed && !parsed.error) {
+        const scanned = pgfmtScan(sql);
+        const result = pgfmtFormatParsed(
+          JSON.stringify(parsed.parse_tree),
+          scanned.result,
+          sql,
+        );
+        if (result && !result.error) {
+          postMessage({ type: "result", id, result: result.result });
+          return;
+        }
       }
-      const scanned = pgfmtScan(sql);
-      const result = pgfmtFormatParsed(
-        JSON.stringify(parsed.parse_tree),
-        scanned.result,
-        sql,
-      );
-      if (result === undefined) {
-        postMessage({ type: "result", id, error: "printer crashed" });
-        return;
+      fullParseFailed = true;
+    } catch {
+      fullParseFailed = true;
+    }
+
+    // Fallback: format each statement individually via pgfmtFormat.
+    if (fullParseFailed) {
+      const parts = [];
+      const batchSize = 10;
+      function formatBatch(start) {
+        const end = Math.min(start + batchSize, stmts.length);
+        for (let i = start; i < end; i++) {
+          try {
+            const r = pgfmtFormat(stmts[i]);
+            parts.push(r && !r.error ? r.result : stmts[i].trim() + "\n\n");
+          } catch {
+            parts.push(stmts[i].trim() + "\n\n");
+          }
+        }
+        if (end < stmts.length) {
+          postMessage({ type: "progress", current: end, total: stmts.length });
+          setTimeout(() => formatBatch(end), 0);
+        } else {
+          postMessage({ type: "result", id, result: parts.join("") });
+        }
       }
-      postMessage({ type: "result", id, result: result.result, error: result.error });
-    } catch (err) {
-      postMessage({ type: "result", id, error: err.toString() });
+      formatBatch(0);
     }
   } catch (err) {
     postMessage({ type: "result", id, error: err.toString() });
