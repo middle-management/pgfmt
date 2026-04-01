@@ -109,8 +109,13 @@ test("shows error for invalid SQL", async () => {
   await resetPage();
 });
 
-// Requires split-statements PR to avoid OOM on the 256MB WASM memory cap.
-test.fixme("formats the full playground example", async () => {
+test("formats the full playground example", async () => {
+  // Reload to get a fresh worker — accumulated WASM memory from prior
+  // tests can cause OOM with the 256MB cap.
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText("Ready", {
+    timeout: FIRST_FORMAT_TIMEOUT,
+  });
   await page.locator("#exampleBtn").click();
   await page.locator("#formatBtn").click();
   await expect(page.locator("#output")).toContainText(
