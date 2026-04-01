@@ -17,6 +17,10 @@ globalThis.onPgfmtWarn = (msg) => console.warn("[pgfmt]", msg);
 
 // Expose parsing to Go via JS callbacks.
 globalThis.pgfmtParse = (sql) => {
+  // Guard against Emscripten ALLOC_STACK overflow on very large statements.
+  if (sql.length > 100000) {
+    return { error: "statement too large for browser parsing" };
+  }
   try {
     const result = pgQuery.parse(sql);
     if (result.error) {
@@ -83,6 +87,11 @@ globalThis.pgfmtScan = (sql) => {
 };
 
 globalThis.pgfmtParsePlPgSQL = (sql) => {
+  // Skip PL/pgSQL parsing for very large functions to avoid Emscripten
+  // ALLOC_STACK overflow which hangs instead of crashing.
+  if (sql.length > 50000) {
+    return { error: "function body too large for browser PL/pgSQL parsing" };
+  }
   try {
     const result = pgQuery.parsePlpgsql(sql);
     if (result.error) {
@@ -170,20 +179,27 @@ onmessage = (e) => {
     // For large inputs, format each statement separately with yields
     // between batches so the browser stays responsive.
     const parts = [];
-    const batchSize = 20;
+    const batchSize = 10;
     function formatBatch(start) {
       const end = Math.min(start + batchSize, stmts.length);
       for (let i = start; i < end; i++) {
-        const result = pgfmtFormat(stmts[i]);
-        if (result === undefined) {
-          postMessage({ type: "result", id, error: "printer crashed on statement " + (i + 1) });
-          return;
+        try {
+          const result = pgfmtFormat(stmts[i]);
+          if (result === undefined) {
+            // Printer crashed — skip this statement, use raw text
+            parts.push(stmts[i].trim() + "\n\n");
+            continue;
+          }
+          if (result.error) {
+            // Parse/format error — use raw text fallback
+            parts.push(stmts[i].trim() + "\n\n");
+            continue;
+          }
+          parts.push(result.result);
+        } catch (err) {
+          // Emscripten crash — use raw text fallback
+          parts.push(stmts[i].trim() + "\n\n");
         }
-        if (result.error) {
-          postMessage({ type: "result", id, error: result.error });
-          return;
-        }
-        parts.push(result.result);
       }
       if (end < stmts.length) {
         setTimeout(() => formatBatch(end), 0);
