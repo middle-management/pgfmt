@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"strings"
 	"sync"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
@@ -61,6 +62,34 @@ func pgDeparse(result *pg_query.ParseResult) (string, error) {
 	return a.pgQueryDeparseProtobuf(protobuf)
 }
 
+func splitStatements(sql string) ([]string, error) {
+	scanResult, err := pgScan(sql)
+	if err != nil {
+		return nil, err
+	}
+
+	var stmts []string
+	start := 0
+	for _, tok := range scanResult.Tokens {
+		if tok.Token == pg_query.Token_ASCII_59 { // ';'
+			stmt := sql[start:tok.End]
+			if strings.TrimSpace(stmt) != ";" && strings.TrimSpace(stmt) != "" {
+				stmts = append(stmts, stmt)
+			}
+			start = int(tok.End)
+		}
+	}
+
+	if start < len(sql) {
+		trailing := sql[start:]
+		if strings.TrimSpace(trailing) != "" {
+			stmts = append(stmts, trailing)
+		}
+	}
+
+	return stmts, nil
+}
+
 func pgParsePlPgSqlToJSON(input string) (string, error) {
 	a := getABI()
 	defer a.release()
@@ -98,7 +127,10 @@ func newRT() (wazero.Runtime, wazero.CompiledModule) {
 
 	rt := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().
 		WithCompilationCache(wazero.NewCompilationCache()).
-		WithCoreFeatures(api.CoreFeaturesV2|experimental.CoreFeaturesThreads))
+		WithCoreFeatures(api.CoreFeaturesV2|experimental.CoreFeaturesThreads).
+		// Cap WASM memory to avoid OOM in js/wasm environments where the
+		// default 4GB max exceeds the Go heap limit.
+		WithMemoryLimitPages(wasmMemoryPages))
 
 	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
 	mustInstantiateWasix(ctx, rt)
@@ -116,15 +148,23 @@ func newRT() (wazero.Runtime, wazero.CompiledModule) {
 	return rt, code
 }
 
-// abi pool
-
-var (
-	abiPool   = list.New()
-	abiPoolMu sync.Mutex
-)
 
 func newABI() *wasmABI {
 	ctx := context.Background()
+	// Use a custom allocator that pre-allocates 64MB. The inner WASM module
+	// declares shared memory which prevents buffer relocation, so we must
+	// allocate enough upfront. 64MB handles most SQL inputs; larger ones
+	// will get a graceful error via recover().
+	ctx = experimental.WithMemoryAllocator(ctx, experimental.MemoryAllocatorFunc(func(cap, max uint64) experimental.LinearMemory {
+		const preallocCap = 64 << 20 // 64MB
+		if cap < preallocCap {
+			cap = preallocCap
+		}
+		if cap > max {
+			cap = max
+		}
+		return &fixedBuffer{buf: make([]byte, 0, cap), max: max}
+	}))
 
 	rt, code := newRT()
 	// Use io.Discard instead of os.Stdout/os.Stderr to avoid stat /dev/stdout
@@ -164,6 +204,11 @@ func newABI() *wasmABI {
 
 	return res
 }
+
+var (
+	abiPool   = list.New()
+	abiPoolMu sync.Mutex
+)
 
 func getABI() *wasmABI {
 	abiPoolMu.Lock()
@@ -425,4 +470,30 @@ func readCStringPtr(mem api.Memory, ptrptr uint32) string {
 	}
 	return string(buf)
 }
+
+const wasmMemoryPages = 2048 // 128MB (each page = 64KB)
+
+// fixedBuffer is a memory allocator for wazero that refuses to move.
+// The inner WASM module uses shared memory, which requires the backing
+// buffer to never be relocated. We pre-allocate enough capacity upfront
+// and return nil if a grow would exceed it.
+type fixedBuffer struct {
+	buf []byte
+	max uint64
+}
+
+func (b *fixedBuffer) Reallocate(size uint64) []byte {
+	if size > b.max {
+		return nil
+	}
+	if uint64(cap(b.buf)) >= size {
+		b.buf = b.buf[:size]
+		return b.buf
+	}
+	// Can't move — return nil to signal allocation failure.
+	return nil
+}
+
+func (b *fixedBuffer) Free() {}
+
 
