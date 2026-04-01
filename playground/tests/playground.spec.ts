@@ -110,8 +110,8 @@ test("shows error for invalid SQL", async () => {
 });
 
 test("formats the full playground example", async () => {
-  // Reload to get a fresh worker — accumulated WASM memory from prior
-  // tests can cause OOM with the 256MB cap.
+  // Reload to get a fresh WASM worker — the inner libpg_query WASM
+  // memory accumulates across calls due to allocator fragmentation.
   await page.reload();
   await expect(page.locator("#status")).toHaveText("Ready", {
     timeout: FIRST_FORMAT_TIMEOUT,
