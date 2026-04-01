@@ -106,20 +106,92 @@ const { instance } = await WebAssembly.instantiateStreaming(
 );
 go.run(instance);
 
+// Split SQL on top-level semicolons (handles strings, dollar-quotes, comments).
+function splitStatements(sql) {
+  const stmts = [];
+  let start = 0;
+  let i = 0;
+  while (i < sql.length) {
+    const ch = sql[i];
+    if (ch === "-" && sql[i + 1] === "-") {
+      i += 2;
+      while (i < sql.length && sql[i] !== "\n") i++;
+    } else if (ch === "/" && sql[i + 1] === "*") {
+      i += 2;
+      while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/"))
+        i++;
+      if (i + 1 < sql.length) i += 2;
+    } else if (ch === "'") {
+      i++;
+      while (i < sql.length) {
+        if (sql[i] === "'") {
+          if (sql[i + 1] === "'") i += 2;
+          else { i++; break; }
+        } else i++;
+      }
+    } else if (ch === "$") {
+      let j = i + 1;
+      while (j < sql.length && /[a-zA-Z0-9_]/.test(sql[j])) j++;
+      if (j < sql.length && sql[j] === "$") {
+        const tag = sql.substring(i, j + 1);
+        i = j + 1;
+        const end = sql.indexOf(tag, i);
+        i = end >= 0 ? end + tag.length : sql.length;
+      } else i++;
+    } else if (ch === ";") {
+      const stmt = sql.substring(start, i + 1).trim();
+      if (stmt && stmt !== ";") stmts.push(sql.substring(start, i + 1));
+      start = i + 1;
+      i++;
+    } else i++;
+  }
+  if (start < sql.length) {
+    const trailing = sql.substring(start).trim();
+    if (trailing) stmts.push(sql.substring(start));
+  }
+  return stmts;
+}
+
 onmessage = (e) => {
   const { id, sql } = e.data;
   try {
-    const result = pgfmtFormat(sql);
-    if (result === undefined) {
-      postMessage({ type: "result", id, error: "printer crashed" });
+    // For small inputs, format directly (single Go call handles everything).
+    const stmts = splitStatements(sql);
+    if (stmts.length <= 1) {
+      const result = pgfmtFormat(sql);
+      if (result === undefined) {
+        postMessage({ type: "result", id, error: "printer crashed" });
+        return;
+      }
+      postMessage({ type: "result", id, result: result.result, error: result.error });
       return;
     }
-    postMessage({
-      type: "result",
-      id,
-      result: result.result,
-      error: result.error,
-    });
+
+    // For large inputs, format each statement separately with yields
+    // between batches so the browser stays responsive.
+    const parts = [];
+    const batchSize = 20;
+    function formatBatch(start) {
+      const end = Math.min(start + batchSize, stmts.length);
+      for (let i = start; i < end; i++) {
+        const result = pgfmtFormat(stmts[i]);
+        if (result === undefined) {
+          postMessage({ type: "result", id, error: "printer crashed on statement " + (i + 1) });
+          return;
+        }
+        if (result.error) {
+          postMessage({ type: "result", id, error: result.error });
+          return;
+        }
+        parts.push(result.result);
+      }
+      if (end < stmts.length) {
+        setTimeout(() => formatBatch(end), 0);
+      } else {
+        postMessage({ type: "result", id, result: parts.join("") });
+      }
+    }
+    formatBatch(0);
   } catch (err) {
     postMessage({ type: "result", id, error: err.toString() });
   }
