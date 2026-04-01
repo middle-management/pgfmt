@@ -1116,6 +1116,40 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			warn("unsupported alter table cmd: %s", n.AlterTableCmd.Subtype.String())
 		}
 
+	case *pg_query.Node_CreateEnumStmt:
+		output.Builder.WriteString("CREATE TYPE ")
+		for i, name := range n.CreateEnumStmt.TypeName {
+			if i > 0 {
+				output.Builder.WriteString(".")
+			}
+			output.Builder.WriteString(name.GetString_().GetSval())
+		}
+		output.Builder.WriteString(" AS ENUM (\n")
+		for i, val := range n.CreateEnumStmt.Vals {
+			output.Builder.WriteString("\t'")
+			output.Builder.WriteString(val.GetString_().GetSval())
+			output.Builder.WriteString("'")
+			if i < len(n.CreateEnumStmt.Vals)-1 {
+				output.Builder.WriteString(",")
+			}
+			output.Builder.WriteString("\n")
+		}
+		output.Builder.WriteString(")")
+
+	case *pg_query.Node_CompositeTypeStmt:
+		output.Builder.WriteString("CREATE TYPE ")
+		output.writeRangeVar(n.CompositeTypeStmt.Typevar)
+		output.Builder.WriteString(" AS (\n")
+		for i, col := range n.CompositeTypeStmt.Coldeflist {
+			output.Builder.WriteString("\t")
+			output.writeNode(col)
+			if i < len(n.CompositeTypeStmt.Coldeflist)-1 {
+				output.Builder.WriteString(",")
+			}
+			output.Builder.WriteString("\n")
+		}
+		output.Builder.WriteString(")")
+
 	case *pg_query.Node_DropStmt:
 		output.Builder.WriteString("DROP ")
 		switch n.DropStmt.RemoveType {
