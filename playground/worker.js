@@ -34,19 +34,16 @@ globalThis.pgfmtScan = (sql) => {
     if (result.error) {
       return { error: result.error.message };
     }
-    // pg-query-emscripten returns an Emscripten vector. Extract plain
-    // objects immediately since the Emscripten refs may not survive.
-    const tokens = [];
-    for (let i = 0; i < result.tokens.size(); i++) {
+    // Convert Emscripten vector to JSON string. Accessing Emscripten-bound
+    // C++ objects (VectorToken) can fail if the underlying memory is freed,
+    // so we serialize everything in one shot and pass as a string to Go.
+    const size = result.tokens.size();
+    const tokens = new Array(size);
+    for (let i = 0; i < size; i++) {
       const t = result.tokens.get(i);
-      tokens.push({
-        start: t.start,
-        end: t.end,
-        token_kind: t.token_kind,
-        keyword_kind: t.keyword_kind,
-      });
+      tokens[i] = [t.start, t.end, t.token_kind, t.keyword_kind];
     }
-    return { tokens };
+    return { result: JSON.stringify(tokens) };
   } catch (err) {
     return { error: err.toString() };
   }
