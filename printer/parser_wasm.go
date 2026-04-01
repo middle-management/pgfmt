@@ -4,14 +4,12 @@ package printer
 
 import (
 	"bytes"
-	"container/list"
 	"context"
 	"embed"
 	"encoding/binary"
 	"errors"
 	"io"
 	"runtime"
-	"sync"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/tetratelabs/wazero"
@@ -98,7 +96,10 @@ func newRT() (wazero.Runtime, wazero.CompiledModule) {
 
 	rt := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().
 		WithCompilationCache(wazero.NewCompilationCache()).
-		WithCoreFeatures(api.CoreFeaturesV2|experimental.CoreFeaturesThreads))
+		WithCoreFeatures(api.CoreFeaturesV2|experimental.CoreFeaturesThreads).
+		// Cap WASM memory to avoid OOM in js/wasm environments where the
+		// default 4GB max exceeds the Go heap limit.
+		WithMemoryLimitPages(wasmMemoryPages))
 
 	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
 	mustInstantiateWasix(ctx, rt)
@@ -116,23 +117,22 @@ func newRT() (wazero.Runtime, wazero.CompiledModule) {
 	return rt, code
 }
 
-// abi pool
-
-var (
-	abiPool   = list.New()
-	abiPoolMu sync.Mutex
-)
 
 func newABI() *wasmABI {
 	ctx := context.Background()
+	// Use a custom allocator that pre-allocates 64MB. The inner WASM module
+	// declares shared memory which prevents buffer relocation, so we must
+	// allocate enough upfront. 64MB handles most SQL inputs; larger ones
+	// will get a graceful error via recover().
 	ctx = experimental.WithMemoryAllocator(ctx, experimental.MemoryAllocatorFunc(func(cap, max uint64) experimental.LinearMemory {
-		// Cap maximum at 512MB to avoid OOM in js/wasm environments where
-		// the default 4GB max causes runtime.makeslice to fail.
-		const maxCap = 512 << 20
-		if max > maxCap {
-			max = maxCap
+		const preallocCap = 64 << 20 // 64MB
+		if cap < preallocCap {
+			cap = preallocCap
 		}
-		return &sliceBuffer{buf: make([]byte, 0, cap), max: max}
+		if cap > max {
+			cap = max
+		}
+		return &fixedBuffer{buf: make([]byte, 0, cap), max: max}
 	}))
 
 	rt, code := newRT()
@@ -175,15 +175,7 @@ func newABI() *wasmABI {
 }
 
 func getABI() *wasmABI {
-	abiPoolMu.Lock()
-	e := abiPool.Front()
-	if e == nil {
-		abiPoolMu.Unlock()
-		return newABI()
-	}
-	abiPool.Remove(e)
-	abiPoolMu.Unlock()
-	return e.Value.(*wasmABI)
+	return newABI()
 }
 
 type wasmABI struct {
@@ -206,9 +198,10 @@ type wasmABI struct {
 }
 
 func (a *wasmABI) release() {
-	abiPoolMu.Lock()
-	abiPool.PushBack(a)
-	abiPoolMu.Unlock()
+	// Close the wazero runtime instead of pooling. Reusing ABI instances
+	// causes inner WASM memory to accumulate (allocator fragmentation in
+	// libpg_query), eventually hitting the memory cap.
+	a.rt.Close(context.Background())
 }
 
 func (a *wasmABI) pgQueryInit() {
@@ -435,15 +428,18 @@ func readCStringPtr(mem api.Memory, ptrptr uint32) string {
 	return string(buf)
 }
 
-// sliceBuffer is a growing memory allocator for wazero.
-// It doubles capacity on each growth up to max, keeping overhead reasonable
-// in memory-constrained js/wasm environments.
-type sliceBuffer struct {
+const wasmMemoryPages = 2048 // 128MB (each page = 64KB)
+
+// fixedBuffer is a memory allocator for wazero that refuses to move.
+// The inner WASM module uses shared memory, which requires the backing
+// buffer to never be relocated. We pre-allocate enough capacity upfront
+// and return nil if a grow would exceed it.
+type fixedBuffer struct {
 	buf []byte
 	max uint64
 }
 
-func (b *sliceBuffer) Reallocate(size uint64) []byte {
+func (b *fixedBuffer) Reallocate(size uint64) []byte {
 	if size > b.max {
 		return nil
 	}
@@ -451,18 +447,10 @@ func (b *sliceBuffer) Reallocate(size uint64) []byte {
 		b.buf = b.buf[:size]
 		return b.buf
 	}
-	newCap := uint64(cap(b.buf)) * 2
-	if newCap < size {
-		newCap = size
-	}
-	if newCap > b.max {
-		newCap = b.max
-	}
-	newBuf := make([]byte, size, newCap)
-	copy(newBuf, b.buf)
-	b.buf = newBuf
-	return b.buf
+	// Can't move — return nil to signal allocation failure.
+	return nil
 }
 
-func (b *sliceBuffer) Free() {}
+func (b *fixedBuffer) Free() {}
+
 

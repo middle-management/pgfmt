@@ -110,12 +110,6 @@ test("shows error for invalid SQL", async () => {
 });
 
 test("formats the full playground example", async () => {
-  // Reload to get a fresh WASM worker — the inner libpg_query WASM
-  // memory accumulates across calls due to allocator fragmentation.
-  await page.reload();
-  await expect(page.locator("#status")).toHaveText("Ready", {
-    timeout: FIRST_FORMAT_TIMEOUT,
-  });
   await page.locator("#exampleBtn").click();
   await page.locator("#formatBtn").click();
   await expect(page.locator("#output")).toContainText(
