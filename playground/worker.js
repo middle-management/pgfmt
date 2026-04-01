@@ -25,7 +25,7 @@ globalThis.pgfmtParse = (sql) => {
     if (result.error) {
       return { error: result.error.message };
     }
-    return { result: JSON.stringify(result.parse_tree) };
+    return { result: camelToSnakeKeys(JSON.stringify(result.parse_tree)) };
   } catch (err) {
     return { error: err.toString() };
   }
@@ -92,6 +92,16 @@ globalThis.pgfmtScan = (sql) => {
 globalThis.pgfmtParsePlPgSQL = () => {
   return { error: "plpgsql body formatting disabled in playground" };
 };
+
+// Convert camelCase JSON keys to snake_case. Only touches keys (before `:`)
+// not values. Needed because pg-query-emscripten outputs camelCase but
+// protojson requires snake_case for regular proto fields.
+function camelToSnakeKeys(json) {
+  return json.replace(/"([a-z][a-zA-Z0-9]*)"(\s*:)/g, (_, key, colon) => {
+    const snake = key.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
+    return `"${snake}"${colon}`;
+  });
+}
 
 // Load pg-query-emscripten.
 pgQuery = await new pgQueryInit();
@@ -172,11 +182,11 @@ onmessage = (e) => {
       const parsed = pgQuery.parse(sql);
       if (parsed && !parsed.error) {
         const scanned = pgfmtScan(sql);
-        const result = pgfmtFormatParsed(
-          JSON.stringify(parsed.parse_tree),
-          scanned.result,
-          sql,
-        );
+        // pg-query-emscripten outputs camelCase keys for non-node fields
+        // (e.g. stmtLocation, stmtLen, returnType) but protojson silently
+        // drops camelCase for regular proto fields. Convert to snake_case.
+        const parseJSON = camelToSnakeKeys(JSON.stringify(parsed.parse_tree));
+        const result = pgfmtFormatParsed(parseJSON, scanned.result, sql);
         if (result && !result.error) {
           postMessage({ type: "result", id, result: result.result });
           return;
