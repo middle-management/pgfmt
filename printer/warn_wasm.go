@@ -1,4 +1,4 @@
-//go:build js && wasm && !tinygo
+//go:build js && wasm
 
 package printer
 

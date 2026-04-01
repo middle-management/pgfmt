@@ -1,4 +1,4 @@
-//go:build !js && !wasip1 && !tinygo
+//go:build !js && !wasip1
 
 package printer
 
