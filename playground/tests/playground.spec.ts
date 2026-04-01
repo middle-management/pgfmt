@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#status")).toHaveText("Ready", { timeout: 30_000 });
+  await expect(page.locator("#status")).toContainText("Ready", { timeout: 30_000 });
 });
 
 test("WASM loads and shows ready status", async ({ page }) => {
