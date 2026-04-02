@@ -2020,6 +2020,52 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.writeCommaSeparatedList(n.CreateTrigStmt.Args)
 		output.Builder.WriteString(")")
 
+	case *pg_query.Node_CreatePolicyStmt:
+		output.Builder.WriteString("CREATE POLICY ")
+		output.Builder.WriteString(n.CreatePolicyStmt.PolicyName)
+		output.Builder.WriteString("\nON ")
+		output.writeRangeVar(n.CreatePolicyStmt.Table)
+		if !n.CreatePolicyStmt.Permissive {
+			output.Builder.WriteString("\nAS RESTRICTIVE")
+		}
+		if n.CreatePolicyStmt.CmdName != "" && n.CreatePolicyStmt.CmdName != "all" {
+			output.Builder.WriteString("\nFOR ")
+			output.Builder.WriteString(strings.ToUpper(n.CreatePolicyStmt.CmdName))
+		}
+		if len(n.CreatePolicyStmt.Roles) > 0 {
+			output.Builder.WriteString("\nTO ")
+			for i, role := range n.CreatePolicyStmt.Roles {
+				if i > 0 {
+					output.Builder.WriteString(", ")
+				}
+				rs := role.GetRoleSpec()
+				if rs != nil {
+					switch rs.Roletype {
+					case pg_query.RoleSpecType_ROLESPEC_PUBLIC:
+						output.Builder.WriteString("PUBLIC")
+					case pg_query.RoleSpecType_ROLESPEC_CURRENT_USER:
+						output.Builder.WriteString("CURRENT_USER")
+					case pg_query.RoleSpecType_ROLESPEC_SESSION_USER:
+						output.Builder.WriteString("SESSION_USER")
+					case pg_query.RoleSpecType_ROLESPEC_CURRENT_ROLE:
+						output.Builder.WriteString("CURRENT_ROLE")
+					default:
+						output.Builder.WriteString(rs.Rolename)
+					}
+				}
+			}
+		}
+		if n.CreatePolicyStmt.Qual != nil {
+			output.Builder.WriteString("\nUSING (")
+			output.writeNode(n.CreatePolicyStmt.Qual)
+			output.Builder.WriteString(")")
+		}
+		if n.CreatePolicyStmt.WithCheck != nil {
+			output.Builder.WriteString("\nWITH CHECK (")
+			output.writeNode(n.CreatePolicyStmt.WithCheck)
+			output.Builder.WriteString(")")
+		}
+
 	case *pg_query.Node_CreateDomainStmt:
 		output.Builder.WriteString("CREATE DOMAIN ")
 		output.writeListWithSeparator(n.CreateDomainStmt.Domainname, ".")
