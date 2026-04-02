@@ -1,4 +1,4 @@
-//go:build !js && !wasip1
+//go:build wasip1
 
 package printer
 
