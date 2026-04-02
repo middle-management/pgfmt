@@ -5,6 +5,10 @@ import { WASI, File, OpenFile, WASIProcExit } from "https://esm.sh/@bjorn3/brows
 let pgQuery;
 let wasmModule; // Compiled WebAssembly.Module (compiled once, instantiated per call)
 
+// Track parse call count to detect Emscripten degradation.
+let parseCallCount = 0;
+const MAX_PARSE_CALLS = 200;
+
 // Convert camelCase JSON keys to snake_case for protojson compatibility.
 function camelToSnakeKeys(json) {
   return json.replace(/"([a-z][a-zA-Z0-9]*)"(\s*:)/g, (_, key, colon) => {
@@ -123,11 +127,34 @@ function extractBody(sql) {
   return match ? match[2] : null;
 }
 
+// Guarded parse — returns null if Emscripten call limit reached.
+function safeParse(sql) {
+  parseCallCount++;
+  if (parseCallCount > MAX_PARSE_CALLS) return null;
+  try {
+    const result = pgQuery.parse(sql);
+    return result && !result.error ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeParsePlpgsql(sql) {
+  parseCallCount++;
+  if (parseCallCount > MAX_PARSE_CALLS) return null;
+  try {
+    const result = pgQuery.parsePlpgsql(sql);
+    return result && !result.error ? result : null;
+  } catch {
+    return null;
+  }
+}
+
 // Build augmented AST JSON for a single SQL statement.
 // This is the JS equivalent of Go's printer.Augment().
 function buildAugmentedAST(sql) {
-  const parsed = pgQuery.parse(sql);
-  if (!parsed || parsed.error) return null;
+  const parsed = safeParse(sql);
+  if (!parsed) return null;
 
   const parseTree = parsed.parse_tree;
   const tokens = scanTokens(sql);
@@ -227,7 +254,7 @@ function preParseBodiesForStmt(sql, rawStmt) {
 
   if (lang === "sql") {
     try {
-      const result = pgQuery.parse(body);
+      const result = safeParse(body);
       if (result && !result.error) {
         // Marshal as ParseResult-like JSON for Go's protojson.Unmarshal.
         const stmts = (result.parse_tree.stmts || []).map((s) => ({
@@ -248,8 +275,8 @@ function preParseBodiesForStmt(sql, rawStmt) {
     for (const prefix of wrappers) {
       const wrapped = prefix + body + "\n$$ LANGUAGE plpgsql;";
       try {
-        const result = pgQuery.parsePlpgsql(wrapped);
-        if (!result.error) {
+        const result = safeParsePlpgsql(wrapped);
+        if (result) {
           bodies.plpgsql[wrapped] = JSON.stringify(result.plpgsql_funcs);
           // Also pre-parse embedded SQL within PL/pgSQL bodies.
           preParsePlpgsqlEmbeddedSQL(result.plpgsql_funcs, bodies);
@@ -281,18 +308,14 @@ function preParsePlpgsqlEmbeddedSQL(plpgsqlFuncs, bodies) {
   });
   for (const sql of sqlStrings) {
     if (bodies.sql[sql]) continue;
-    try {
-      const result = pgQuery.parse(sql);
-      if (result && !result.error) {
-        const stmts = (result.parse_tree.stmts || []).map((s) => ({
-          stmt: s.stmt,
-        }));
-        bodies.sql[sql] = camelToSnakeKeys(
-          JSON.stringify({ version: result.parse_tree.version, stmts }),
-        );
-      }
-    } catch {
-      // skip
+    const result = safeParse(sql);
+    if (result) {
+      const stmts = (result.parse_tree.stmts || []).map((s) => ({
+        stmt: s.stmt,
+      }));
+      bodies.sql[sql] = camelToSnakeKeys(
+        JSON.stringify({ version: result.parse_tree.version, stmts }),
+      );
     }
   }
 }
@@ -315,6 +338,7 @@ function runWASI(stdinData) {
       new OpenFile(stdoutFile),
       new OpenFile(stderrFile),
     ],
+    { debug: false },
   );
 
   const instance = new WebAssembly.Instance(wasmModule, {
@@ -363,6 +387,7 @@ postMessage({
 
 onmessage = (e) => {
   const { id, sql } = e.data;
+  parseCallCount = 0; // Reset per format request.
   try {
     const stmts = splitStatements(sql);
 
