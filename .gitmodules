@@ -1,0 +1,3 @@
+[submodule "third_party/pg-query-emscripten"]
+	path = third_party/pg-query-emscripten
+	url = https://github.com/slaskis/pg-query-emscripten.git

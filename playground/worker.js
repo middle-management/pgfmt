@@ -5,14 +5,14 @@ import {
   WASI,
   WASIProcExit,
 } from "https://esm.sh/@bjorn3/browser_wasi_shim@0.4.2";
-import pgQueryInit from "https://esm.sh/pg-query-emscripten@5.1.0";
+import pgQueryInit from "./pg_query.js";
 
 let pgQuery;
 let wasmModule; // Compiled WebAssembly.Module (compiled once, instantiated per call)
 
 // Track parse call count to detect Emscripten degradation.
 let parseCallCount = 0;
-const MAX_PARSE_CALLS = 200;
+const MAX_PARSE_CALLS = 2000;
 
 // Convert camelCase JSON keys to snake_case for protojson compatibility.
 function camelToSnakeKeys(json) {
@@ -134,19 +134,34 @@ function extractBody(sql) {
 function safeParse(sql) {
   parseCallCount++;
   if (parseCallCount > MAX_PARSE_CALLS) {
-    console.warn(`[pgfmt] parse limit reached (${parseCallCount}/${MAX_PARSE_CALLS})`);
+    console.warn(
+      `[pgfmt] parse limit reached (${parseCallCount}/${MAX_PARSE_CALLS})`,
+    );
     return null;
   }
   try {
     const result = pgQuery.parse(sql);
     if (!result || result.error) {
-      console.warn("[pgfmt] pg_query error:", result?.error?.message || "unknown");
+      console.warn(
+        "[pgfmt] pg_query error:",
+        result?.error?.message || "unknown",
+      );
       return null;
     }
     return result;
   } catch (e) {
     console.warn("[pgfmt] pg_query threw:", e);
     return null;
+  }
+}
+
+function safeDeparse(sql) {
+  try {
+    const result = pgQuery.deparse(sql);
+    if (!result || result.error) return "";
+    return result.query;
+  } catch {
+    return "";
   }
 }
 
@@ -227,10 +242,15 @@ function buildAugmentedAST(sql) {
       stmtJSON._bodies = bodies;
     }
 
+    // Deparse individual statement for fallback on unsupported node types.
+    const stmtText = sql.substring(stmtLocation, stmtEnd).trim();
+    const deparsed = safeDeparse(stmtText);
+
     augmented.stmts.push({
       stmt: stmtJSON,
       stmt_location: stmtLocation,
       stmt_len: stmtLen,
+      deparsed,
     });
   }
 
@@ -363,7 +383,7 @@ function formatOne(sql) {
 }
 
 // Initialize pg-query-emscripten.
-pgQuery = await new pgQueryInit();
+pgQuery = await pgQueryInit();
 
 // Load and compile the WASI WASM module.
 const wasmResponse = await fetch("pgfmt-print.wasm");
