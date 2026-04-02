@@ -31,12 +31,7 @@ jobs:
       - uses: actions/setup-go@v6
 
       - name: Build WASM
-        run: |
-          VER=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-          GOOS=js GOARCH=wasm go build -ldflags "-X main.version=$VER" -o playground/pgfmt.wasm ./playground/wasm/
-
-      - name: Copy wasm_exec.js
-        run: cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" playground/wasm_exec.js
+        run: GOOS=wasip1 GOARCH=wasm go build -o playground/pgfmt-print.wasm ./cmd/pgfmt-print
 
       - uses: actions/setup-node@v4
         with:

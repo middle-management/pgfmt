@@ -1,118 +1,9 @@
-// Web Worker: pg-query-emscripten parses SQL, Go WASM prints it.
+// Web Worker: pg-query-emscripten parses SQL, Go WASI WASM prints it.
 import pgQueryInit from "https://esm.sh/pg-query-emscripten@5.1.0";
-
-// Load Go WASM runtime (sets globalThis.Go).
-import "./wasm_exec.js";
+import { WASI, File, OpenFile, WASIProcExit } from "https://esm.sh/@bjorn3/browser_wasi_shim@0.4.2";
 
 let pgQuery;
-let printerReady = false;
-
-globalThis.onPgfmtReady = () => {
-  printerReady = true;
-  if (pgQuery)
-    postMessage({
-      type: "ready",
-      version: globalThis.pgfmtVersion,
-      buildInfo: globalThis.pgfmtBuildInfo,
-    });
-};
-
-// Forward warnings from Go printer to console.
-globalThis.onPgfmtWarn = (msg) => console.warn("[pgfmt]", msg);
-
-// Expose parsing to Go via JS callbacks.
-// Track parse call count to detect Emscripten degradation.
-let parseCallCount = 0;
-const MAX_PARSE_CALLS = 200;
-
-globalThis.pgfmtParse = (sql) => {
-  parseCallCount++;
-  if (parseCallCount > MAX_PARSE_CALLS) {
-    return { error: "too many parse calls; Emscripten state may be degraded" };
-  }
-  if (sql.length > 100000) {
-    return { error: "statement too large for browser parsing" };
-  }
-  try {
-    const result = pgQuery.parse(sql);
-    if (result.error) {
-      return { error: result.error.message };
-    }
-    return { result: camelToSnakeKeys(JSON.stringify(result.parse_tree)) };
-  } catch (err) {
-    return { error: err.toString() };
-  }
-};
-
-// Pure JS scanner — finds comments and semicolons without calling Emscripten.
-globalThis.pgfmtScan = (sql) => {
-  try {
-    const tokens = [];
-    let i = 0;
-    while (i < sql.length) {
-      const ch = sql[i];
-      if (ch === "-" && sql[i + 1] === "-") {
-        const start = i;
-        i += 2;
-        while (i < sql.length && sql[i] !== "\n") i++;
-        tokens.push([start, i, "SQL_COMMENT", "NO_KEYWORD"]);
-      } else if (ch === "/" && sql[i + 1] === "*") {
-        const start = i;
-        i += 2;
-        while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/"))
-          i++;
-        if (i + 1 < sql.length) i += 2;
-        tokens.push([start, i, "C_COMMENT", "NO_KEYWORD"]);
-      } else if (ch === "'") {
-        i++;
-        while (i < sql.length) {
-          if (sql[i] === "'") {
-            if (sql[i + 1] === "'") i += 2;
-            else {
-              i++;
-              break;
-            }
-          } else i++;
-        }
-      } else if (ch === "$") {
-        let j = i + 1;
-        while (j < sql.length && /[a-zA-Z0-9_]/.test(sql[j])) j++;
-        if (j < sql.length && sql[j] === "$") {
-          const tag = sql.substring(i, j + 1);
-          i = j + 1;
-          const end = sql.indexOf(tag, i);
-          i = end >= 0 ? end + tag.length : sql.length;
-        } else i++;
-      } else if (ch === ";") {
-        tokens.push([i, i + 1, "ASCII_59", "NO_KEYWORD"]);
-        i++;
-      } else {
-        i++;
-      }
-    }
-    return { result: JSON.stringify(tokens) };
-  } catch (err) {
-    return { error: err.toString() };
-  }
-};
-
-// PL/pgSQL parsing uses the shared Emscripten instance. Subject to the
-// same MAX_PARSE_CALLS limit as pgfmtParse.
-globalThis.pgfmtParsePlPgSQL = (sql) => {
-  parseCallCount++;
-  if (parseCallCount > MAX_PARSE_CALLS) {
-    return { error: "parse call limit reached" };
-  }
-  try {
-    const result = pgQuery.parsePlpgsql(sql);
-    if (result.error) {
-      return { error: result.error.message || String(result.error) };
-    }
-    return { result: JSON.stringify(result.plpgsql_funcs) };
-  } catch (err) {
-    return { error: err.toString() };
-  }
-};
+let wasmModule; // Compiled WebAssembly.Module (compiled once, instantiated per call)
 
 // Convert camelCase JSON keys to snake_case for protojson compatibility.
 function camelToSnakeKeys(json) {
@@ -171,55 +62,201 @@ function splitStatements(sql) {
   return stmts;
 }
 
-// Extract $$ body from a SQL statement (e.g. CREATE FUNCTION ... AS $$ body $$).
+// Pure JS scanner — finds comments and semicolons.
+function scanTokens(sql) {
+  const tokens = [];
+  let i = 0;
+  while (i < sql.length) {
+    const ch = sql[i];
+    if (ch === "-" && sql[i + 1] === "-") {
+      const start = i;
+      i += 2;
+      while (i < sql.length && sql[i] !== "\n") i++;
+      tokens.push([start, i, "SQL_COMMENT", "NO_KEYWORD"]);
+    } else if (ch === "/" && sql[i + 1] === "*") {
+      const start = i;
+      i += 2;
+      while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/"))
+        i++;
+      if (i + 1 < sql.length) i += 2;
+      tokens.push([start, i, "C_COMMENT", "NO_KEYWORD"]);
+    } else if (ch === "'") {
+      i++;
+      while (i < sql.length) {
+        if (sql[i] === "'") {
+          if (sql[i + 1] === "'") i += 2;
+          else {
+            i++;
+            break;
+          }
+        } else i++;
+      }
+    } else if (ch === "$") {
+      let j = i + 1;
+      while (j < sql.length && /[a-zA-Z0-9_]/.test(sql[j])) j++;
+      if (j < sql.length && sql[j] === "$") {
+        const tag = sql.substring(i, j + 1);
+        i = j + 1;
+        const end = sql.indexOf(tag, i);
+        i = end >= 0 ? end + tag.length : sql.length;
+      } else i++;
+    } else if (ch === ";") {
+      tokens.push([i, i + 1, "ASCII_59", "NO_KEYWORD"]);
+      i++;
+    } else {
+      i++;
+    }
+  }
+  return tokens;
+}
+
+// Extract comments from scan tokens.
+function extractComments(sql, tokens) {
+  return tokens
+    .filter((t) => t[2] === "SQL_COMMENT" || t[2] === "C_COMMENT")
+    .map((t) => ({ text: sql.substring(t[0], t[1]), start: t[0], end: t[1] }));
+}
+
+// Extract $$ body from a SQL statement.
 function extractBody(sql) {
   const match = sql.match(/\$(\w*)\$([\s\S]*?)\$\1\$/);
   return match ? match[2] : null;
 }
 
-// Pre-parse function bodies for a statement. Returns a bodies object
-// or null if no bodies found. The Go printer checks these before
-// calling back to JS for pgParse/pgParsePlPgSqlToJSON.
-function preParseBodies(sql) {
+// Build augmented AST JSON for a single SQL statement.
+// This is the JS equivalent of Go's printer.Augment().
+function buildAugmentedAST(sql) {
+  const parsed = pgQuery.parse(sql);
+  if (!parsed || parsed.error) return null;
+
+  const parseTree = parsed.parse_tree;
+  const tokens = scanTokens(sql);
+  const comments = extractComments(sql, tokens);
+
+  const augmented = { version: parseTree.version || 0, stmts: [] };
+  let ci = 0;
+
+  for (const rawStmt of parseTree.stmts || []) {
+    const stmtLocation = rawStmt.stmt_location || 0;
+    const stmtLen = rawStmt.stmt_len || 0;
+    const stmtEnd = stmtLen > 0 ? stmtLocation + stmtLen : sql.length;
+
+    // Find first real (non-comment) token in the statement range.
+    let realStart = stmtEnd;
+    for (const tok of tokens) {
+      if (tok[0] < stmtLocation) continue;
+      if (tok[0] >= stmtEnd) break;
+      if (tok[2] !== "SQL_COMMENT" && tok[2] !== "C_COMMENT") {
+        realStart = tok[0];
+        break;
+      }
+    }
+
+    // Emit leading comments.
+    while (ci < comments.length && comments[ci].start < realStart) {
+      const c = comments[ci];
+      augmented.stmts.push({
+        comment: {
+          text: c.text,
+          type: c.text.startsWith("/*") ? "block" : "line",
+        },
+      });
+      ci++;
+    }
+
+    // Collect inline comments for this statement.
+    const inlineComments = [];
+    while (ci < comments.length && comments[ci].start < stmtEnd) {
+      inlineComments.push(comments[ci]);
+      ci++;
+    }
+
+    // Build the statement JSON (snake_case for protojson compatibility).
+    let stmtJSON = JSON.parse(camelToSnakeKeys(JSON.stringify(rawStmt.stmt)));
+
+    // Embed inline comments as _comments sidecar.
+    if (inlineComments.length > 0) {
+      stmtJSON._comments = inlineComments.map((c) => ({
+        text: c.text,
+        start: c.start,
+        end: c.end,
+      }));
+    }
+
+    // Pre-parse function bodies.
+    const bodies = preParseBodiesForStmt(sql, rawStmt);
+    if (bodies) {
+      stmtJSON._bodies = bodies;
+    }
+
+    augmented.stmts.push({
+      stmt: stmtJSON,
+      stmt_location: stmtLocation,
+      stmt_len: stmtLen,
+    });
+  }
+
+  // Trailing comments.
+  while (ci < comments.length) {
+    const c = comments[ci];
+    augmented.stmts.push({
+      comment: {
+        text: c.text,
+        type: c.text.startsWith("/*") ? "block" : "line",
+      },
+    });
+    ci++;
+  }
+
+  return augmented;
+}
+
+// Pre-parse function bodies for a statement.
+function preParseBodiesForStmt(sql, rawStmt) {
   const body = extractBody(sql);
   if (!body) return null;
 
-  const bodies = { sql: {}, plpgsql: {} };
   const isPlpgsql = /LANGUAGE\s+plpgsql/i.test(sql);
   const isSql = /LANGUAGE\s+sql/i.test(sql);
+  // DO blocks default to plpgsql
+  const isDo = rawStmt.stmt?.DoStmt || rawStmt.stmt?.do_stmt;
+  const lang = isPlpgsql || (isDo && !isSql) ? "plpgsql" : isSql ? "sql" : "";
+  if (!lang) return null;
 
-  if (isPlpgsql) {
-    // Try both wrapper prefixes (same as Go's formatPLpgSQLBody).
+  const bodies = { sql: {}, plpgsql: {} };
+
+  if (lang === "sql") {
+    try {
+      const result = pgQuery.parse(body);
+      if (result && !result.error) {
+        // Marshal as ParseResult-like JSON for Go's protojson.Unmarshal.
+        const stmts = (result.parse_tree.stmts || []).map((s) => ({
+          stmt: s.stmt,
+        }));
+        bodies.sql[body] = camelToSnakeKeys(
+          JSON.stringify({ version: result.parse_tree.version, stmts }),
+        );
+      }
+    } catch {
+      // body stays unformatted
+    }
+  } else if (lang === "plpgsql") {
     const wrappers = [
       "CREATE FUNCTION _plpgsql_fmt_() RETURNS void AS $$",
       "CREATE FUNCTION _plpgsql_fmt_() RETURNS SETOF record AS $$",
     ];
     for (const prefix of wrappers) {
       const wrapped = prefix + body + "\n$$ LANGUAGE plpgsql;";
-      parseCallCount++;
-      if (parseCallCount > MAX_PARSE_CALLS) break;
       try {
         const result = pgQuery.parsePlpgsql(wrapped);
         if (!result.error) {
           bodies.plpgsql[wrapped] = JSON.stringify(result.plpgsql_funcs);
+          // Also pre-parse embedded SQL within PL/pgSQL bodies.
+          preParsePlpgsqlEmbeddedSQL(result.plpgsql_funcs, bodies);
           break;
         }
       } catch {
         // try next wrapper
-      }
-    }
-  } else if (isSql) {
-    parseCallCount++;
-    if (parseCallCount <= MAX_PARSE_CALLS) {
-      try {
-        const result = pgQuery.parse(body);
-        if (result && !result.error) {
-          bodies.sql[body] = camelToSnakeKeys(
-            JSON.stringify(result.parse_tree),
-          );
-        }
-      } catch {
-        // body stays unformatted
       }
     }
   }
@@ -229,93 +266,129 @@ function preParseBodies(sql) {
     : null;
 }
 
-// Parse a single statement in JS via pg-query-emscripten.
-// Returns { parseJSON, scanJSON, bodiesJSON } or null on failure.
-function parseStatement(sql) {
-  parseCallCount++;
-  if (parseCallCount > MAX_PARSE_CALLS) return null;
+// Pre-parse SQL queries embedded within PL/pgSQL bodies.
+function preParsePlpgsqlEmbeddedSQL(plpgsqlFuncs, bodies) {
+  const sqlStrings = new Set();
+  JSON.stringify(plpgsqlFuncs, (key, value) => {
+    if (
+      (key === "query" || key === "sqlstmt") &&
+      typeof value === "string" &&
+      value.trim()
+    ) {
+      sqlStrings.add(value);
+    }
+    return value;
+  });
+  for (const sql of sqlStrings) {
+    if (bodies.sql[sql]) continue;
+    try {
+      const result = pgQuery.parse(sql);
+      if (result && !result.error) {
+        const stmts = (result.parse_tree.stmts || []).map((s) => ({
+          stmt: s.stmt,
+        }));
+        bodies.sql[sql] = camelToSnakeKeys(
+          JSON.stringify({ version: result.parse_tree.version, stmts }),
+        );
+      }
+    } catch {
+      // skip
+    }
+  }
+}
+
+// Run the WASI WASM binary with the given stdin data.
+// Returns the stdout output as a string.
+function runWASI(stdinData) {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  const stdinFile = new File(encoder.encode(stdinData));
+  const stdoutFile = new File([]);
+  const stderrFile = new File([]);
+
+  const wasi = new WASI(
+    ["pgfmt-print"],
+    [],
+    [
+      new OpenFile(stdinFile),
+      new OpenFile(stdoutFile),
+      new OpenFile(stderrFile),
+    ],
+  );
+
+  const instance = new WebAssembly.Instance(wasmModule, {
+    wasi_snapshot_preview1: wasi.wasiImport,
+  });
+
   try {
-    const parsed = pgQuery.parse(sql);
-    if (!parsed || parsed.error) return null;
-    const parseJSON = camelToSnakeKeys(JSON.stringify(parsed.parse_tree));
-    const scanned = pgfmtScan(sql);
-    if (scanned.error) return null;
-    const bodies = preParseBodies(sql);
-    return {
-      parseJSON,
-      scanJSON: scanned.result,
-      sql,
-      bodiesJSON: bodies ? JSON.stringify(bodies) : undefined,
-    };
-  } catch {
+    wasi.start(instance);
+  } catch (e) {
+    // Go's os.Exit(0) triggers WASIProcExit with code 0.
+    if (e instanceof WASIProcExit && e.code === 0) {
+      // Normal exit.
+    } else {
+      throw e;
+    }
+  }
+
+  return decoder.decode(new Uint8Array(stdoutFile.data));
+}
+
+// Format a single SQL string via the augmented AST pipeline.
+function formatOne(sql) {
+  const augmented = buildAugmentedAST(sql);
+  if (!augmented) return null;
+  try {
+    return runWASI(JSON.stringify(augmented));
+  } catch (err) {
+    console.warn("[pgfmt] WASI execution failed:", err);
     return null;
   }
 }
 
-// Load pg-query-emscripten.
+// Initialize pg-query-emscripten.
 pgQuery = await new pgQueryInit();
-if (printerReady)
-  postMessage({
-    type: "ready",
-    version: globalThis.pgfmtVersion,
-    buildInfo: globalThis.pgfmtBuildInfo,
-  });
 
-// Load Go WASM printer.
-const go = new globalThis.Go();
-const { instance } = await WebAssembly.instantiateStreaming(
-  fetch("pgfmt.wasm"),
-  go.importObject,
-);
-go.run(instance);
+// Load and compile the WASI WASM module.
+const wasmResponse = await fetch("pgfmt-print.wasm");
+wasmModule = await WebAssembly.compile(await wasmResponse.arrayBuffer());
+
+// Signal ready.
+postMessage({
+  type: "ready",
+  version: "pgfmt",
+  buildInfo: "pgfmt WASI",
+});
 
 onmessage = (e) => {
   const { id, sql } = e.data;
-  parseCallCount = 0; // Reset per format request.
   try {
-    // For small inputs, use pgfmtFormat (Go handles everything via callbacks).
     const stmts = splitStatements(sql);
+
     if (stmts.length <= 1) {
-      const result = pgfmtFormat(sql);
-      if (result === undefined) {
-        postMessage({ type: "result", id, error: "printer crashed" });
-        return;
+      const result = formatOne(sql);
+      if (result !== null) {
+        postMessage({ type: "result", id, result });
+      } else {
+        postMessage({ type: "result", id, error: "format failed" });
       }
-      postMessage({
-        type: "result",
-        id,
-        result: result.result,
-        error: result.error,
-      });
       return;
     }
 
-    // For large inputs: parse each statement in JS, then format in Go
-    // via pgfmtFormatParsed (no Go↔JS callbacks needed per statement).
+    // Large inputs: format each statement separately with progress.
     const parts = [];
     const batchSize = 20;
     function formatBatch(start) {
       const end = Math.min(start + batchSize, stmts.length);
       for (let i = start; i < end; i++) {
-        const parsed = parseStatement(stmts[i]);
-        if (parsed) {
-          try {
-            const result = pgfmtFormatParsed(
-              parsed.parseJSON,
-              parsed.scanJSON,
-              parsed.sql,
-              parsed.bodiesJSON,
-            );
-            if (result && !result.error) {
-              parts.push(result.result);
-              continue;
-            }
-          } catch {
-            // fall through to raw text
-          }
+        const result = formatOne(stmts[i]);
+        if (result !== null) {
+          parts.push(result);
+        } else {
+          // Fallback: raw text.
+          parts.push(stmts[i].trim() + "\n\n");
         }
-        // Fallback: raw text
-        parts.push(stmts[i].trim() + "\n\n");
       }
       if (end < stmts.length) {
         postMessage({ type: "progress", current: end, total: stmts.length });
