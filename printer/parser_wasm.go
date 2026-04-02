@@ -37,6 +37,10 @@ func pgParse(input string) (*pg_query.ParseResult, error) {
 				return result, nil
 			}
 		}
+		// Cache is active but body not found — don't fall through to JS
+		// callback which can hang Emscripten. Return error so the body
+		// passes through unformatted.
+		return nil, errors.New("body not in pre-parsed cache")
 	}
 	fn := js.Global().Get("pgfmtParse")
 	if fn.IsUndefined() {
@@ -91,6 +95,8 @@ func pgParsePlPgSqlToJSON(input string) (string, error) {
 		if cached, ok := PreParsedBodies.PlPgSQL[input]; ok {
 			return cached, nil
 		}
+		// Cache is active but not found — don't call JS.
+		return "", errors.New("body not in pre-parsed cache")
 	}
 	fn := js.Global().Get("pgfmtParsePlPgSQL")
 	if fn.IsUndefined() {
