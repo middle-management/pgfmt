@@ -277,6 +277,9 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
                         status.textContent = msg.version
                             ? msg.version + " · Ready"
                             : "Ready";
+                        if (msg.buildInfo) {
+                            status.title = msg.buildInfo;
+                        }
                         status.className = "status ready";
                         formatBtn.disabled = false;
                         return;

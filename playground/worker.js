@@ -9,7 +9,12 @@ let printerReady = false;
 
 globalThis.onPgfmtReady = () => {
   printerReady = true;
-  if (pgQuery) postMessage({ type: "ready", version: globalThis.pgfmtVersion });
+  if (pgQuery)
+    postMessage({
+      type: "ready",
+      version: globalThis.pgfmtVersion,
+      buildInfo: globalThis.pgfmtBuildInfo,
+    });
 };
 
 // Forward warnings from Go printer to console.
