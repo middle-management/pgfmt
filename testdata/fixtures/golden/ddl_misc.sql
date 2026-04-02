@@ -116,3 +116,19 @@ AS $$
 		('Hello, ' || name) || '!'
 $$;
 
+-- CHECK constraint with complex boolean expression
+CREATE TABLE asset_package (
+	id uuid NOT NULL,
+	type text,
+	element_id uuid,
+	variable_id uuid,
+	CONSTRAINT variable_type_check CHECK (
+		(
+			(type = 'VARIABLE'::text)
+			AND variable_id IS NOT NULL
+			AND element_id IS NOT NULL
+		)
+		OR (type <> 'VARIABLE'::text)
+	)
+);
+
