@@ -502,10 +502,24 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
                 copyBtn.addEventListener("click", () => {
                     const text = output.textContent;
                     if (!text) return;
-                    navigator.clipboard.writeText(text).then(() => {
+                    if (navigator.clipboard?.writeText) {
+                        navigator.clipboard.writeText(text).then(() => {
+                            copyBtn.textContent = "Copied!";
+                            setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+                        });
+                    } else {
+                        // Fallback for non-HTTPS contexts.
+                        const ta = document.createElement("textarea");
+                        ta.value = text;
+                        ta.style.position = "fixed";
+                        ta.style.opacity = "0";
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand("copy");
+                        document.body.removeChild(ta);
                         copyBtn.textContent = "Copied!";
                         setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
-                    });
+                    }
                 });
 
                 clearBtn.addEventListener("click", () => {
