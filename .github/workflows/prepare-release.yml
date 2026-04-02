@@ -52,32 +52,31 @@ jobs:
           grep -q "const VERSION: &str = \"${VERSION}\";" zed-pgfmt/src/lib.rs
           echo "All version strings updated to ${VERSION}"
 
-      - name: Create pull request
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit version bump
         run: |
-          BRANCH="release/v${{ inputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b "${BRANCH}"
           git add -A
           git commit -m "release: v${{ inputs.version }}"
-          git push -u origin "${BRANCH}"
-          gh pr create \
-            --title "release: v${{ inputs.version }}" \
-            --label "release" \
-            --body "$(cat <<EOF
-          ## Release v${{ inputs.version }}
 
-          This PR bumps version strings for the v${{ inputs.version }} release.
+      # peter-evans/create-pull-request pushes the branch and creates
+      # the PR in a way that triggers CI workflows (unlike GITHUB_TOKEN).
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: release/v${{ inputs.version }}
+          title: "release: v${{ inputs.version }}"
+          labels: release
+          body: |
+            ## Release v${{ inputs.version }}
 
-          ### Updated files
-          - \`lsp/server.go\` — LSP server info version
-          - \`zed-pgfmt/extension.toml\` — Zed extension version
-          - \`zed-pgfmt/Cargo.toml\` — Cargo package version
-          - \`zed-pgfmt/src/lib.rs\` — VERSION constant
+            This PR bumps version strings for the v${{ inputs.version }} release.
 
-          ### What happens on merge
-          A GitHub release \`v${{ inputs.version }}\` will be created automatically, which triggers the release build workflow to compile and upload binaries.
-          EOF
-          )"
+            ### Updated files
+            - `lsp/server.go` — LSP server info version
+            - `zed-pgfmt/extension.toml` — Zed extension version
+            - `zed-pgfmt/Cargo.toml` — Cargo package version
+            - `zed-pgfmt/src/lib.rs` — VERSION constant
+
+            ### What happens on merge
+            A GitHub release `v${{ inputs.version }}` will be created automatically, which triggers the release build workflow to compile and upload binaries.
