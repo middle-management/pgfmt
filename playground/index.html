@@ -522,6 +522,29 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
                     }
                 });
 
+                // Select all output text on Ctrl/Cmd+A when output is focused.
+                output.setAttribute("tabindex", "0");
+                output.addEventListener("keydown", (e) => {
+                    if (e.key === "a" && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        const range = document.createRange();
+                        range.selectNodeContents(output);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    }
+                });
+
+                // Double-click output selects all text.
+                output.addEventListener("dblclick", (e) => {
+                    e.preventDefault();
+                    const range = document.createRange();
+                    range.selectNodeContents(output);
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                });
+
                 clearBtn.addEventListener("click", () => {
                     input.value = "";
                     output.textContent = "";
