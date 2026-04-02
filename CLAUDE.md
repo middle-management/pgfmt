@@ -27,7 +27,8 @@ There is no Makefile; use `go` commands directly.
 - **Unit tests** in `printer/printer_test.go` cover individual SQL constructs
 - **Integration tests** in `main_test.go` compare formatted output against golden files in `testdata/fixtures/golden/`
 - CI verifies golden files are up to date via `git diff --exit-code testdata/fixtures/golden/`
-- When adding new SQL formatting support, add both unit tests and fixture coverage
+- When adding new SQL formatting support, prefer golden fixture coverage over custom unit tests
+- Only use unit tests when a fixture can't adequately cover the case
 
 ## Deparse Fallback
 
