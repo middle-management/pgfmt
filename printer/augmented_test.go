@@ -4,6 +4,8 @@ package printer
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -29,6 +31,56 @@ func TestAugmentInterStatementComments(t *testing.T) {
 	}
 	if ast.Stmts[2].Comment == nil || ast.Stmts[2].Comment.Text != "-- footer" {
 		t.Fatalf("expected trailing comment, got %+v", ast.Stmts[2])
+	}
+}
+
+func TestFormatAugmentedRoundTrip(t *testing.T) {
+	sql := "-- header\nSELECT id, name FROM users;\n\n-- footer\n"
+	augmented, err := Augment(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := FormatAugmented(augmented)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := Format(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("round-trip mismatch\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
+func TestFormatAugmentedFixtures(t *testing.T) {
+	fixtures, err := filepath.Glob("../testdata/fixtures/*.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range fixtures {
+		name := filepath.Base(f)
+		t.Run(name, func(t *testing.T) {
+			sql, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			augmented, err := Augment(string(sql))
+			if err != nil {
+				t.Fatalf("Augment: %v", err)
+			}
+			got, err := FormatAugmented(augmented)
+			if err != nil {
+				t.Fatalf("FormatAugmented: %v", err)
+			}
+			want, err := Format(string(sql))
+			if err != nil {
+				t.Fatalf("Format: %v", err)
+			}
+			if got != want {
+				t.Errorf("round-trip mismatch\n--- got (len=%d) ---\n%s\n--- want (len=%d) ---\n%s", len(got), got, len(want), want)
+			}
+		})
 	}
 }
 
