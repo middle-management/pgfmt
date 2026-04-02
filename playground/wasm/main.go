@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"runtime/debug"
 	"syscall/js"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
@@ -86,7 +87,31 @@ func main() {
 	js.Global().Set("pgfmtFormatParsed", js.FuncOf(formatParsed))
 	js.Global().Set("pgfmtVersion", version)
 
-	fmt.Printf("pgfmt %s\n", version)
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		v := bi.Main.Version
+		if v == "" || v == "(devel)" {
+			v = version
+		}
+		var vcs string
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" {
+				vcs = s.Value[:min(8, len(s.Value))]
+			}
+			if s.Key == "vcs.time" {
+				vcs += " " + s.Value
+			}
+			if s.Key == "vcs.modified" && s.Value == "true" {
+				vcs += " (dirty)"
+			}
+		}
+		if vcs != "" {
+			fmt.Printf("pgfmt %s %s\n", v, vcs)
+		} else {
+			fmt.Printf("pgfmt %s\n", v)
+		}
+	} else {
+		fmt.Printf("pgfmt %s\n", version)
+	}
 
 	if cb := js.Global().Get("onPgfmtReady"); !cb.IsUndefined() {
 		cb.Invoke()
