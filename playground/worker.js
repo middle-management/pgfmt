@@ -20,7 +20,7 @@ globalThis.onPgfmtReady = () => {
 // Forward warnings from Go printer to console.
 globalThis.onPgfmtWarn = (msg) => console.warn("[pgfmt]", msg);
 
-// Expose parsing to Go via JS callbacks.
+// Expose parsing to Go via JS callbacks (used by pgfmtFormat for single statements).
 globalThis.pgfmtParse = (sql) => {
   if (sql.length > 100000) {
     return { error: "statement too large for browser parsing" };
@@ -37,8 +37,6 @@ globalThis.pgfmtParse = (sql) => {
 };
 
 // Pure JS scanner — finds comments and semicolons without calling Emscripten.
-// pg-query-emscripten's scan() uses ALLOC_STACK which overflows on large inputs,
-// and returns Emscripten vectors that crash when accessed.
 globalThis.pgfmtScan = (sql) => {
   try {
     const tokens = [];
@@ -90,35 +88,18 @@ globalThis.pgfmtScan = (sql) => {
   }
 };
 
-// PL/pgSQL body parsing is disabled in the playground. Emscripten's
-// setjmp/longjmp handling corrupts state after repeated parsePlpgsql
-// calls, causing hangs or crashes on schemas with many functions.
-// Function signatures are still formatted; only $$ bodies pass through.
+// PL/pgSQL body parsing disabled — Emscripten state corrupts after repeated calls.
 globalThis.pgfmtParsePlPgSQL = () => {
   return { error: "plpgsql body formatting disabled in playground" };
 };
 
-// Convert camelCase JSON keys to snake_case. Only touches keys (before `:`)
-// not values. Needed because pg-query-emscripten outputs camelCase but
-// protojson requires snake_case for regular proto fields.
+// Convert camelCase JSON keys to snake_case for protojson compatibility.
 function camelToSnakeKeys(json) {
   return json.replace(/"([a-z][a-zA-Z0-9]*)"(\s*:)/g, (_, key, colon) => {
     const snake = key.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
     return `"${snake}"${colon}`;
   });
 }
-
-// Load pg-query-emscripten.
-pgQuery = await new pgQueryInit();
-if (printerReady) postMessage({ type: "ready" });
-
-// Load Go WASM printer.
-const go = new globalThis.Go();
-const { instance } = await WebAssembly.instantiateStreaming(
-  fetch("pgfmt.wasm"),
-  go.importObject,
-);
-go.run(instance);
 
 // Split SQL on top-level semicolons (handles strings, dollar-quotes, comments).
 function splitStatements(sql) {
@@ -140,7 +121,10 @@ function splitStatements(sql) {
       while (i < sql.length) {
         if (sql[i] === "'") {
           if (sql[i + 1] === "'") i += 2;
-          else { i++; break; }
+          else {
+            i++;
+            break;
+          }
         } else i++;
       }
     } else if (ch === "$") {
@@ -166,10 +150,42 @@ function splitStatements(sql) {
   return stmts;
 }
 
+// Parse a single statement in JS via pg-query-emscripten.
+// Returns { parseJSON, scanJSON } or null on failure.
+function parseStatement(sql) {
+  try {
+    const parsed = pgQuery.parse(sql);
+    if (!parsed || parsed.error) return null;
+    const parseJSON = camelToSnakeKeys(JSON.stringify(parsed.parse_tree));
+    const scanned = pgfmtScan(sql);
+    if (scanned.error) return null;
+    return { parseJSON, scanJSON: scanned.result, sql };
+  } catch {
+    return null;
+  }
+}
+
+// Load pg-query-emscripten.
+pgQuery = await new pgQueryInit();
+if (printerReady)
+  postMessage({
+    type: "ready",
+    version: globalThis.pgfmtVersion,
+    buildInfo: globalThis.pgfmtBuildInfo,
+  });
+
+// Load Go WASM printer.
+const go = new globalThis.Go();
+const { instance } = await WebAssembly.instantiateStreaming(
+  fetch("pgfmt.wasm"),
+  go.importObject,
+);
+go.run(instance);
+
 onmessage = (e) => {
   const { id, sql } = e.data;
   try {
-    // For small inputs, format directly (single Go call handles everything).
+    // For small inputs, use pgfmtFormat (Go handles everything via callbacks).
     const stmts = splitStatements(sql);
     if (stmts.length <= 1) {
       const result = pgfmtFormat(sql);
@@ -177,58 +193,49 @@ onmessage = (e) => {
         postMessage({ type: "result", id, error: "printer crashed" });
         return;
       }
-      postMessage({ type: "result", id, result: result.result, error: result.error });
+      postMessage({
+        type: "result",
+        id,
+        result: result.result,
+        error: result.error,
+      });
       return;
     }
 
-    // Try parsing the entire input at once — one Emscripten call, one Go call.
-    let fullParseFailed = false;
-    try {
-      console.log(`Parsing ${sql.length} bytes (${stmts.length} statements)...`);
-      const parsed = pgQuery.parse(sql);
-      if (parsed && !parsed.error) {
-        console.log(`Parsed ${parsed.parse_tree.stmts.length} statements, formatting...`);
-        const scanned = pgfmtScan(sql);
-        const parseJSON = camelToSnakeKeys(JSON.stringify(parsed.parse_tree));
-        const result = pgfmtFormatParsed(parseJSON, scanned.result, sql);
-        if (result && !result.error) {
-          console.log(`FormatParsed succeeded (${result.result.length} bytes output)`);
-          postMessage({ type: "result", id, result: result.result });
-          return;
-        }
-        console.warn("FormatParsed failed:", result?.error);
-      } else {
-        console.warn("Parse failed:", parsed?.error?.message);
-      }
-      fullParseFailed = true;
-    } catch (err) {
-      console.warn("Full parse exception:", err);
-      fullParseFailed = true;
-    }
-
-    // Fallback: format each statement individually via pgfmtFormat.
-    if (fullParseFailed) {
-      const parts = [];
-      const batchSize = 10;
-      function formatBatch(start) {
-        const end = Math.min(start + batchSize, stmts.length);
-        for (let i = start; i < end; i++) {
+    // For large inputs: parse each statement in JS, then format in Go
+    // via pgfmtFormatParsed (no Go↔JS callbacks needed per statement).
+    const parts = [];
+    const batchSize = 20;
+    function formatBatch(start) {
+      const end = Math.min(start + batchSize, stmts.length);
+      for (let i = start; i < end; i++) {
+        const parsed = parseStatement(stmts[i]);
+        if (parsed) {
           try {
-            const r = pgfmtFormat(stmts[i]);
-            parts.push(r && !r.error ? r.result : stmts[i].trim() + "\n\n");
+            const result = pgfmtFormatParsed(
+              parsed.parseJSON,
+              parsed.scanJSON,
+              parsed.sql,
+            );
+            if (result && !result.error) {
+              parts.push(result.result);
+              continue;
+            }
           } catch {
-            parts.push(stmts[i].trim() + "\n\n");
+            // fall through to raw text
           }
         }
-        if (end < stmts.length) {
-          postMessage({ type: "progress", current: end, total: stmts.length });
-          setTimeout(() => formatBatch(end), 0);
-        } else {
-          postMessage({ type: "result", id, result: parts.join("") });
-        }
+        // Fallback: raw text
+        parts.push(stmts[i].trim() + "\n\n");
       }
-      formatBatch(0);
+      if (end < stmts.length) {
+        postMessage({ type: "progress", current: end, total: stmts.length });
+        setTimeout(() => formatBatch(end), 0);
+      } else {
+        postMessage({ type: "result", id, result: parts.join("") });
+      }
     }
+    formatBatch(0);
   } catch (err) {
     postMessage({ type: "result", id, error: err.toString() });
   }
