@@ -289,8 +289,6 @@ function preParseBodiesForStmt(sql, rawStmt) {
         const result = safeParsePlpgsql(wrapped);
         if (result) {
           bodies.plpgsql[wrapped] = JSON.stringify(result.plpgsql_funcs);
-          // Also pre-parse embedded SQL within PL/pgSQL bodies.
-          preParsePlpgsqlEmbeddedSQL(result.plpgsql_funcs, bodies);
           break;
         }
       } catch {
@@ -302,33 +300,6 @@ function preParseBodiesForStmt(sql, rawStmt) {
   return Object.keys(bodies.sql).length || Object.keys(bodies.plpgsql).length
     ? bodies
     : null;
-}
-
-// Pre-parse SQL queries embedded within PL/pgSQL bodies.
-function preParsePlpgsqlEmbeddedSQL(plpgsqlFuncs, bodies) {
-  const sqlStrings = new Set();
-  JSON.stringify(plpgsqlFuncs, (key, value) => {
-    if (
-      (key === "query" || key === "sqlstmt") &&
-      typeof value === "string" &&
-      value.trim()
-    ) {
-      sqlStrings.add(value);
-    }
-    return value;
-  });
-  for (const sql of sqlStrings) {
-    if (bodies.sql[sql]) continue;
-    const result = safeParse(sql);
-    if (result) {
-      const stmts = (result.parse_tree.stmts || []).map((s) => ({
-        stmt: s.stmt,
-      }));
-      bodies.sql[sql] = camelToSnakeKeys(
-        JSON.stringify({ version: result.parse_tree.version, stmts }),
-      );
-    }
-  }
 }
 
 // Run the WASI WASM binary with the given stdin data.
