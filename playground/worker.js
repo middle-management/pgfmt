@@ -366,7 +366,7 @@ function runWASI(stdinData) {
 function formatOne(sql) {
   const augmented = buildAugmentedAST(sql);
   if (!augmented) {
-    console.warn("[pgfmt] parse failed:", sql.slice(0, 120));
+    console.warn("[pgfmt] parse failed:", sql);
     return null;
   }
   try {
@@ -374,11 +374,11 @@ function formatOne(sql) {
     const result = runWASI(JSON.stringify(augmented));
     const dt = performance.now() - t0;
     if (dt > 500) {
-      console.warn(`[pgfmt] slow WASI (${Math.round(dt)}ms):`, sql.slice(0, 80));
+      console.warn(`[pgfmt] slow WASI (${Math.round(dt)}ms):`, sql);
     }
     return result;
   } catch (err) {
-    console.warn("[pgfmt] WASI failed:", err, "sql:", sql.slice(0, 80));
+    console.warn("[pgfmt] WASI failed:", err, "sql:", sql);
     return null;
   }
 }
