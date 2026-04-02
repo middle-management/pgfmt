@@ -133,11 +133,19 @@ function extractBody(sql) {
 // Guarded parse — returns null if Emscripten call limit reached.
 function safeParse(sql) {
   parseCallCount++;
-  if (parseCallCount > MAX_PARSE_CALLS) return null;
+  if (parseCallCount > MAX_PARSE_CALLS) {
+    console.warn(`[pgfmt] parse limit reached (${parseCallCount}/${MAX_PARSE_CALLS})`);
+    return null;
+  }
   try {
     const result = pgQuery.parse(sql);
-    return result && !result.error ? result : null;
-  } catch {
+    if (!result || result.error) {
+      console.warn("[pgfmt] pg_query error:", result?.error?.message || "unknown");
+      return null;
+    }
+    return result;
+  } catch (e) {
+    console.warn("[pgfmt] pg_query threw:", e);
     return null;
   }
 }
