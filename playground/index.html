@@ -348,22 +348,33 @@
                 const counter = document.getElementById("counter");
                 const inputHighlight = document.getElementById("inputHighlight");
 
-                let highlightTimer;
                 function updateInputHighlight() {
-                    clearTimeout(highlightTimer);
-                    highlightTimer = setTimeout(() => {
-                        const text = input.value;
-                        if (!text) {
-                            inputHighlight.innerHTML = "";
-                            return;
-                        }
-                        highlightText(text, 'sql', false).then(html => {
-                            inputHighlight.innerHTML = html;
-                        });
-                    }, 150);
+                    const text = input.value;
+                    if (!text || text.length > 50000) {
+                        inputHighlight.textContent = text || "";
+                        return;
+                    }
+                    highlightText(text, 'sql', false).then(html => {
+                        inputHighlight.innerHTML = html;
+                    });
                 }
 
-                input.addEventListener("input", updateInputHighlight);
+                // Show highlighting when not actively typing.
+                input.addEventListener("focus", () => {
+                    // Show plain text in highlight layer while focused
+                    // to avoid double-render lag.
+                    inputHighlight.style.color = "var(--text)";
+                    input.style.webkitTextFillColor = "inherit";
+                    input.style.color = "inherit";
+                    inputHighlight.textContent = "";
+                });
+                input.addEventListener("blur", () => {
+                    // Restore transparent textarea, show highlight.
+                    input.style.webkitTextFillColor = "transparent";
+                    input.style.color = "transparent";
+                    inputHighlight.style.color = "";
+                    updateInputHighlight();
+                });
                 input.addEventListener("scroll", () => {
                     inputHighlight.scrollTop = input.scrollTop;
                     inputHighlight.scrollLeft = input.scrollLeft;
