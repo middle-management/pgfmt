@@ -240,15 +240,14 @@
                 display: block;
             }
 
-            .output [data-shj-numbers] {
-                padding-left: 3.5em;
-            }
-
-            .output [data-shj-numbers]::before {
-                color: var(--border);
-                width: 2.5em;
+            .output .shj-numbers div::before {
+                display: inline-block;
+                width: 3em;
                 text-align: right;
                 margin-right: 1em;
+                color: var(--border);
+                opacity: 1;
+                user-select: none;
             }
 
             .error-text {
