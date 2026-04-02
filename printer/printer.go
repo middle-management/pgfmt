@@ -936,16 +936,17 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("IF NOT EXISTS ")
 		}
 		output.writeRangeVar(n.CreateStmt.Relation)
-		output.Builder.WriteString(" (\n")
+		output.Builder.WriteString(" (")
+		output.indent++
 		for i, elt := range n.CreateStmt.TableElts {
-			output.Builder.WriteString("\t")
+			output.writeNewlineIndent()
 			output.writeNode(elt)
 			if i != len(n.CreateStmt.TableElts)-1 {
 				output.Builder.WriteString(",")
 			}
-			output.Builder.WriteString("\n")
 		}
-		output.Builder.WriteString(")")
+		output.indent--
+		output.Builder.WriteString("\n)")
 		if len(n.CreateStmt.InhRelations) > 0 {
 			output.Builder.WriteString(" INHERITS (")
 			output.writeCommaSeparatedList(n.CreateStmt.InhRelations)
@@ -984,9 +985,25 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeNode(n.Constraint.RawExpr)
 			output.Builder.WriteString(") STORED")
 		case pg_query.ConstrType_CONSTR_CHECK:
-			output.Builder.WriteString("CHECK (")
-			output.writeNode(n.Constraint.RawExpr)
-			output.Builder.WriteString(")")
+			if n.Constraint.Conname != "" {
+				output.Builder.WriteString("CONSTRAINT ")
+				output.Builder.WriteString(n.Constraint.Conname)
+				output.Builder.WriteString(" ")
+			}
+			// Use multiline format for complex boolean expressions
+			if be, ok := n.Constraint.RawExpr.GetNode().(*pg_query.Node_BoolExpr); ok && len(be.BoolExpr.Args) > 1 {
+				output.Builder.WriteString("CHECK (")
+				output.indent++
+				output.writeNewlineIndent()
+				output.writeNode(n.Constraint.RawExpr)
+				output.indent--
+				output.writeNewlineIndent()
+				output.Builder.WriteString(")")
+			} else {
+				output.Builder.WriteString("CHECK (")
+				output.writeNode(n.Constraint.RawExpr)
+				output.Builder.WriteString(")")
+			}
 		case pg_query.ConstrType_CONSTR_PRIMARY:
 			if n.Constraint.Conname != "" {
 				output.Builder.WriteString("CONSTRAINT ")
