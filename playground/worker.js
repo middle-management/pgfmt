@@ -96,9 +96,22 @@ globalThis.pgfmtScan = (sql) => {
   }
 };
 
-// PL/pgSQL body parsing disabled — Emscripten state corrupts after repeated calls.
-globalThis.pgfmtParsePlPgSQL = () => {
-  return { error: "plpgsql body formatting disabled in playground" };
+// PL/pgSQL parsing uses the shared Emscripten instance. Subject to the
+// same MAX_PARSE_CALLS limit as pgfmtParse.
+globalThis.pgfmtParsePlPgSQL = (sql) => {
+  parseCallCount++;
+  if (parseCallCount > MAX_PARSE_CALLS) {
+    return { error: "parse call limit reached" };
+  }
+  try {
+    const result = pgQuery.parsePlpgsql(sql);
+    if (result.error) {
+      return { error: result.error.message || String(result.error) };
+    }
+    return { result: JSON.stringify(result.plpgsql_funcs) };
+  } catch (err) {
+    return { error: err.toString() };
+  }
 };
 
 // Convert camelCase JSON keys to snake_case for protojson compatibility.
