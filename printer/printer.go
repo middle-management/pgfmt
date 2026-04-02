@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func isOp(s string) bool {
@@ -31,6 +32,10 @@ type Printer struct {
 	lastNodeEndPos int       // output position after last node with a source location
 	RawStmt        *pg_query.RawStmt // set by Format to enable deparse fallback
 	OriginalSQL    string             // original SQL input for raw text fallback
+	Deparsed       string             // pre-computed deparsed text for fallback
+	// bodyCache maps body text → parse result JSON for pre-parsed function bodies.
+	// Used by FormatAugmented to avoid calling pgParse/pgParsePlPgSqlToJSON.
+	bodyCache      map[string]string
 }
 
 func (output *Printer) Print(node *pg_query.Node) {
@@ -2222,7 +2227,12 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		// nothing
 
 	default:
-		// Fallback 1: deparse via pg_query (native)
+		// Fallback 1: use pre-computed deparsed text (from augmented AST)
+		if output.Deparsed != "" {
+			output.Builder.WriteString(output.Deparsed)
+			return
+		}
+		// Fallback 2: deparse via pg_query (native)
 		if output.RawStmt != nil {
 			deparsed, err := pgDeparse(&pg_query.ParseResult{
 				Stmts: []*pg_query.RawStmt{output.RawStmt},
@@ -2232,7 +2242,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				return
 			}
 		}
-		// Fallback 2: extract original SQL text (WASM, where deparse is unavailable)
+		// Fallback 3: extract original SQL text (WASM, where deparse is unavailable)
 		if output.RawStmt != nil && output.OriginalSQL != "" {
 			start := output.RawStmt.StmtLocation
 			end := start + output.RawStmt.StmtLen
@@ -2723,11 +2733,23 @@ func (output *Printer) writeAlias(a *pg_query.Alias) {
 }
 
 func (output *Printer) formatSQLBody(body string, indentLevel int) {
-	result, err := pgParse(body)
-	if err != nil {
-		warn("failed to parse SQL function body: %v", err)
-		output.Builder.WriteString(body)
-		return
+	var result *pg_query.ParseResult
+	var err error
+
+	if cached, ok := output.bodyCache[body]; ok {
+		result = &pg_query.ParseResult{}
+		if unmarshalErr := protojson.Unmarshal([]byte(cached), result); unmarshalErr != nil {
+			warn("failed to unmarshal cached body: %v", unmarshalErr)
+			output.Builder.WriteString(body)
+			return
+		}
+	} else {
+		result, err = pgParse(body)
+		if err != nil {
+			warn("failed to parse SQL function body: %v", err)
+			output.Builder.WriteString(body)
+			return
+		}
 	}
 	for i, stmt := range result.Stmts {
 		b := &strings.Builder{}

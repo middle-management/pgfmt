@@ -3,6 +3,9 @@ package printer
 import (
 	"encoding/json"
 	"strings"
+
+	pg_query "github.com/pganalyze/pg_query_go/v6"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // plComment represents a comment extracted from a PL/pgSQL body.
@@ -161,10 +164,10 @@ func formatSQL(query string) string {
 		return b.String()
 	}
 
-	allComments := extractComments(query, scanResult)
+	allComments := ExtractComments(query, scanResult)
 	stmt := result.Stmts[0]
 	stmtEnd := stmtEndPos(stmt, int32(len(query)))
-	realStart := firstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
+	realStart := FirstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
 
 	b := &strings.Builder{}
 	ci := 0
@@ -209,7 +212,7 @@ func hasLineComment(s string) bool {
 // writeSQL formats a SQL query and writes it. Uses compact single-line form
 // if it fits within ~100 characters at the current indent level.
 func (ctx *plContext) writeSQL(query string, ind int) {
-	formatted := formatSQL(query)
+	formatted := ctx.formatSQLCached(query)
 	if !hasLineComment(formatted) {
 		compact := compactSQL(formatted)
 		if len(compact) <= 100-ind*4 {
@@ -218,6 +221,22 @@ func (ctx *plContext) writeSQL(query string, ind int) {
 		}
 	}
 	ctx.writeIndented(formatted, ind)
+}
+
+// formatSQLCached formats a SQL query, using the printer's bodyCache when available.
+func (ctx *plContext) formatSQLCached(query string) string {
+	cache := ctx.printer.bodyCache
+	if cached, ok := cache[query]; ok {
+		// The cache stores protojson-encoded ParseResult.
+		result := &pg_query.ParseResult{}
+		if err := protojson.Unmarshal([]byte(cached), result); err == nil && len(result.Stmts) > 0 {
+			b := &strings.Builder{}
+			p := &Printer{Builder: b, bodyCache: cache}
+			p.Print(result.Stmts[0].Stmt)
+			return b.String()
+		}
+	}
+	return formatSQL(query)
 }
 
 // writeIndented writes a possibly multi-line string, re-indenting continuation lines.
@@ -253,6 +272,12 @@ func (output *Printer) formatPLpgSQLBody(body string, indentLevel int) {
 	var err error
 	for _, prefix := range wrappers {
 		stmt := prefix + body + "\n$$ LANGUAGE plpgsql;"
+		// Check bodyCache first.
+		if cached, ok := output.bodyCache[stmt]; ok {
+			jsonResult = cached
+			err = nil
+			break
+		}
 		jsonResult, err = pgParsePlPgSqlToJSON(stmt)
 		if err == nil {
 			break
@@ -644,7 +669,7 @@ func (ctx *plContext) writeRaise(node *plStmtRaise, ind int) {
 }
 
 func (ctx *plContext) writeExecSQL(node *plStmtExecSQL, ind int) {
-	formatted := formatSQL(node.SQLStmt.E.Query)
+	formatted := ctx.formatSQLCached(node.SQLStmt.E.Query)
 
 	insertInto := func(sql, sep string) string {
 		intoClause := "INTO "
@@ -686,7 +711,7 @@ func (ctx *plContext) writeExecSQL(node *plStmtExecSQL, ind int) {
 
 func (ctx *plContext) writePerform(node *plStmtPerform, ind int) {
 	// Parser converts PERFORM to SELECT; format as SQL then swap back
-	formatted := formatSQL(node.Expr.E.Query)
+	formatted := ctx.formatSQLCached(node.Expr.E.Query)
 
 	swapSelectToPerform := func(s string) string {
 		s = strings.TrimSpace(s)

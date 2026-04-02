@@ -19,7 +19,8 @@ testdata/fixtures/output/
 zed-pgfmt/target/
 zed-pgfmt/extension.wasm
 playground/pgfmt.wasm
-playground/wasm_exec.js
+playground/pgfmt-print.wasm
+playground/pg_query.js
 playground/node_modules/
 playground/test-results/
 .playwright-mcp/
