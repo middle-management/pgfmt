@@ -84,6 +84,44 @@ func TestFormatAugmentedFixtures(t *testing.T) {
 	}
 }
 
+func TestAugmentInlineComments(t *testing.T) {
+	sql := "SELECT id, -- user id\nname FROM users;"
+	augmented, err := Augment(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := FormatAugmented(augmented)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := Format(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("inline comment mismatch\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
+func TestAugmentSQLFunctionBody(t *testing.T) {
+	sql := `CREATE FUNCTION add(a int, b int) RETURNS int LANGUAGE sql AS $$ SELECT a + b; $$;`
+	augmented, err := Augment(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := FormatAugmented(augmented)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := Format(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("function body mismatch\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
 func TestAugmentedASTMarshalUnmarshal(t *testing.T) {
 	original := AugmentedAST{
 		Version: 1,

@@ -21,6 +21,7 @@ type AugmentedStmt struct {
 	StmtLocation int32             `json:"stmt_location,omitempty"`
 	StmtLen      int32             `json:"stmt_len,omitempty"`
 	Comment      *AugmentedComment `json:"comment,omitempty"`
+	Deparsed     string            `json:"deparsed,omitempty"`
 }
 
 // AugmentedComment represents a SQL comment injected into the AST.
@@ -49,6 +50,12 @@ func FormatAugmented(data []byte) (string, error) {
 			continue
 		}
 
+		// Extract pre-parsed bodies.
+		bodyCache := extractBodies(entry.Stmt)
+
+		// Extract inline comments from augmented JSON before protojson unmarshal.
+		inlineComments := extractInlineComments(entry.Stmt)
+
 		// Unmarshal the protojson node back into a pg_query.Node.
 		unmarshalOpts := protojson.UnmarshalOptions{DiscardUnknown: true}
 		node := &pg_query.Node{}
@@ -63,13 +70,63 @@ func FormatAugmented(data []byte) (string, error) {
 		}
 
 		b := &strings.Builder{}
-		p := &Printer{Builder: b, RawStmt: rawStmt}
+		p := &Printer{Builder: b, comments: inlineComments, RawStmt: rawStmt, Deparsed: entry.Deparsed, bodyCache: bodyCache}
 		p.Print(node)
 		out.WriteString(b.String())
 		out.WriteString(";\n\n")
 	}
 
 	return out.String(), nil
+}
+
+// extractInlineComments pulls the _comments array from an augmented stmt JSON.
+func extractInlineComments(data json.RawMessage) []comment {
+	var node map[string]json.RawMessage
+	if err := json.Unmarshal(data, &node); err != nil {
+		return nil
+	}
+	commentsRaw, ok := node["_comments"]
+	if !ok {
+		return nil
+	}
+	var jc []struct {
+		Text  string `json:"text"`
+		Start int32  `json:"start"`
+		End   int32  `json:"end"`
+	}
+	if err := json.Unmarshal(commentsRaw, &jc); err != nil {
+		return nil
+	}
+	var result []comment
+	for _, c := range jc {
+		result = append(result, comment{text: c.Text, start: c.Start, end: c.End})
+	}
+	return result
+}
+
+// extractBodies pulls the _bodies object from an augmented stmt JSON and
+// flattens it into a single map for the printer's bodyCache.
+func extractBodies(data json.RawMessage) map[string]string {
+	var node map[string]json.RawMessage
+	if err := json.Unmarshal(data, &node); err != nil {
+		return nil
+	}
+	bodiesRaw, ok := node["_bodies"]
+	if !ok {
+		return nil
+	}
+	var bodies map[string]map[string]string
+	if err := json.Unmarshal(bodiesRaw, &bodies); err != nil {
+		return nil
+	}
+	// Flatten into a single map for the printer's bodyCache.
+	result := make(map[string]string)
+	for _, m := range bodies {
+		for k, v := range m {
+			result[k] = v
+		}
+	}
+	return result
 }
 
 // ParsedBody replaces a raw function body string with its parsed form.
