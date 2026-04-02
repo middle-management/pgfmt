@@ -179,10 +179,25 @@
                 background: var(--bg);
             }
 
-            .output .shj-lang-sql {
+            .output [class*="shj-lang-"] {
                 background: none;
                 padding: 0;
                 margin: 0;
+                font-family: inherit;
+                font-size: inherit;
+                line-height: inherit;
+                display: block;
+            }
+
+            .output [data-shj-numbers] {
+                padding-left: 3.5em;
+            }
+
+            .output [data-shj-numbers]::before {
+                color: var(--border);
+                width: 2.5em;
+                text-align: right;
+                margin-right: 1em;
             }
 
             .error-text {
@@ -365,7 +380,7 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
                                 escapeHtml(res.error) +
                                 "</span>";
                         } else {
-                            highlightText(res.result, 'sql', false).then(html => {
+                            highlightText(res.result, 'sql', true).then(html => {
                                 output.innerHTML = html;
                             });
                         }
