@@ -259,6 +259,7 @@ func (output *Printer) formatPLpgSQLBody(body string, indentLevel int) {
 		}
 	}
 	if err != nil {
+		warn("failed to parse PL/pgSQL body: %v", err)
 		output.Builder.WriteString("\n")
 		output.Builder.WriteString(body)
 		return
@@ -266,6 +267,7 @@ func (output *Printer) formatPLpgSQLBody(body string, indentLevel int) {
 
 	var parsed []plFunctionW
 	if err := json.Unmarshal([]byte(jsonResult), &parsed); err != nil || len(parsed) == 0 {
+		warn("failed to unmarshal PL/pgSQL JSON")
 		output.Builder.WriteString("\n")
 		output.Builder.WriteString(body)
 		return

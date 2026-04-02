@@ -4,6 +4,7 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>pgfmt playground</title>
+        <link rel="stylesheet" href="https://unpkg.com/@speed-highlight/core/dist/themes/atom-dark.css">
         <style>
             :root {
                 --bg: #1e1e2e;
@@ -118,7 +119,11 @@
             }
 
             .pane-header {
-                padding: 8px 16px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0 16px;
+                height: 32px;
                 font-size: 12px;
                 font-weight: 600;
                 text-transform: uppercase;
@@ -126,6 +131,82 @@
                 color: var(--subtext);
                 border-bottom: 1px solid var(--border);
                 flex-shrink: 0;
+            }
+
+            .counter {
+                font-weight: 400;
+                text-transform: none;
+                letter-spacing: 0;
+                opacity: 0.6;
+            }
+
+            .btn-copy {
+                background: var(--surface);
+                color: var(--subtext);
+                border: 1px solid var(--border);
+                padding: 2px 10px;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 500;
+                cursor: pointer;
+                text-transform: none;
+                letter-spacing: 0;
+                transition: color 0.15s, border-color 0.15s;
+            }
+            .btn-copy:hover {
+                color: var(--text);
+                border-color: var(--text);
+            }
+
+            .editor {
+                position: relative;
+                flex: 1;
+                min-height: 0;
+            }
+
+            .editor textarea,
+            .editor-highlight {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                padding: 16px;
+                font-family: var(--font-mono);
+                font-size: 14px;
+                line-height: 1.6;
+                tab-size: 4;
+                white-space: pre;
+                overflow: auto;
+                margin: 0;
+                border: none;
+            }
+
+            .editor textarea {
+                background: transparent;
+                color: transparent;
+                caret-color: var(--text);
+                resize: none;
+                outline: none;
+                z-index: 1;
+                -webkit-text-fill-color: transparent;
+            }
+
+            .editor-highlight {
+                background: var(--surface);
+                color: var(--text);
+                z-index: 0;
+                pointer-events: none;
+            }
+
+            .editor-highlight [class*="shj-lang-"] {
+                background: none;
+                padding: 0;
+                margin: 0;
+                font-family: inherit;
+                font-size: inherit;
+                line-height: inherit;
+                display: block;
             }
 
             textarea,
@@ -147,6 +228,34 @@
 
             .output {
                 background: var(--bg);
+            }
+
+            .output > div {
+                display: flex;
+                min-height: 100%;
+            }
+
+            .output .shj-numbers {
+                flex-shrink: 0;
+                padding: 0 0.75em 0 0;
+                border-right: 1px solid var(--border);
+                margin-right: 1em;
+                text-align: right;
+                user-select: none;
+                color: var(--border);
+            }
+
+            .output .shj-numbers div::before {
+                display: block;
+                opacity: 1;
+                color: inherit;
+                margin: 0;
+                padding: 0;
+            }
+
+            .output > div > div:last-child {
+                flex: 1;
+                min-width: 0;
             }
 
             .error-text {
@@ -200,22 +309,31 @@
 
         <div class="editor-wrap">
             <div class="pane">
-                <div class="pane-header">Input SQL</div>
-                <textarea
-                    id="input"
-                    spellcheck="false"
-                    placeholder="Paste your SQL here..."
-                ></textarea>
+                <div class="pane-header">
+                    Input SQL
+                    <span class="counter" id="counter"></span>
+                </div>
+                <div class="editor">
+                    <pre class="editor-highlight" id="inputHighlight"></pre>
+                    <textarea
+                        id="input"
+                        spellcheck="false"
+                        placeholder="Paste your SQL here..."
+                    ></textarea>
+                </div>
             </div>
             <div class="pane">
-                <div class="pane-header">Formatted Output</div>
+                <div class="pane-header">
+                    Formatted Output
+                    <button type="button" class="btn-copy" id="copyBtn" title="Copy to clipboard">Copy</button>
+                </div>
                 <pre class="output" id="output"></pre>
             </div>
         </div>
 
         <div class="hint">
-            <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to format &middot; Runs entirely in
-            your browser via WebAssembly &middot;
+            <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to format &middot;
+            Your SQL never leaves your browser &middot;
             <a
                 href="https://github.com/middle-management/pgfmt"
                 style="color: var(--accent)"
@@ -223,14 +341,64 @@
             >
         </div>
 
-        <script>
+        <script type="module">
+            import { highlightText } from 'https://unpkg.com/@speed-highlight/core/dist/index.js';
+
             (() => {
                 const input = document.getElementById("input");
                 const output = document.getElementById("output");
                 const status = document.getElementById("status");
                 const formatBtn = document.getElementById("formatBtn");
                 const clearBtn = document.getElementById("clearBtn");
+                const copyBtn = document.getElementById("copyBtn");
                 const exampleBtn = document.getElementById("exampleBtn");
+                const counter = document.getElementById("counter");
+                const inputHighlight = document.getElementById("inputHighlight");
+
+                function updateInputHighlight() {
+                    const text = input.value;
+                    if (!text || text.length > 50000) {
+                        inputHighlight.textContent = text || "";
+                        return;
+                    }
+                    highlightText(text, 'sql', false).then(html => {
+                        inputHighlight.innerHTML = html;
+                    });
+                }
+
+                // Show highlighting when not actively typing.
+                input.addEventListener("focus", () => {
+                    // Show plain text in highlight layer while focused
+                    // to avoid double-render lag.
+                    inputHighlight.style.color = "var(--text)";
+                    input.style.webkitTextFillColor = "inherit";
+                    input.style.color = "inherit";
+                    inputHighlight.textContent = "";
+                });
+                input.addEventListener("blur", () => {
+                    // Restore transparent textarea, show highlight.
+                    input.style.webkitTextFillColor = "transparent";
+                    input.style.color = "transparent";
+                    inputHighlight.style.color = "";
+                    updateInputHighlight();
+                });
+                input.addEventListener("scroll", () => {
+                    inputHighlight.scrollTop = input.scrollTop;
+                    inputHighlight.scrollLeft = input.scrollLeft;
+                });
+
+                function updateCounter() {
+                    const text = input.value;
+                    if (!text) {
+                        counter.textContent = "";
+                        return;
+                    }
+                    const lines = text.split("\n").length;
+                    const chars = text.length;
+                    counter.textContent = `${lines} lines, ${chars.toLocaleString()} chars`;
+                }
+
+                input.addEventListener("input", updateCounter);
 
                 const exampleSQL = `select u.id, u.name, u.email, count(o.id) as order_count, sum(o.total) as total_spent from users u left join orders o on o.user_id = u.id where u.created_at >= '2024-01-01' and u.status = 'active' group by u.id, u.name, u.email having count(o.id) > 0 order by total_spent desc limit 50;
 
@@ -249,9 +417,21 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
                     const msg = e.data;
                     if (msg.type === "ready") {
                         ready = true;
-                        status.textContent = "Ready";
+                        status.textContent = msg.version
+                            ? msg.version + " · Ready"
+                            : "Ready";
+                        if (msg.buildInfo) {
+                            status.title = msg.buildInfo;
+                        }
                         status.className = "status ready";
                         formatBtn.disabled = false;
+                        return;
+                    }
+                    if (msg.type === "progress") {
+                        const pct = Math.round(
+                            (msg.current / msg.total) * 100,
+                        );
+                        formatBtn.textContent = `Formatting... ${pct}%`;
                         return;
                     }
                     if (msg.type === "result") {
@@ -294,7 +474,9 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
                                 escapeHtml(res.error) +
                                 "</span>";
                         } else {
-                            output.textContent = res.result;
+                            highlightText(res.result, 'sql', true).then(html => {
+                                output.innerHTML = html;
+                            });
                         }
                     } catch (err) {
                         output.innerHTML =
@@ -317,14 +499,64 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
 
                 formatBtn.addEventListener("click", doFormat);
 
+                copyBtn.addEventListener("click", () => {
+                    const text = output.textContent;
+                    if (!text) return;
+                    if (navigator.clipboard?.writeText) {
+                        navigator.clipboard.writeText(text).then(() => {
+                            copyBtn.textContent = "Copied!";
+                            setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+                        });
+                    } else {
+                        // Fallback for non-HTTPS contexts.
+                        const ta = document.createElement("textarea");
+                        ta.value = text;
+                        ta.style.position = "fixed";
+                        ta.style.opacity = "0";
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand("copy");
+                        document.body.removeChild(ta);
+                        copyBtn.textContent = "Copied!";
+                        setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+                    }
+                });
+
+                // Select all output text on Ctrl/Cmd+A when output is focused.
+                output.setAttribute("tabindex", "0");
+                output.addEventListener("keydown", (e) => {
+                    if (e.key === "a" && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        const range = document.createRange();
+                        range.selectNodeContents(output);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    }
+                });
+
+                // Double-click output selects all text.
+                output.addEventListener("dblclick", (e) => {
+                    e.preventDefault();
+                    const range = document.createRange();
+                    range.selectNodeContents(output);
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                });
+
                 clearBtn.addEventListener("click", () => {
                     input.value = "";
                     output.textContent = "";
+                    inputHighlight.innerHTML = "";
+                    updateCounter();
                     input.focus();
                 });
 
                 exampleBtn.addEventListener("click", () => {
                     input.value = exampleSQL;
+                    updateCounter();
+                    updateInputHighlight();
                     input.focus();
                 });
 

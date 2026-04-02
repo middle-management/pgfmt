@@ -3,6 +3,7 @@
 package printer
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"syscall/js"
@@ -17,7 +18,30 @@ import (
 
 var jsonOpts = protojson.UnmarshalOptions{DiscardUnknown: true}
 
+// PreParsedBodies holds pre-parsed results for function bodies, populated
+// by the WASM entry point before calling FormatParsed. This avoids calling
+// back to Emscripten from within Go for function body parsing.
+var PreParsedBodies struct {
+	// SQL maps SQL function body text → parse result JSON (protojson format).
+	SQL map[string]string
+	// PlPgSQL maps wrapped PL/pgSQL statement → parsed JSON.
+	PlPgSQL map[string]string
+}
+
 func pgParse(input string) (*pg_query.ParseResult, error) {
+	// Check pre-parsed cache first.
+	if PreParsedBodies.SQL != nil {
+		if cached, ok := PreParsedBodies.SQL[input]; ok {
+			result := &pg_query.ParseResult{}
+			if err := jsonOpts.Unmarshal([]byte(cached), result); err == nil {
+				return result, nil
+			}
+		}
+		// Cache is active but body not found — don't fall through to JS
+		// callback which can hang Emscripten. Return error so the body
+		// passes through unformatted.
+		return nil, errors.New("body not in pre-parsed cache")
+	}
 	fn := js.Global().Get("pgfmtParse")
 	if fn.IsUndefined() {
 		return nil, errors.New("pgfmtParse not defined in JS")
@@ -43,23 +67,37 @@ func pgScan(input string) (*pg_query.ScanResult, error) {
 	if errStr := res.Get("error").String(); errStr != "" && errStr != "<undefined>" {
 		return nil, errors.New(errStr)
 	}
-	// Build ScanResult from JS scan tokens.
-	tokens := res.Get("tokens")
-	length := tokens.Length()
+	// Parse JSON array of [start, end, token_kind, keyword_kind] tuples.
+	jsonStr := res.Get("result").String()
+	var rawTokens [][4]any
+	if err := json.Unmarshal([]byte(jsonStr), &rawTokens); err != nil {
+		return nil, err
+	}
 	scanResult := &pg_query.ScanResult{}
-	for i := 0; i < length; i++ {
-		tok := tokens.Index(i)
+	for _, t := range rawTokens {
+		start, _ := t[0].(float64)
+		end, _ := t[1].(float64)
+		tokenKind, _ := t[2].(string)
+		keywordKind, _ := t[3].(string)
 		scanResult.Tokens = append(scanResult.Tokens, &pg_query.ScanToken{
-			Start:   int32(tok.Get("start").Int()),
-			End:     int32(tok.Get("end").Int()),
-			Token:       pg_query.Token(tokenKindToEnum(tok.Get("token_kind").String())),
-			KeywordKind: pg_query.KeywordKind(keywordKindToEnum(tok.Get("keyword_kind").String())),
+			Start:       int32(start),
+			End:         int32(end),
+			Token:       pg_query.Token(tokenKindToEnum(tokenKind)),
+			KeywordKind: pg_query.KeywordKind(keywordKindToEnum(keywordKind)),
 		})
 	}
 	return scanResult, nil
 }
 
 func pgParsePlPgSqlToJSON(input string) (string, error) {
+	// Check pre-parsed cache first.
+	if PreParsedBodies.PlPgSQL != nil {
+		if cached, ok := PreParsedBodies.PlPgSQL[input]; ok {
+			return cached, nil
+		}
+		// Cache is active but not found — don't call JS.
+		return "", errors.New("body not in pre-parsed cache")
+	}
 	fn := js.Global().Get("pgfmtParsePlPgSQL")
 	if fn.IsUndefined() {
 		return "", errors.New("pgfmtParsePlPgSQL not defined in JS")

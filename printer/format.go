@@ -41,6 +41,46 @@ func Format(sql string) (string, error) {
 	return out.String(), nil
 }
 
+// FormatParsed formats SQL using pre-parsed results, avoiding any pgParse/pgScan calls.
+// This is used by the WASM playground where parsing is done in JS.
+func FormatParsed(parseResult *pg_query.ParseResult, scanResult *pg_query.ScanResult, originalSQL string) (string, error) {
+	comments := extractComments(originalSQL, scanResult)
+
+	var out strings.Builder
+	ci := 0
+
+	for _, stmt := range parseResult.Stmts {
+		stmtEnd := stmtEndPos(stmt, int32(len(originalSQL)))
+		realStart := firstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
+
+		for ci < len(comments) && comments[ci].start < realStart {
+			out.WriteString(comments[ci].text)
+			out.WriteString("\n")
+			ci++
+		}
+
+		var inlineComments []comment
+		for ci < len(comments) && comments[ci].start < stmtEnd {
+			inlineComments = append(inlineComments, comments[ci])
+			ci++
+		}
+
+		b := &strings.Builder{}
+		p := &Printer{Builder: b, comments: inlineComments, RawStmt: stmt, OriginalSQL: originalSQL}
+		p.Print(stmt.Stmt)
+		out.WriteString(b.String())
+		out.WriteString(";\n\n")
+	}
+
+	for ci < len(comments) {
+		out.WriteString(comments[ci].text)
+		out.WriteString("\n")
+		ci++
+	}
+
+	return out.String(), nil
+}
+
 // formatOne formats a single SQL string (which may still contain multiple
 // statements, but typically contains one or few).
 func formatOne(sql string) (string, error) {
@@ -49,12 +89,19 @@ func formatOne(sql string) (string, error) {
 		return "", err
 	}
 
-	scanResult, err := pgScan(sql)
-	if err != nil {
-		return "", err
-	}
+	// Only scan for tokens if the input might contain comments.
+	// This avoids a costly pgScan round-trip for the common case.
+	hasComments := strings.Contains(sql, "--") || strings.Contains(sql, "/*")
 
-	comments := extractComments(sql, scanResult)
+	var scanResult *pg_query.ScanResult
+	var comments []comment
+	if hasComments {
+		scanResult, err = pgScan(sql)
+		if err != nil {
+			return "", err
+		}
+		comments = extractComments(sql, scanResult)
+	}
 
 	var out strings.Builder
 	ci := 0 // comment index
@@ -62,26 +109,30 @@ func formatOne(sql string) (string, error) {
 	for _, stmt := range parseResult.Stmts {
 		stmtEnd := stmtEndPos(stmt, int32(len(sql)))
 
-		// Find where the actual SQL keyword starts (skip leading comments/whitespace)
-		realStart := firstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
+		if hasComments {
+			// Find where the actual SQL keyword starts (skip leading comments/whitespace)
+			realStart := firstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
 
-		// Emit leading comments (those before the first real token)
-		for ci < len(comments) && comments[ci].start < realStart {
-			out.WriteString(comments[ci].text)
-			out.WriteString("\n")
-			ci++
+			// Emit leading comments (those before the first real token)
+			for ci < len(comments) && comments[ci].start < realStart {
+				out.WriteString(comments[ci].text)
+				out.WriteString("\n")
+				ci++
+			}
 		}
 
 		// Collect inline comments (within the statement body, after first real token)
 		var inlineComments []comment
-		for ci < len(comments) && comments[ci].start < stmtEnd {
-			inlineComments = append(inlineComments, comments[ci])
-			ci++
+		if hasComments {
+			for ci < len(comments) && comments[ci].start < stmtEnd {
+				inlineComments = append(inlineComments, comments[ci])
+				ci++
+			}
 		}
 
 		// Format the statement, passing inline comments to the printer
 		b := &strings.Builder{}
-		p := &Printer{Builder: b, comments: inlineComments, RawStmt: stmt}
+		p := &Printer{Builder: b, comments: inlineComments, RawStmt: stmt, OriginalSQL: sql}
 		p.Print(stmt.Stmt)
 		out.WriteString(b.String())
 		out.WriteString(";\n\n")
