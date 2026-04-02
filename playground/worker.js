@@ -184,21 +184,25 @@ onmessage = (e) => {
     // Try parsing the entire input at once — one Emscripten call, one Go call.
     let fullParseFailed = false;
     try {
+      console.log(`Parsing ${sql.length} bytes (${stmts.length} statements)...`);
       const parsed = pgQuery.parse(sql);
       if (parsed && !parsed.error) {
+        console.log(`Parsed ${parsed.parse_tree.stmts.length} statements, formatting...`);
         const scanned = pgfmtScan(sql);
-        // pg-query-emscripten outputs camelCase keys for non-node fields
-        // (e.g. stmtLocation, stmtLen, returnType) but protojson silently
-        // drops camelCase for regular proto fields. Convert to snake_case.
         const parseJSON = camelToSnakeKeys(JSON.stringify(parsed.parse_tree));
         const result = pgfmtFormatParsed(parseJSON, scanned.result, sql);
         if (result && !result.error) {
+          console.log(`FormatParsed succeeded (${result.result.length} bytes output)`);
           postMessage({ type: "result", id, result: result.result });
           return;
         }
+        console.warn("FormatParsed failed:", result?.error);
+      } else {
+        console.warn("Parse failed:", parsed?.error?.message);
       }
       fullParseFailed = true;
-    } catch {
+    } catch (err) {
+      console.warn("Full parse exception:", err);
       fullParseFailed = true;
     }
 
