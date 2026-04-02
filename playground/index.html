@@ -4,6 +4,7 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>pgfmt playground</title>
+        <link rel="stylesheet" href="https://unpkg.com/@speed-highlight/core/dist/themes/atom-dark.css">
         <style>
             :root {
                 --bg: #1e1e2e;
@@ -178,6 +179,12 @@
                 background: var(--bg);
             }
 
+            .output .shj-lang-sql {
+                background: none;
+                padding: 0;
+                margin: 0;
+            }
+
             .error-text {
                 color: var(--red);
                 font-style: italic;
@@ -258,7 +265,9 @@
             >
         </div>
 
-        <script>
+        <script type="module">
+            import { highlightText } from 'https://unpkg.com/@speed-highlight/core/dist/index.js';
+
             (() => {
                 const input = document.getElementById("input");
                 const output = document.getElementById("output");
@@ -356,7 +365,9 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
                                 escapeHtml(res.error) +
                                 "</span>";
                         } else {
-                            output.textContent = res.result;
+                            highlightText(res.result, 'sql').then(html => {
+                                output.innerHTML = html;
+                            });
                         }
                     } catch (err) {
                         output.innerHTML =
