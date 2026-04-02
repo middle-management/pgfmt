@@ -44,14 +44,14 @@ func Format(sql string) (string, error) {
 // FormatParsed formats SQL using pre-parsed results, avoiding any pgParse/pgScan calls.
 // This is used by the WASM playground where parsing is done in JS.
 func FormatParsed(parseResult *pg_query.ParseResult, scanResult *pg_query.ScanResult, originalSQL string) (string, error) {
-	comments := extractComments(originalSQL, scanResult)
+	comments := ExtractComments(originalSQL, scanResult)
 
 	var out strings.Builder
 	ci := 0
 
 	for _, stmt := range parseResult.Stmts {
 		stmtEnd := stmtEndPos(stmt, int32(len(originalSQL)))
-		realStart := firstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
+		realStart := FirstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
 
 		for ci < len(comments) && comments[ci].start < realStart {
 			out.WriteString(comments[ci].text)
@@ -100,7 +100,7 @@ func formatOne(sql string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		comments = extractComments(sql, scanResult)
+		comments = ExtractComments(sql, scanResult)
 	}
 
 	var out strings.Builder
@@ -111,7 +111,7 @@ func formatOne(sql string) (string, error) {
 
 		if hasComments {
 			// Find where the actual SQL keyword starts (skip leading comments/whitespace)
-			realStart := firstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
+			realStart := FirstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
 
 			// Emit leading comments (those before the first real token)
 			for ci < len(comments) && comments[ci].start < realStart {
@@ -159,7 +159,7 @@ func stmtEndPos(stmt *pg_query.RawStmt, inputLen int32) int32 {
 
 // firstRealTokenStart finds the byte position of the first non-comment token
 // within the given range of the scan result. Returns rangeEnd if none found.
-func firstRealTokenStart(scanResult *pg_query.ScanResult, rangeStart, rangeEnd int32) int32 {
+func FirstRealTokenStart(scanResult *pg_query.ScanResult, rangeStart, rangeEnd int32) int32 {
 	for _, tok := range scanResult.Tokens {
 		if tok.Start < rangeStart {
 			continue
@@ -174,7 +174,7 @@ func firstRealTokenStart(scanResult *pg_query.ScanResult, rangeStart, rangeEnd i
 	return rangeEnd
 }
 
-func extractComments(sql string, scanResult *pg_query.ScanResult) []comment {
+func ExtractComments(sql string, scanResult *pg_query.ScanResult) []comment {
 	var comments []comment
 	for _, token := range scanResult.Tokens {
 		if token.Token == pg_query.Token_SQL_COMMENT || token.Token == pg_query.Token_C_COMMENT {

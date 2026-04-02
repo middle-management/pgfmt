@@ -161,10 +161,10 @@ func formatSQL(query string) string {
 		return b.String()
 	}
 
-	allComments := extractComments(query, scanResult)
+	allComments := ExtractComments(query, scanResult)
 	stmt := result.Stmts[0]
 	stmtEnd := stmtEndPos(stmt, int32(len(query)))
-	realStart := firstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
+	realStart := FirstRealTokenStart(scanResult, stmt.StmtLocation, stmtEnd)
 
 	b := &strings.Builder{}
 	ci := 0

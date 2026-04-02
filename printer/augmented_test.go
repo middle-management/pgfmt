@@ -7,6 +7,31 @@ import (
 	"testing"
 )
 
+func TestAugmentInterStatementComments(t *testing.T) {
+	sql := "-- header\nSELECT 1;\n-- footer"
+	data, err := Augment(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ast AugmentedAST
+	if err := json.Unmarshal(data, &ast); err != nil {
+		t.Fatal(err)
+	}
+	// Expect: comment, stmt, comment
+	if len(ast.Stmts) != 3 {
+		t.Fatalf("expected 3 entries, got %d: %s", len(ast.Stmts), string(data))
+	}
+	if ast.Stmts[0].Comment == nil || ast.Stmts[0].Comment.Text != "-- header" {
+		t.Fatalf("expected leading comment, got %+v", ast.Stmts[0])
+	}
+	if ast.Stmts[1].Stmt == nil {
+		t.Fatal("expected stmt in position 1")
+	}
+	if ast.Stmts[2].Comment == nil || ast.Stmts[2].Comment.Text != "-- footer" {
+		t.Fatalf("expected trailing comment, got %+v", ast.Stmts[2])
+	}
+}
+
 func TestAugmentedASTMarshalUnmarshal(t *testing.T) {
 	original := AugmentedAST{
 		Version: 1,
