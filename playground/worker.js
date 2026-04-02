@@ -362,11 +362,14 @@ function runWASI(stdinData) {
 // Format a single SQL string via the augmented AST pipeline.
 function formatOne(sql) {
   const augmented = buildAugmentedAST(sql);
-  if (!augmented) return null;
+  if (!augmented) {
+    console.warn("[pgfmt] parse failed:", sql.slice(0, 80));
+    return null;
+  }
   try {
     return runWASI(JSON.stringify(augmented));
   } catch (err) {
-    console.warn("[pgfmt] WASI execution failed:", err);
+    console.warn("[pgfmt] WASI execution failed:", err, "sql:", sql.slice(0, 80));
     return null;
   }
 }
