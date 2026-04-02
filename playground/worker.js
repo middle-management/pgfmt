@@ -20,8 +20,16 @@ globalThis.onPgfmtReady = () => {
 // Forward warnings from Go printer to console.
 globalThis.onPgfmtWarn = (msg) => console.warn("[pgfmt]", msg);
 
-// Expose parsing to Go via JS callbacks (used by pgfmtFormat for single statements).
+// Expose parsing to Go via JS callbacks.
+// Track parse call count to detect Emscripten degradation.
+let parseCallCount = 0;
+const MAX_PARSE_CALLS = 200;
+
 globalThis.pgfmtParse = (sql) => {
+  parseCallCount++;
+  if (parseCallCount > MAX_PARSE_CALLS) {
+    return { error: "too many parse calls; Emscripten state may be degraded" };
+  }
   if (sql.length > 100000) {
     return { error: "statement too large for browser parsing" };
   }
@@ -153,6 +161,8 @@ function splitStatements(sql) {
 // Parse a single statement in JS via pg-query-emscripten.
 // Returns { parseJSON, scanJSON } or null on failure.
 function parseStatement(sql) {
+  parseCallCount++;
+  if (parseCallCount > MAX_PARSE_CALLS) return null;
   try {
     const parsed = pgQuery.parse(sql);
     if (!parsed || parsed.error) return null;
@@ -184,6 +194,7 @@ go.run(instance);
 
 onmessage = (e) => {
   const { id, sql } = e.data;
+  parseCallCount = 0; // Reset per format request.
   try {
     // For small inputs, use pgfmtFormat (Go handles everything via callbacks).
     const stmts = splitStatements(sql);
