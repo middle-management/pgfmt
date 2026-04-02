@@ -2476,6 +2476,49 @@ func (output *Printer) writeRangeVar(stmt *pg_query.RangeVar) {
 	}
 }
 
+// setOpBranch represents one branch in a flattened set operation chain.
+// The first branch has op/all unset (it's the leftmost SELECT).
+type setOpBranch struct {
+	stmt *pg_query.SelectStmt
+	op   pg_query.SetOperation // the operator BEFORE this branch
+	all  bool
+}
+
+// collectSetOpBranches flattens a chain of same-type set operations into a
+// list of branches. For example, A UNION B UNION C (parsed as (A UNION B) UNION C)
+// becomes [A, B, C]. When the operation type changes (e.g., UNION vs EXCEPT),
+// the differing subtree is kept as-is (not flattened further).
+func collectSetOpBranches(stmt *pg_query.SelectStmt) []setOpBranch {
+	var branches []setOpBranch
+	var collect func(s *pg_query.SelectStmt, op pg_query.SetOperation, all bool)
+	collect = func(s *pg_query.SelectStmt, op pg_query.SetOperation, all bool) {
+		// If the left side is the same set op type, flatten it
+		if s.Op != pg_query.SetOperation_SETOP_NONE && s.Larg != nil &&
+			(op == pg_query.SetOperation_SETOP_NONE || (s.Op == op && s.All == all)) {
+			collect(s.Larg, s.Op, s.All)
+			branches = append(branches, setOpBranch{stmt: s.Rarg, op: s.Op, all: s.All})
+		} else {
+			branches = append(branches, setOpBranch{stmt: s, op: op, all: all})
+		}
+	}
+	collect(stmt, pg_query.SetOperation_SETOP_NONE, false)
+	return branches
+}
+
+func (output *Printer) writeSetOpKeyword(op pg_query.SetOperation, all bool) {
+	switch op {
+	case pg_query.SetOperation_SETOP_UNION:
+		output.Builder.WriteString("UNION")
+	case pg_query.SetOperation_SETOP_INTERSECT:
+		output.Builder.WriteString("INTERSECT")
+	case pg_query.SetOperation_SETOP_EXCEPT:
+		output.Builder.WriteString("EXCEPT")
+	}
+	if all {
+		output.Builder.WriteString(" ALL")
+	}
+}
+
 func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 	if stmt.WithClause != nil {
 		output.writeWithClause(stmt.WithClause)
@@ -2579,38 +2622,26 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 			output.writeCommaSeparatedList(stmt.WindowClause)
 		}
 	case pg_query.SetOperation_SETOP_UNION, pg_query.SetOperation_SETOP_INTERSECT, pg_query.SetOperation_SETOP_EXCEPT:
-		output.Builder.WriteString("(")
-		output.indent++
-		output.writeNewlineIndent()
-		output.writeSelectStmt(stmt.Larg)
-		output.indent--
-		output.writeNewlineIndent()
-		output.Builder.WriteString(")")
-
-		output.writeNewlineIndent()
-		switch stmt.Op {
-		case pg_query.SetOperation_SETOP_UNION:
-			output.Builder.WriteString("UNION")
-		case pg_query.SetOperation_SETOP_INTERSECT:
-			output.Builder.WriteString("INTERSECT")
-		case pg_query.SetOperation_SETOP_EXCEPT:
-			output.Builder.WriteString("EXCEPT")
-		default:
-			warn("unexpected set operation")
+		branches := collectSetOpBranches(stmt)
+		for i, branch := range branches {
+			if i > 0 {
+				output.writeNewlineIndent()
+				output.writeSetOpKeyword(branch.op, branch.all)
+				output.writeNewlineIndent()
+			}
+			// Wrap in parens only if this branch is itself a different set operation
+			if branch.stmt.Op != pg_query.SetOperation_SETOP_NONE {
+				output.Builder.WriteString("(")
+				output.indent++
+				output.writeNewlineIndent()
+				output.writeSelectStmt(branch.stmt)
+				output.indent--
+				output.writeNewlineIndent()
+				output.Builder.WriteString(")")
+			} else {
+				output.writeSelectStmt(branch.stmt)
+			}
 		}
-
-		if stmt.All {
-			output.Builder.WriteString(" ALL")
-		}
-
-		output.writeNewlineIndent()
-		output.Builder.WriteString("(")
-		output.indent++
-		output.writeNewlineIndent()
-		output.writeSelectStmt(stmt.Rarg)
-		output.indent--
-		output.writeNewlineIndent()
-		output.Builder.WriteString(")")
 	}
 
 	if len(stmt.SortClause) > 0 {
