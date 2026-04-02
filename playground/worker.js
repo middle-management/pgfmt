@@ -171,8 +171,66 @@ function splitStatements(sql) {
   return stmts;
 }
 
+// Extract $$ body from a SQL statement (e.g. CREATE FUNCTION ... AS $$ body $$).
+function extractBody(sql) {
+  const match = sql.match(/\$(\w*)\$([\s\S]*?)\$\1\$/);
+  return match ? match[2] : null;
+}
+
+// Pre-parse function bodies for a statement. Returns a bodies object
+// or null if no bodies found. The Go printer checks these before
+// calling back to JS for pgParse/pgParsePlPgSqlToJSON.
+function preParseBodies(sql) {
+  const body = extractBody(sql);
+  if (!body) return null;
+
+  const bodies = { sql: {}, plpgsql: {} };
+  const isPlpgsql = /LANGUAGE\s+plpgsql/i.test(sql);
+  const isSql = /LANGUAGE\s+sql/i.test(sql);
+
+  if (isPlpgsql) {
+    // Try both wrapper prefixes (same as Go's formatPLpgSQLBody).
+    const wrappers = [
+      "CREATE FUNCTION _plpgsql_fmt_() RETURNS void AS $$",
+      "CREATE FUNCTION _plpgsql_fmt_() RETURNS SETOF record AS $$",
+    ];
+    for (const prefix of wrappers) {
+      const wrapped = prefix + body + "\n$$ LANGUAGE plpgsql;";
+      parseCallCount++;
+      if (parseCallCount > MAX_PARSE_CALLS) break;
+      try {
+        const result = pgQuery.parsePlpgsql(wrapped);
+        if (!result.error) {
+          bodies.plpgsql[wrapped] = JSON.stringify(result.plpgsql_funcs);
+          break;
+        }
+      } catch {
+        // try next wrapper
+      }
+    }
+  } else if (isSql) {
+    parseCallCount++;
+    if (parseCallCount <= MAX_PARSE_CALLS) {
+      try {
+        const result = pgQuery.parse(body);
+        if (result && !result.error) {
+          bodies.sql[body] = camelToSnakeKeys(
+            JSON.stringify(result.parse_tree),
+          );
+        }
+      } catch {
+        // body stays unformatted
+      }
+    }
+  }
+
+  return Object.keys(bodies.sql).length || Object.keys(bodies.plpgsql).length
+    ? bodies
+    : null;
+}
+
 // Parse a single statement in JS via pg-query-emscripten.
-// Returns { parseJSON, scanJSON } or null on failure.
+// Returns { parseJSON, scanJSON, bodiesJSON } or null on failure.
 function parseStatement(sql) {
   parseCallCount++;
   if (parseCallCount > MAX_PARSE_CALLS) return null;
@@ -182,7 +240,13 @@ function parseStatement(sql) {
     const parseJSON = camelToSnakeKeys(JSON.stringify(parsed.parse_tree));
     const scanned = pgfmtScan(sql);
     if (scanned.error) return null;
-    return { parseJSON, scanJSON: scanned.result, sql };
+    const bodies = preParseBodies(sql);
+    return {
+      parseJSON,
+      scanJSON: scanned.result,
+      sql,
+      bodiesJSON: bodies ? JSON.stringify(bodies) : undefined,
+    };
   } catch {
     return null;
   }
@@ -240,6 +304,7 @@ onmessage = (e) => {
               parsed.parseJSON,
               parsed.scanJSON,
               parsed.sql,
+              parsed.bodiesJSON,
             );
             if (result && !result.error) {
               parts.push(result.result);

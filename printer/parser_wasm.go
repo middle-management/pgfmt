@@ -18,7 +18,26 @@ import (
 
 var jsonOpts = protojson.UnmarshalOptions{DiscardUnknown: true}
 
+// PreParsedBodies holds pre-parsed results for function bodies, populated
+// by the WASM entry point before calling FormatParsed. This avoids calling
+// back to Emscripten from within Go for function body parsing.
+var PreParsedBodies struct {
+	// SQL maps SQL function body text → parse result JSON (protojson format).
+	SQL map[string]string
+	// PlPgSQL maps wrapped PL/pgSQL statement → parsed JSON.
+	PlPgSQL map[string]string
+}
+
 func pgParse(input string) (*pg_query.ParseResult, error) {
+	// Check pre-parsed cache first.
+	if PreParsedBodies.SQL != nil {
+		if cached, ok := PreParsedBodies.SQL[input]; ok {
+			result := &pg_query.ParseResult{}
+			if err := jsonOpts.Unmarshal([]byte(cached), result); err == nil {
+				return result, nil
+			}
+		}
+	}
 	fn := js.Global().Get("pgfmtParse")
 	if fn.IsUndefined() {
 		return nil, errors.New("pgfmtParse not defined in JS")
@@ -67,6 +86,12 @@ func pgScan(input string) (*pg_query.ScanResult, error) {
 }
 
 func pgParsePlPgSqlToJSON(input string) (string, error) {
+	// Check pre-parsed cache first.
+	if PreParsedBodies.PlPgSQL != nil {
+		if cached, ok := PreParsedBodies.PlPgSQL[input]; ok {
+			return cached, nil
+		}
+	}
 	fn := js.Global().Get("pgfmtParsePlPgSQL")
 	if fn.IsUndefined() {
 		return "", errors.New("pgfmtParsePlPgSQL not defined in JS")

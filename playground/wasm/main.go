@@ -49,6 +49,21 @@ func formatParsed(_ js.Value, args []js.Value) (ret any) {
 	scanJSON := args[1].String()
 	originalSQL := args[2].String()
 
+	// Optional 4th arg: pre-parsed function bodies JSON {"sql": {...}, "plpgsql": {...}}
+	printer.PreParsedBodies.SQL = nil
+	printer.PreParsedBodies.PlPgSQL = nil
+	if len(args) >= 4 && !args[3].IsUndefined() && !args[3].IsNull() {
+		bodiesJSON := args[3].String()
+		var bodies struct {
+			SQL     map[string]string `json:"sql"`
+			PlPgSQL map[string]string `json:"plpgsql"`
+		}
+		if err := json.Unmarshal([]byte(bodiesJSON), &bodies); err == nil {
+			printer.PreParsedBodies.SQL = bodies.SQL
+			printer.PreParsedBodies.PlPgSQL = bodies.PlPgSQL
+		}
+	}
+
 	// Unmarshal parse result (pg-query-emscripten PascalCase keys work with protojson).
 	parseResult := &pg_query.ParseResult{}
 	if err := jsonOpts.Unmarshal([]byte(parseJSON), parseResult); err != nil {
