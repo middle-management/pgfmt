@@ -365,7 +365,7 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
                                 escapeHtml(res.error) +
                                 "</span>";
                         } else {
-                            highlightText(res.result, 'sql').then(html => {
+                            highlightText(res.result, 'sql', false).then(html => {
                                 output.innerHTML = html;
                             });
                         }
