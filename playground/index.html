@@ -131,6 +131,13 @@
                 flex-shrink: 0;
             }
 
+            .counter {
+                font-weight: 400;
+                text-transform: none;
+                letter-spacing: 0;
+                opacity: 0.6;
+            }
+
             .btn-copy {
                 background: var(--surface);
                 color: var(--subtext);
@@ -221,7 +228,10 @@
 
         <div class="editor-wrap">
             <div class="pane">
-                <div class="pane-header">Input SQL</div>
+                <div class="pane-header">
+                    Input SQL
+                    <span class="counter" id="counter"></span>
+                </div>
                 <textarea
                     id="input"
                     spellcheck="false"
@@ -256,6 +266,20 @@
                 const clearBtn = document.getElementById("clearBtn");
                 const copyBtn = document.getElementById("copyBtn");
                 const exampleBtn = document.getElementById("exampleBtn");
+                const counter = document.getElementById("counter");
+
+                function updateCounter() {
+                    const text = input.value;
+                    if (!text) {
+                        counter.textContent = "";
+                        return;
+                    }
+                    const lines = text.split("\n").length;
+                    const chars = text.length;
+                    counter.textContent = `${lines} lines, ${chars.toLocaleString()} chars`;
+                }
+
+                input.addEventListener("input", updateCounter);
 
                 const exampleSQL = `select u.id, u.name, u.email, count(o.id) as order_count, sum(o.total) as total_spent from users u left join orders o on o.user_id = u.id where u.created_at >= '2024-01-01' and u.status = 'active' group by u.id, u.name, u.email having count(o.id) > 0 order by total_spent desc limit 50;
 
@@ -366,11 +390,13 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
                 clearBtn.addEventListener("click", () => {
                     input.value = "";
                     output.textContent = "";
+                    updateCounter();
                     input.focus();
                 });
 
                 exampleBtn.addEventListener("click", () => {
                     input.value = exampleSQL;
+                    updateCounter();
                     input.focus();
                 });
 
