@@ -1,6 +1,11 @@
 // Web Worker: pg-query-emscripten parses SQL, Go WASI WASM prints it.
+import {
+  File,
+  OpenFile,
+  WASI,
+  WASIProcExit,
+} from "https://esm.sh/@bjorn3/browser_wasi_shim@0.4.2";
 import pgQueryInit from "https://esm.sh/pg-query-emscripten@5.1.0";
-import { WASI, File, OpenFile, WASIProcExit } from "https://esm.sh/@bjorn3/browser_wasi_shim@0.4.2";
 
 let pgQuery;
 let wasmModule; // Compiled WebAssembly.Module (compiled once, instantiated per call)
@@ -29,8 +34,7 @@ function splitStatements(sql) {
       while (i < sql.length && sql[i] !== "\n") i++;
     } else if (ch === "/" && sql[i + 1] === "*") {
       i += 2;
-      while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/"))
-        i++;
+      while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/")) i++;
       if (i + 1 < sql.length) i += 2;
     } else if (ch === "'") {
       i++;
@@ -80,8 +84,7 @@ function scanTokens(sql) {
     } else if (ch === "/" && sql[i + 1] === "*") {
       const start = i;
       i += 2;
-      while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/"))
-        i++;
+      while (i + 1 < sql.length && !(sql[i] === "*" && sql[i + 1] === "/")) i++;
       if (i + 1 < sql.length) i += 2;
       tokens.push([start, i, "C_COMMENT", "NO_KEYWORD"]);
     } else if (ch === "'") {
@@ -199,7 +202,7 @@ function buildAugmentedAST(sql) {
     }
 
     // Build the statement JSON (snake_case for protojson compatibility).
-    let stmtJSON = JSON.parse(camelToSnakeKeys(JSON.stringify(rawStmt.stmt)));
+    const stmtJSON = JSON.parse(camelToSnakeKeys(JSON.stringify(rawStmt.stmt)));
 
     // Embed inline comments as _comments sidecar.
     if (inlineComments.length > 0) {
@@ -363,13 +366,19 @@ function runWASI(stdinData) {
 function formatOne(sql) {
   const augmented = buildAugmentedAST(sql);
   if (!augmented) {
-    console.warn("[pgfmt] parse failed:", sql.slice(0, 80));
+    console.warn("[pgfmt] parse failed:", sql.slice(0, 120));
     return null;
   }
   try {
-    return runWASI(JSON.stringify(augmented));
+    const t0 = performance.now();
+    const result = runWASI(JSON.stringify(augmented));
+    const dt = performance.now() - t0;
+    if (dt > 500) {
+      console.warn(`[pgfmt] slow WASI (${Math.round(dt)}ms):`, sql.slice(0, 80));
+    }
+    return result;
   } catch (err) {
-    console.warn("[pgfmt] WASI execution failed:", err, "sql:", sql.slice(0, 80));
+    console.warn("[pgfmt] WASI failed:", err, "sql:", sql.slice(0, 80));
     return null;
   }
 }
