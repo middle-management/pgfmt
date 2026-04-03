@@ -39,7 +39,7 @@ jobs:
         run: make
 
       - name: Copy pg_query.js to playground
-        run: cp third_party/pg-query-emscripten/pg_query.js playground/pg_query.js
+        run: cp third_party/pg-query-emscripten/pg_query_wasm.js playground/pg_query.js
 
       - name: Build WASM
         run: GOOS=wasip1 GOARCH=wasm go build -o playground/pgfmt-print.wasm ./cmd/pgfmt-print
