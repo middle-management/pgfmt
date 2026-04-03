@@ -157,7 +157,7 @@ function safeParse(sql) {
 
 function safeDeparse(sql) {
   try {
-    const result = pgQuery.deparse(sql);
+    const result = pgQuery.format(sql);
     if (!result || result.error) return "";
     return result.query;
   } catch {
