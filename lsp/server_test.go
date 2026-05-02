@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
 
 func TestFormatSQL(t *testing.T) {
@@ -66,6 +68,49 @@ func TestOffsetToPosition(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("offsetToPosition(_, %d) = %v, want %v", tt.offset, got, tt.want)
 		}
+	}
+}
+
+func TestPositionToOffset(t *testing.T) {
+	content := "SELECT\nFROM\nWHERE"
+	tests := []struct {
+		pos  Position
+		want int
+	}{
+		{Position{0, 0}, 0},
+		{Position{0, 6}, 6},
+		{Position{1, 0}, 7},
+		{Position{1, 4}, 11},
+		{Position{2, 5}, 17},
+	}
+	for _, tt := range tests {
+		got := positionToOffset(content, tt.pos)
+		if got != tt.want {
+			t.Errorf("positionToOffset(_, %v) = %d, want %d", tt.pos, got, tt.want)
+		}
+	}
+}
+
+func TestParseErrorOffset(t *testing.T) {
+	_, err := pg_query.Parse("SELECT FROM WHERE")
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	off := parseErrorOffset(err)
+	if off <= 0 {
+		t.Errorf("expected positive cursor offset, got %d", off)
+	}
+}
+
+func TestErrorRangeNonEmpty(t *testing.T) {
+	content := "SELECT FROM WHERE"
+	_, err := pg_query.Parse(content)
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	start, end := errorRange(content, err)
+	if start == end {
+		t.Errorf("expected non-empty range, got start=%v end=%v", start, end)
 	}
 }
 
@@ -151,5 +196,54 @@ func TestServerInitializeAndFormat(t *testing.T) {
 	// Should contain formatting result with SELECT
 	if !strings.Contains(responses, "SELECT") {
 		t.Errorf("expected formatted SQL in response, got: %s", responses)
+	}
+
+	// Should advertise range formatting capability
+	if !strings.Contains(responses, `"documentRangeFormattingProvider":true`) {
+		t.Error("expected documentRangeFormattingProvider in initialize response")
+	}
+}
+
+func TestServerRangeFormatting(t *testing.T) {
+	var input bytes.Buffer
+	writeMsg := func(msg any) {
+		data, _ := json.Marshal(msg)
+		fmt.Fprintf(&input, "Content-Length: %d\r\n\r\n%s", len(data), data)
+	}
+	idNum := func(n int) *json.RawMessage {
+		raw := json.RawMessage(fmt.Sprintf("%d", n))
+		return &raw
+	}
+
+	writeMsg(Request{JSONRPC: "2.0", ID: idNum(1), Method: "initialize", Params: json.RawMessage(`{"processId":1}`)})
+	writeMsg(Request{JSONRPC: "2.0", Method: "initialized"})
+
+	doc := "-- header\nselect id,name from users where id=1"
+	docParams, _ := json.Marshal(DidOpenTextDocumentParams{
+		TextDocument: TextDocumentItem{URI: "file:///r.sql", LanguageID: "sql", Version: 1, Text: doc},
+	})
+	writeMsg(Request{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: json.RawMessage(docParams)})
+
+	// Format only the second line (the SELECT statement).
+	rangeParams, _ := json.Marshal(DocumentRangeFormattingParams{
+		TextDocument: TextDocumentIdentifier{URI: "file:///r.sql"},
+		Range: Range{
+			Start: Position{Line: 1, Character: 0},
+			End:   Position{Line: 1, Character: len("select id,name from users where id=1")},
+		},
+	})
+	writeMsg(Request{JSONRPC: "2.0", ID: idNum(2), Method: "textDocument/rangeFormatting", Params: json.RawMessage(rangeParams)})
+
+	var output bytes.Buffer
+	s := NewServer(&input, &output)
+	_ = s.Run()
+	responses := output.String()
+
+	if !strings.Contains(responses, "SELECT") {
+		t.Errorf("expected uppercased SELECT in range formatting response, got: %s", responses)
+	}
+	// The header comment should NOT be in the edit's NewText — only the selected range.
+	if strings.Contains(responses, "-- header") {
+		t.Errorf("range formatting should not include text outside the range, got: %s", responses)
 	}
 }

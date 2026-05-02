@@ -5,6 +5,7 @@ package lsp
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/middle-management/pgfmt/printer"
 	pg_query "github.com/pganalyze/pg_query_go/v6"
+	"github.com/pganalyze/pg_query_go/v6/parser"
 )
 
 // Server is a minimal LSP server providing SQL formatting and diagnostics.
@@ -53,8 +55,9 @@ func (s *Server) Run() error {
 		case "initialize":
 			s.reply(req.ID, InitializeResult{
 				Capabilities: ServerCapabilities{
-					TextDocumentSync:           1, // Full
-					DocumentFormattingProvider: true,
+					TextDocumentSync:                1, // Full
+					DocumentFormattingProvider:      true,
+					DocumentRangeFormattingProvider: true,
 				},
 				ServerInfo: ServerInfo{Name: "pgfmt-lsp", Version: "0.3.1"},
 			})
@@ -129,6 +132,40 @@ func (s *Server) Run() error {
 				NewText: formatted,
 			}})
 
+		case "textDocument/rangeFormatting":
+			var params DocumentRangeFormattingParams
+			if err := json.Unmarshal(req.Params, &params); err != nil {
+				s.logger.Printf("rangeFormatting unmarshal: %v", err)
+				s.replyError(req.ID, -32602, "invalid params")
+				continue
+			}
+			content, ok := s.docs[params.TextDocument.URI]
+			if !ok {
+				s.reply(req.ID, []TextEdit{})
+				continue
+			}
+			startOff := positionToOffset(content, params.Range.Start)
+			endOff := positionToOffset(content, params.Range.End)
+			if startOff < 0 || endOff < 0 || endOff < startOff {
+				s.reply(req.ID, []TextEdit{})
+				continue
+			}
+			selection := content[startOff:endOff]
+			formatted, err := formatSQL(selection)
+			if err != nil {
+				// Selection isn't a valid standalone SQL fragment.
+				s.reply(req.ID, []TextEdit{})
+				continue
+			}
+			if formatted == selection {
+				s.reply(req.ID, []TextEdit{})
+				continue
+			}
+			s.reply(req.ID, []TextEdit{{
+				Range:   params.Range,
+				NewText: formatted,
+			}})
+
 		default:
 			if req.ID != nil {
 				s.replyError(req.ID, -32601, "method not found: "+req.Method)
@@ -182,12 +219,9 @@ func (s *Server) publishDiagnostics(uri, content string) {
 	if content != "" {
 		_, err := pg_query.Parse(content)
 		if err != nil {
-			pos := offsetToPosition(content, parseErrorOffset(err))
+			start, end := errorRange(content, err)
 			params.Diagnostics = []Diagnostic{{
-				Range: Range{
-					Start: pos,
-					End:   pos,
-				},
+				Range:    Range{Start: start, End: end},
 				Severity: DiagnosticSeverityError,
 				Source:   "pgfmt",
 				Message:  err.Error(),
@@ -234,15 +268,71 @@ func offsetToPosition(content string, offset int) Position {
 	return Position{Line: line, Character: col}
 }
 
-// parseErrorOffset extracts the cursor position from a pg_query parse error.
+// positionToOffset converts an LSP Position to a 0-based byte offset.
+// Returns -1 if the position is out of range.
+func positionToOffset(content string, p Position) int {
+	line, col := 0, 0
+	for i, ch := range content {
+		if line == p.Line && col == p.Character {
+			return i
+		}
+		if ch == '\n' {
+			if line == p.Line {
+				return i
+			}
+			line++
+			col = 0
+		} else {
+			col++
+		}
+	}
+	if line == p.Line && col == p.Character {
+		return len(content)
+	}
+	return -1
+}
+
+// errorRange returns Start/End positions for a parse error. End is advanced
+// past the offending word when possible to give the editor a non-empty range.
+func errorRange(content string, err error) (Position, Position) {
+	off := parseErrorOffset(err)
+	start := offsetToPosition(content, off)
+	endOff := wordEndOffset(content, off)
+	end := offsetToPosition(content, endOff)
+	if endOff <= off {
+		end = start
+	}
+	return start, end
+}
+
+// parseErrorOffset extracts the 1-based cursor position from a pg_query
+// parse error. Returns 0 if the error is not a parser.Error.
 func parseErrorOffset(err error) int {
-	// pg_query errors include the cursor position in the error string.
-	// The error message format is: "message at or near \"...\" (at pos N)"
-	// We try to extract N. If we can't, return 0.
-	msg := err.Error()
-	// Look for "scan error" prefix or parse position from the error
-	// pg_query_go wraps errors and doesn't always expose Cursorpos directly,
-	// so we fall back to position 0.
-	_ = msg
+	var pe *parser.Error
+	if errors.As(err, &pe) {
+		return pe.Cursorpos
+	}
 	return 0
+}
+
+// wordEndOffset returns a 1-based offset just past the identifier or word
+// at the given 1-based offset, used to give parse errors a visible range.
+func wordEndOffset(content string, offset int) int {
+	if offset <= 0 || offset > len(content) {
+		return offset
+	}
+	i := offset - 1
+	for i < len(content) {
+		ch := content[i]
+		isWord := (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') || ch == '_'
+		if !isWord {
+			break
+		}
+		i++
+	}
+	if i == offset-1 {
+		i = offset
+	}
+	return i + 1
 }

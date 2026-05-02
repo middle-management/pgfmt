@@ -17,8 +17,9 @@ type ServerInfo struct {
 }
 
 type ServerCapabilities struct {
-	TextDocumentSync           int  `json:"textDocumentSync"`
-	DocumentFormattingProvider bool `json:"documentFormattingProvider"`
+	TextDocumentSync                int  `json:"textDocumentSync"`
+	DocumentFormattingProvider      bool `json:"documentFormattingProvider"`
+	DocumentRangeFormattingProvider bool `json:"documentRangeFormattingProvider"`
 }
 
 type DidOpenTextDocumentParams struct {
@@ -56,6 +57,11 @@ type TextDocumentIdentifier struct {
 
 type DocumentFormattingParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+type DocumentRangeFormattingParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
 }
 
 type TextEdit struct {
