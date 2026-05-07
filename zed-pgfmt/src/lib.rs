@@ -3,7 +3,7 @@ use zed_extension_api::{self as zed, LanguageServerId, Result, settings::LspSett
 const BINARY_NAME: &str = "pgfmt-lsp";
 const GITHUB_REPO: &str = "middle-management/pgfmt";
 // Keep this in sync with extension.toml. The release workflow updates both automatically.
-const VERSION: &str = "0.3.1";
+const VERSION: &str = "0.3.3";
 
 struct PgfmtExtension {
     cached_binary_path: Option<String>,
