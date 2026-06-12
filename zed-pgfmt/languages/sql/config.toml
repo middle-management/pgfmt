@@ -1,3 +1,0 @@
-name = "SQL"
-line_comments = ["-- "]
-block_comment = ["/* ", " */"]
