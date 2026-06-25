@@ -1,4 +1,4 @@
-id = "pgfmt"
+id = "pgfmt-lsp"
 name = "pgfmt"
 version = "0.3.3"
 schema_version = 1
