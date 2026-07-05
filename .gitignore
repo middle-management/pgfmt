@@ -24,3 +24,4 @@ playground/pg_query.js
 playground/node_modules/
 playground/test-results/
 .playwright-mcp/
+testdata/corpus/
