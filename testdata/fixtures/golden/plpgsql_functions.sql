@@ -137,3 +137,60 @@ BEGIN
 END
 $$;
 
+-- Function options: SET ... TO, SET ... FROM CURRENT (previously dropped)
+CREATE OR REPLACE FUNCTION add_schedule_tick()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'pg_temp'
+AS $$
+BEGIN
+	RETURN NEW;
+END
+$$;
+
+CREATE FUNCTION with_current_setting()
+RETURNS void
+LANGUAGE plpgsql
+SET work_mem FROM CURRENT
+SET statement_timeout TO DEFAULT
+AS $$
+BEGIN
+	PERFORM 1;
+END
+$$;
+
+-- NULL statements are compiled away by the parser; empty bodies must
+-- round-trip as NULL; instead of being dropped.
+CREATE FUNCTION do_nothing()
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	NULL;
+END
+$$;
+
+CREATE FUNCTION null_branches(x int)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	IF x > 0 THEN
+		NULL;
+	END IF;
+	CASE x
+		WHEN 1 THEN
+			RAISE NOTICE 'one';
+		ELSE
+			NULL;
+	END CASE;
+	BEGIN
+		PERFORM 1;
+	EXCEPTION
+		WHEN others THEN
+			NULL;
+	END;
+END
+$$;
+

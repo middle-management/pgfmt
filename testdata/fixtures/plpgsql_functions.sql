@@ -115,3 +115,49 @@ BEGIN
   RETURN QUERY SELECT id, name FROM users WHERE active = true;
 END;
 $$ LANGUAGE plpgsql STABLE;
+
+-- Function options: SET ... TO, SET ... FROM CURRENT (previously dropped)
+CREATE OR REPLACE FUNCTION add_schedule_tick() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'pg_temp'
+AS $$
+BEGIN
+  RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION with_current_setting() RETURNS void AS $$
+BEGIN
+  PERFORM 1;
+END;
+$$ LANGUAGE plpgsql SET work_mem FROM CURRENT SET statement_timeout TO DEFAULT;
+
+-- NULL statements are compiled away by the parser; empty bodies must
+-- round-trip as NULL; instead of being dropped.
+CREATE FUNCTION do_nothing() RETURNS void AS $$
+BEGIN
+  NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE FUNCTION null_branches(x int) RETURNS void AS $$
+BEGIN
+  IF x > 0 THEN
+    NULL;
+  END IF;
+
+  CASE x
+  WHEN 1 THEN
+    RAISE NOTICE 'one';
+  ELSE
+    NULL;
+  END CASE;
+
+  BEGIN
+    PERFORM 1;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
+END;
+$$ LANGUAGE plpgsql;

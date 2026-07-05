@@ -421,7 +421,7 @@ func (ctx *plContext) writeBlock(block *plStmtBlock, ind int, topLevel bool) {
 	}
 
 	ctx.w("BEGIN")
-	ctx.writeStmts(body, ind+1)
+	ctx.writeBody(body, ind+1)
 
 	// Flush trailing comments inside the block body (before END/EXCEPTION).
 	if topLevel {
@@ -439,7 +439,7 @@ func (ctx *plContext) writeBlock(block *plStmtBlock, ind int, topLevel bool) {
 			}
 			ctx.newlineIndent(ind + 1)
 			ctx.w("WHEN " + strings.Join(condNames, " OR ") + " THEN")
-			ctx.writeStmts(exc.Action, ind+2)
+			ctx.writeBody(exc.Action, ind+2)
 		}
 	}
 
@@ -460,6 +460,19 @@ func (ctx *plContext) writeStmts(stmts []plStmt, ind int) {
 	}
 }
 
+// writeBody emits a statement list, falling back to NULL; when it produces
+// no output. The PL/pgSQL parser compiles NULL statements away entirely, so
+// a body that was only `NULL;` arrives as an empty (or implicit-RETURN-only)
+// list and would otherwise be silently dropped.
+func (ctx *plContext) writeBody(stmts []plStmt, ind int) {
+	before := ctx.printer.Builder.Len()
+	ctx.writeStmts(stmts, ind)
+	if ctx.printer.Builder.Len() == before {
+		ctx.newlineIndent(ind)
+		ctx.w("NULL;")
+	}
+}
+
 func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 	switch {
 	case s.Assign != nil:
@@ -474,7 +487,7 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 	case s.While != nil:
 		ctx.newlineIndent(ind)
 		ctx.w("WHILE " + s.While.Cond.E.Query + " LOOP")
-		ctx.writeStmts(s.While.Body, ind+1)
+		ctx.writeBody(s.While.Body, ind+1)
 		ctx.newlineIndent(ind)
 		ctx.w("END LOOP;")
 	case s.ForI != nil:
@@ -485,14 +498,14 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 		ctx.writeSQL(s.ForS.Query.E.Query, ind)
 		ctx.skipSQLComments(s.ForS.LineNo, s.ForS.Query.E.Query)
 		ctx.w(" LOOP")
-		ctx.writeStmts(s.ForS.Body, ind+1)
+		ctx.writeBody(s.ForS.Body, ind+1)
 		ctx.newlineIndent(ind)
 		ctx.w("END LOOP;")
 	case s.ForEachA != nil:
 		ctx.newlineIndent(ind)
 		varName := ctx.getDatumName(s.ForEachA.VarNo)
 		ctx.w("FOREACH " + varName + " IN ARRAY " + s.ForEachA.Expr.E.Query + " LOOP")
-		ctx.writeStmts(s.ForEachA.Body, ind+1)
+		ctx.writeBody(s.ForEachA.Body, ind+1)
 		ctx.newlineIndent(ind)
 		ctx.w("END LOOP;")
 	case s.Exit != nil:
@@ -539,18 +552,18 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 func (ctx *plContext) writeIf(node *plStmtIf, ind int) {
 	ctx.newlineIndent(ind)
 	ctx.w("IF " + node.Cond.E.Query + " THEN")
-	ctx.writeStmts(node.ThenBody, ind+1)
+	ctx.writeBody(node.ThenBody, ind+1)
 
 	for _, ew := range node.ElsIfList {
 		ctx.newlineIndent(ind)
 		ctx.w("ELSIF " + ew.E.Cond.E.Query + " THEN")
-		ctx.writeStmts(ew.E.Stmts, ind+1)
+		ctx.writeBody(ew.E.Stmts, ind+1)
 	}
 
 	if len(node.ElseBody) > 0 {
 		ctx.newlineIndent(ind)
 		ctx.w("ELSE")
-		ctx.writeStmts(node.ElseBody, ind+1)
+		ctx.writeBody(node.ElseBody, ind+1)
 	}
 
 	ctx.newlineIndent(ind)
@@ -574,13 +587,13 @@ func (ctx *plContext) writeCase(node *plStmtCase, ind int) {
 			expr = extractCaseWhenValue(expr)
 		}
 		ctx.w("WHEN " + expr + " THEN")
-		ctx.writeStmts(w.Stmts, ind+2)
+		ctx.writeBody(w.Stmts, ind+2)
 	}
 
-	if node.HaveElse && len(node.ElseStmts) > 0 {
+	if node.HaveElse {
 		ctx.newlineIndent(ind + 1)
 		ctx.w("ELSE")
-		ctx.writeStmts(node.ElseStmts, ind+2)
+		ctx.writeBody(node.ElseStmts, ind+2)
 	}
 
 	ctx.newlineIndent(ind)
@@ -608,7 +621,7 @@ func (ctx *plContext) writeLoop(node *plStmtLoop, ind int) {
 		ctx.indent(ind)
 	}
 	ctx.w("LOOP")
-	ctx.writeStmts(node.Body, ind+1)
+	ctx.writeBody(node.Body, ind+1)
 	ctx.newlineIndent(ind)
 	ctx.w("END LOOP;")
 }
@@ -624,7 +637,7 @@ func (ctx *plContext) writeForI(node *plStmtForI, ind int) {
 		ctx.w(" BY " + node.Step.E.Query)
 	}
 	ctx.w(" LOOP")
-	ctx.writeStmts(node.Body, ind+1)
+	ctx.writeBody(node.Body, ind+1)
 	ctx.newlineIndent(ind)
 	ctx.w("END LOOP;")
 }
