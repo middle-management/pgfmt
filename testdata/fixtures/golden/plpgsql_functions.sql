@@ -160,3 +160,37 @@ BEGIN
 END
 $$;
 
+-- NULL statements are compiled away by the parser; empty bodies must
+-- round-trip as NULL; instead of being dropped.
+CREATE FUNCTION do_nothing()
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	NULL;
+END
+$$;
+
+CREATE FUNCTION null_branches(x int)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	IF x > 0 THEN
+		NULL;
+	END IF;
+	CASE x
+		WHEN 1 THEN
+			RAISE NOTICE 'one';
+		ELSE
+			NULL;
+	END CASE;
+	BEGIN
+		PERFORM 1;
+	EXCEPTION
+		WHEN others THEN
+			NULL;
+	END;
+END
+$$;
+

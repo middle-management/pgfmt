@@ -132,3 +132,32 @@ BEGIN
   PERFORM 1;
 END;
 $$ LANGUAGE plpgsql SET work_mem FROM CURRENT SET statement_timeout TO DEFAULT;
+
+-- NULL statements are compiled away by the parser; empty bodies must
+-- round-trip as NULL; instead of being dropped.
+CREATE FUNCTION do_nothing() RETURNS void AS $$
+BEGIN
+  NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE FUNCTION null_branches(x int) RETURNS void AS $$
+BEGIN
+  IF x > 0 THEN
+    NULL;
+  END IF;
+
+  CASE x
+  WHEN 1 THEN
+    RAISE NOTICE 'one';
+  ELSE
+    NULL;
+  END CASE;
+
+  BEGIN
+    PERFORM 1;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
+END;
+$$ LANGUAGE plpgsql;
