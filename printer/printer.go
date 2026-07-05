@@ -731,6 +731,73 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeNode(n.IndexStmt.WhereClause)
 		}
 
+	case *pg_query.Node_TableLikeClause:
+		output.Builder.WriteString("LIKE ")
+		output.writeRangeVar(n.TableLikeClause.Relation)
+		const likeAll = 0x7FFFFFFF
+		if n.TableLikeClause.Options == likeAll {
+			output.Builder.WriteString(" INCLUDING ALL")
+		} else {
+			// Bit positions follow the CREATE_TABLE_LIKE_* C enum order.
+			names := []string{"COMMENTS", "COMPRESSION", "CONSTRAINTS", "DEFAULTS",
+				"GENERATED", "IDENTITY", "INDEXES", "STATISTICS", "STORAGE"}
+			for bit, name := range names {
+				if n.TableLikeClause.Options&(1<<bit) != 0 {
+					output.Builder.WriteString(" INCLUDING ")
+					output.Builder.WriteString(name)
+				}
+			}
+		}
+
+	case *pg_query.Node_PartitionElem:
+		if n.PartitionElem.Name != "" {
+			output.Builder.WriteString(quoteIdentifier(n.PartitionElem.Name))
+		} else if n.PartitionElem.Expr != nil {
+			// The grammar only allows "windowless" function calls without
+			// parentheses; anything else must be wrapped.
+			bare := false
+			switch e := n.PartitionElem.Expr.GetNode().(type) {
+			case *pg_query.Node_FuncCall:
+				bare = e.FuncCall.Over == nil && e.FuncCall.AggFilter == nil &&
+					!e.FuncCall.AggWithinGroup && len(e.FuncCall.AggOrder) == 0
+			case *pg_query.Node_SqlvalueFunction,
+				*pg_query.Node_CoalesceExpr,
+				*pg_query.Node_MinMaxExpr,
+				*pg_query.Node_XmlExpr:
+				bare = true
+			}
+			if bare {
+				output.writeNode(n.PartitionElem.Expr)
+			} else {
+				output.Builder.WriteString("(")
+				output.writeNode(n.PartitionElem.Expr)
+				output.Builder.WriteString(")")
+			}
+		}
+		if len(n.PartitionElem.Collation) > 0 {
+			output.Builder.WriteString(" COLLATE ")
+			for i, o := range n.PartitionElem.Collation {
+				if i > 0 {
+					output.Builder.WriteString(".")
+				}
+				output.Builder.WriteString(quoteIdentifier(o.GetString_().GetSval()))
+			}
+		}
+		if len(n.PartitionElem.Opclass) > 0 {
+			output.Builder.WriteString(" ")
+			output.writeListWithSeparator(n.PartitionElem.Opclass, ".")
+		}
+
+	case *pg_query.Node_PartitionRangeDatum:
+		switch n.PartitionRangeDatum.Kind {
+		case pg_query.PartitionRangeDatumKind_PARTITION_RANGE_DATUM_MINVALUE:
+			output.Builder.WriteString("MINVALUE")
+		case pg_query.PartitionRangeDatumKind_PARTITION_RANGE_DATUM_MAXVALUE:
+			output.Builder.WriteString("MAXVALUE")
+		default:
+			output.writeNode(n.PartitionRangeDatum.Value)
+		}
+
 	case *pg_query.Node_RangeVar:
 		output.writeRangeVar(n.RangeVar)
 
@@ -994,27 +1061,76 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("IF NOT EXISTS ")
 		}
 		output.writeRangeVar(n.CreateStmt.Relation)
-		output.Builder.WriteString(" (")
-		output.indent++
-		for i, elt := range n.CreateStmt.TableElts {
-			output.writeNewlineIndent()
-			output.writeNode(elt)
-			if i != len(n.CreateStmt.TableElts)-1 {
-				output.Builder.WriteString(",")
-			}
+
+		// With a partition bound, InhRelations holds the parent table of a
+		// PARTITION OF clause rather than INHERITS.
+		partitionOf := n.CreateStmt.Partbound != nil && len(n.CreateStmt.InhRelations) > 0
+		if partitionOf {
+			output.Builder.WriteString(" PARTITION OF ")
+			output.writeNode(n.CreateStmt.InhRelations[0])
+		} else if n.CreateStmt.OfTypename != nil {
+			output.Builder.WriteString(" OF ")
+			output.writeTypeName(n.CreateStmt.OfTypename)
 		}
-		output.indent--
-		output.Builder.WriteString("\n)")
-		if len(n.CreateStmt.InhRelations) > 0 {
+
+		// PARTITION OF and OF type_name tables omit the column list entirely
+		// when there are no constraint entries; a plain empty list is valid
+		// (and required) otherwise.
+		if len(n.CreateStmt.TableElts) > 0 || (!partitionOf && n.CreateStmt.OfTypename == nil) {
+			output.Builder.WriteString(" (")
+			output.indent++
+			for i, elt := range n.CreateStmt.TableElts {
+				output.writeNewlineIndent()
+				output.writeNode(elt)
+				if i != len(n.CreateStmt.TableElts)-1 {
+					output.Builder.WriteString(",")
+				}
+			}
+			output.indent--
+			output.Builder.WriteString("\n)")
+		}
+
+		if !partitionOf && len(n.CreateStmt.InhRelations) > 0 {
 			output.Builder.WriteString(" INHERITS (")
 			output.writeCommaSeparatedList(n.CreateStmt.InhRelations)
 			output.Builder.WriteString(")")
 		}
+		if n.CreateStmt.Partbound != nil {
+			output.writePartitionBound(n.CreateStmt.Partbound)
+		}
+		if n.CreateStmt.Partspec != nil {
+			output.writePartitionSpec(n.CreateStmt.Partspec)
+		}
+		if n.CreateStmt.AccessMethod != "" {
+			output.Builder.WriteString(" USING ")
+			output.Builder.WriteString(quoteIdentifier(n.CreateStmt.AccessMethod))
+		}
+		if len(n.CreateStmt.Options) > 0 {
+			output.Builder.WriteString(" WITH (")
+			output.writeCommaSeparatedList(n.CreateStmt.Options)
+			output.Builder.WriteString(")")
+		}
+		switch n.CreateStmt.Oncommit {
+		case pg_query.OnCommitAction_ONCOMMIT_PRESERVE_ROWS:
+			output.Builder.WriteString(" ON COMMIT PRESERVE ROWS")
+		case pg_query.OnCommitAction_ONCOMMIT_DELETE_ROWS:
+			output.Builder.WriteString(" ON COMMIT DELETE ROWS")
+		case pg_query.OnCommitAction_ONCOMMIT_DROP:
+			output.Builder.WriteString(" ON COMMIT DROP")
+		}
+		if n.CreateStmt.Tablespacename != "" {
+			output.Builder.WriteString(" TABLESPACE ")
+			output.Builder.WriteString(quoteIdentifier(n.CreateStmt.Tablespacename))
+		}
 
 	case *pg_query.Node_ColumnDef:
 		output.Builder.WriteString(quoteIdentifier(n.ColumnDef.Colname))
-		output.Builder.WriteString(" ")
-		output.writeTypeName(n.ColumnDef.TypeName)
+		// TypeName is nil for column entries that only attach constraints to
+		// an inherited column (CREATE TABLE ... PARTITION OF / OF type_name).
+		if n.ColumnDef.TypeName != nil {
+			output.Builder.WriteString(" ")
+			output.writeTypeName(n.ColumnDef.TypeName)
+		}
 		for _, c := range n.ColumnDef.Constraints {
 			output.Builder.WriteString(" ")
 			output.writeNode(c)
