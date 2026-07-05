@@ -50,7 +50,7 @@ jobs:
 
       - name: Install Playwright
         working-directory: playground
-        run: npm ci && npx playwright install --with-deps chromium
+        run: npm ci && npx playwright install --with-deps chromium webkit
 
       - name: Run Playwright tests
         working-directory: playground

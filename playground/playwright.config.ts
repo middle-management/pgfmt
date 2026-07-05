@@ -11,5 +11,10 @@ export default defineConfig({
     port: 8787,
     reuseExistingServer: !process.env.CI,
   },
-  projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+  projects: [
+    { name: "chromium", use: { browserName: "chromium" } },
+    // WebKit uses JavaScriptCore, the engine in Safari and every iOS
+    // browser — it has WASM/TextDecoder behaviors V8 does not exercise.
+    { name: "webkit", use: { browserName: "webkit" } },
+  ],
 });
