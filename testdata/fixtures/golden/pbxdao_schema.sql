@@ -307,9 +307,9 @@ AS $$
 		r.pbx_voicemail_id,
 		array_agg(u.pbx_user_id) FILTER (WHERE u.pbx_route_id IS NOT NULL) AS users,
 		array_agg(u.pbx_user_id) FILTER (WHERE u.pbx_route_id IS NOT NULL
-	AND (u.connected = true)) AS connectedusers,
+		AND (u.connected = true)) AS connectedusers,
 		array_agg(u.pbx_user_id) FILTER (WHERE u.pbx_route_id IS NOT NULL
-	AND (u.connected = false)) AS disconnectedusers,
+		AND (u.connected = false)) AS disconnectedusers,
 		json_object_agg(m.type, m.next) FILTER (WHERE m.pbx_route_id IS NOT NULL) AS menu,
 		json_agg(row_to_json(i) ORDER BY i.index) FILTER (WHERE i.pbx_route_id IS NOT NULL) AS schedule,
 		(

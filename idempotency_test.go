@@ -24,6 +24,9 @@ func normalizeForCompare(s string) string {
 	s = dollarBodyRe.ReplaceAllString(s, "")
 	s = funcOptionsRe.ReplaceAllString(s, "")
 	s = multiSpaceRe.ReplaceAllString(s, " ")
+	// Stripping bodies/options can leave a dangling space before the
+	// statement separator depending on where they appeared.
+	s = strings.ReplaceAll(s, " ;", ";")
 	return strings.TrimSpace(s)
 }
 

@@ -141,16 +141,16 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 				output.Builder.WriteString(")")
 			}
 		}
+		output.indent++
 		output.writeNewlineIndent()
-		output.Builder.WriteString("\t")
 		for i, t := range stmt.TargetList {
 			output.writeNode(t)
 			if i != len(stmt.TargetList)-1 {
 				output.Builder.WriteString(",")
 				output.writeNewlineIndent()
-				output.Builder.WriteString("\t")
 			}
 		}
+		output.indent--
 
 		if stmt.IntoClause != nil {
 			output.writeNewlineIndent()

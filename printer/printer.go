@@ -12,16 +12,17 @@ import (
 
 type Printer struct {
 	Builder        *strings.Builder
-	indent         int       // current indentation level
-	comments       []comment // inline comments for the current statement
-	commentIdx     int       // next inline comment to process
-	lastNodeEndPos int       // output position after last node with a source location
+	indent         int               // current indentation level
+	comments       []comment         // inline comments for the current statement
+	commentIdx     int               // next inline comment to process
+	lastNodeEndPos int               // output position after last node with a source location
+	nodeDepth      int               // writeNode recursion depth, distinguishes statement vs expression fallback
 	RawStmt        *pg_query.RawStmt // set by Format to enable deparse fallback
-	OriginalSQL    string             // original SQL input for raw text fallback
-	Deparsed       string             // pre-computed deparsed text for fallback
+	OriginalSQL    string            // original SQL input for raw text fallback
+	Deparsed       string            // pre-computed deparsed text for fallback
 	// bodyCache maps body text → parse result JSON for pre-parsed function bodies.
 	// Used by FormatAugmented to avoid calling pgParse/pgParsePlPgSqlToJSON.
-	bodyCache      map[string]string
+	bodyCache map[string]string
 }
 
 func (output *Printer) Print(node *pg_query.Node) {
@@ -103,6 +104,22 @@ func nodeLocation(node *pg_query.Node) int32 {
 		return n.AArrayExpr.GetLocation()
 	case *pg_query.Node_RowExpr:
 		return n.RowExpr.GetLocation()
+	case *pg_query.Node_JsonObjectConstructor:
+		return n.JsonObjectConstructor.GetLocation()
+	case *pg_query.Node_JsonArrayConstructor:
+		return n.JsonArrayConstructor.GetLocation()
+	case *pg_query.Node_JsonArrayQueryConstructor:
+		return n.JsonArrayQueryConstructor.GetLocation()
+	case *pg_query.Node_JsonParseExpr:
+		return n.JsonParseExpr.GetLocation()
+	case *pg_query.Node_JsonScalarExpr:
+		return n.JsonScalarExpr.GetLocation()
+	case *pg_query.Node_JsonSerializeExpr:
+		return n.JsonSerializeExpr.GetLocation()
+	case *pg_query.Node_JsonIsPredicate:
+		return n.JsonIsPredicate.GetLocation()
+	case *pg_query.Node_JsonFuncExpr:
+		return n.JsonFuncExpr.GetLocation()
 	default:
 		return -1
 	}
@@ -211,7 +228,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 	if loc > 0 && len(output.comments) > 0 {
 		output.emitInlineCommentsUpTo(loc)
 	}
+	output.nodeDepth++
 	defer func() {
+		output.nodeDepth--
 		if loc > 0 {
 			output.lastNodeEndPos = output.Builder.Len()
 		}
@@ -296,12 +315,12 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_EXPR_SUBLINK:
 			output.Builder.WriteString("(")
-			output.indent += 2
+			output.indent++
 			output.writeNewlineIndent()
 			output.writeNode(n.SubLink.Subselect)
-			output.indent -= 2
+			output.indent--
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\t)")
+			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_CTE_SUBLINK:
 			output.Builder.WriteString("/* UNSUPPORTED: CTE sublink */")
 		default:
@@ -466,14 +485,34 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if n.FuncCall.AggStar {
 			output.Builder.WriteString("*")
 		}
-		for i, a := range n.FuncCall.Args {
-			if n.FuncCall.FuncVariadic && i == len(n.FuncCall.Args)-1 {
-				output.Builder.WriteString("VARIADIC ")
+		if isKeyValuePairCall(n.FuncCall) {
+			output.writeKeyValuePairArgs(n.FuncCall.Args)
+		} else if breaksArgsForKeyValuePair(n.FuncCall) {
+			// One argument per line when an argument is a multi-line
+			// key/value call, so nesting stays readable.
+			output.indent++
+			for i, a := range n.FuncCall.Args {
+				output.writeNewlineIndent()
+				if n.FuncCall.FuncVariadic && i == len(n.FuncCall.Args)-1 {
+					output.Builder.WriteString("VARIADIC ")
+				}
+				output.writeNode(a)
+				if i != len(n.FuncCall.Args)-1 {
+					output.Builder.WriteString(",")
+				}
 			}
-			output.writeNode(a)
+			output.indent--
+			output.writeNewlineIndent()
+		} else {
+			for i, a := range n.FuncCall.Args {
+				if n.FuncCall.FuncVariadic && i == len(n.FuncCall.Args)-1 {
+					output.Builder.WriteString("VARIADIC ")
+				}
+				output.writeNode(a)
 
-			if i != len(n.FuncCall.Args)-1 {
-				output.Builder.WriteString(", ")
+				if i != len(n.FuncCall.Args)-1 {
+					output.Builder.WriteString(", ")
+				}
 			}
 		}
 		if len(n.FuncCall.AggOrder) > 0 {
@@ -841,9 +880,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if len(n.InsertStmt.ReturningList) > 0 {
 			output.writeNewlineIndent()
 			output.Builder.WriteString("RETURNING")
+			output.indent++
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\t")
 			output.writeCommaSeparatedList(n.InsertStmt.ReturningList)
+			output.indent--
 		}
 
 	case *pg_query.Node_AStar:
@@ -874,6 +914,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString("UPDATE ")
 		output.writeRangeVar(n.UpdateStmt.Relation)
 		output.Builder.WriteString("\nSET\n\t")
+		output.indent++
 		for i, t := range n.UpdateStmt.TargetList {
 			rt := t.GetResTarget()
 			output.Builder.WriteString(rt.Name)
@@ -884,6 +925,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.Builder.WriteString(",\n\t")
 			}
 		}
+		output.indent--
 		if len(n.UpdateStmt.FromClause) > 0 {
 			output.Builder.WriteString("\nFROM\n\t")
 			output.writeCommaSeparatedList(n.UpdateStmt.FromClause)
@@ -894,7 +936,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		if len(n.UpdateStmt.ReturningList) > 0 {
 			output.Builder.WriteString("\nRETURNING\n\t")
+			output.indent++
 			output.writeCommaSeparatedList(n.UpdateStmt.ReturningList)
+			output.indent--
 		}
 
 	case *pg_query.Node_DeleteStmt:
@@ -913,7 +957,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		if len(n.DeleteStmt.ReturningList) > 0 {
 			output.Builder.WriteString("\nRETURNING\n\t")
+			output.indent++
 			output.writeCommaSeparatedList(n.DeleteStmt.ReturningList)
+			output.indent--
 		}
 
 	case *pg_query.Node_CreateStmt:
@@ -2251,6 +2297,42 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.writeCommaSeparatedList(n.RowExpr.Args)
 		output.Builder.WriteString(")")
 
+	case *pg_query.Node_JsonObjectConstructor:
+		output.writeJsonObjectConstructor(n.JsonObjectConstructor)
+
+	case *pg_query.Node_JsonArrayConstructor:
+		output.writeJsonArrayConstructor(n.JsonArrayConstructor)
+
+	case *pg_query.Node_JsonArrayQueryConstructor:
+		output.writeJsonArrayQueryConstructor(n.JsonArrayQueryConstructor)
+
+	case *pg_query.Node_JsonObjectAgg:
+		output.writeJsonObjectAgg(n.JsonObjectAgg)
+
+	case *pg_query.Node_JsonArrayAgg:
+		output.writeJsonArrayAgg(n.JsonArrayAgg)
+
+	case *pg_query.Node_JsonKeyValue:
+		output.writeJsonKeyValue(n.JsonKeyValue)
+
+	case *pg_query.Node_JsonValueExpr:
+		output.writeJsonValueExpr(n.JsonValueExpr)
+
+	case *pg_query.Node_JsonParseExpr:
+		output.writeJsonParseExpr(n.JsonParseExpr)
+
+	case *pg_query.Node_JsonScalarExpr:
+		output.writeJsonScalarExpr(n.JsonScalarExpr)
+
+	case *pg_query.Node_JsonSerializeExpr:
+		output.writeJsonSerializeExpr(n.JsonSerializeExpr)
+
+	case *pg_query.Node_JsonIsPredicate:
+		output.writeJsonIsPredicate(n.JsonIsPredicate)
+
+	case *pg_query.Node_JsonFuncExpr:
+		output.writeJsonFuncExpr(n.JsonFuncExpr)
+
 	case *pg_query.Node_ConstraintsSetStmt:
 		output.Builder.WriteString("SET CONSTRAINTS ")
 		if len(n.ConstraintsSetStmt.Constraints) == 0 {
@@ -2268,6 +2350,16 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		// nothing
 
 	default:
+		// Unhandled expression inside a handled statement: deparse just this
+		// expression. The statement-level fallbacks below would paste the
+		// entire statement here, producing invalid SQL.
+		if output.nodeDepth > 1 {
+			if s, ok := deparseExprFallback(node); ok {
+				warn("unsupported expression node %T, using deparse", n)
+				output.Builder.WriteString(s)
+				return
+			}
+		}
 		// Fallback 1: use pre-computed deparsed text (from augmented AST)
 		if output.Deparsed != "" {
 			output.Builder.WriteString(output.Deparsed)
@@ -2435,4 +2527,3 @@ const (
 	MILLISECOND
 	MICROSECOND
 )
-
