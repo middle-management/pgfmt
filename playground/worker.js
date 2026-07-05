@@ -530,21 +530,31 @@ onmessage = (e) => {
       }
     }
 
-    if (stmts.length <= 1 && !stmts.some((s) => s.meta)) {
+    // Fast path: format the whole input in a single WASI call. Each call
+    // instantiates the module afresh, and memory-constrained browsers
+    // (iOS Safari in particular) can fail when that happens once per
+    // statement — so prefer one instantiation for the entire input.
+    // Bounded so huge documents still get the batched path with progress
+    // reporting; on failure, fall through to per-statement formatting to
+    // isolate the failing statement.
+    if (stmts.length <= 100 && !stmts.some((s) => s.meta)) {
       const result = formatOne(sql);
       if (result !== null) {
         postMessage({ type: "result", id, result });
-      } else {
+        return;
+      }
+      if (stmts.length <= 1) {
         postMessage({
           type: "result",
           id,
           error: "format failed: " + (lastFormatError || "unknown error"),
         });
+        return;
       }
-      return;
     }
 
-    // Large inputs: format each statement separately with progress.
+    // Large inputs (or fast-path failure): format each statement separately
+    // with progress.
     const parts = [];
     const batchSize = 20;
     let failed = 0;
