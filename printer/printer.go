@@ -1358,6 +1358,11 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				}
 			case "parallel":
 				otherOpts = append(otherOpts, "PARALLEL "+strings.ToUpper(de.Arg.GetString_().GetSval()))
+			case "set":
+				b := &strings.Builder{}
+				tmp := &Printer{Builder: b}
+				tmp.writeNode(de.Arg)
+				otherOpts = append(otherOpts, b.String())
 			}
 		}
 		if lang != "" {
@@ -1873,6 +1878,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("SET ")
 			output.Builder.WriteString(n.VariableSetStmt.Name)
 			output.Builder.WriteString(" TO DEFAULT")
+		case pg_query.VariableSetKind_VAR_SET_CURRENT:
+			output.Builder.WriteString("SET ")
+			output.Builder.WriteString(n.VariableSetStmt.Name)
+			output.Builder.WriteString(" FROM CURRENT")
 		case pg_query.VariableSetKind_VAR_RESET:
 			output.Builder.WriteString("RESET ")
 			output.Builder.WriteString(n.VariableSetStmt.Name)

@@ -137,3 +137,26 @@ BEGIN
 END
 $$;
 
+-- Function options: SET ... TO, SET ... FROM CURRENT (previously dropped)
+CREATE OR REPLACE FUNCTION add_schedule_tick()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'pg_temp'
+AS $$
+BEGIN
+	RETURN NEW;
+END
+$$;
+
+CREATE FUNCTION with_current_setting()
+RETURNS void
+LANGUAGE plpgsql
+SET work_mem FROM CURRENT
+SET statement_timeout TO DEFAULT
+AS $$
+BEGIN
+	PERFORM 1;
+END
+$$;
+
