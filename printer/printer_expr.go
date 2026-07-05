@@ -101,6 +101,32 @@ func deparseExprFallback(node *pg_query.Node) (string, bool) {
 	return strings.CutPrefix(deparsed, "SELECT ")
 }
 
+// deparseRangeFallback renders an arbitrary FROM-clause item by deparsing a
+// synthetic SELECT and stripping the prefix. Used for range nodes the printer
+// does not handle explicitly (JSON_TABLE, XMLTABLE, ...); without it these
+// would hit the whole-statement fallback and paste the entire statement into
+// the FROM clause.
+func deparseRangeFallback(node *pg_query.Node) (string, bool) {
+	deparsed, err := pgDeparse(&pg_query.ParseResult{
+		Stmts: []*pg_query.RawStmt{{
+			Stmt: &pg_query.Node{Node: &pg_query.Node_SelectStmt{SelectStmt: &pg_query.SelectStmt{
+				TargetList: []*pg_query.Node{{
+					Node: &pg_query.Node_ResTarget{ResTarget: &pg_query.ResTarget{
+						Val: &pg_query.Node{Node: &pg_query.Node_ColumnRef{ColumnRef: &pg_query.ColumnRef{
+							Fields: []*pg_query.Node{{Node: &pg_query.Node_AStar{AStar: &pg_query.A_Star{}}}},
+						}}},
+					}},
+				}},
+				FromClause: []*pg_query.Node{node},
+			}}},
+		}},
+	})
+	if err != nil {
+		return "", false
+	}
+	return strings.CutPrefix(deparsed, "SELECT * FROM ")
+}
+
 // breaksArgsForKeyValuePair reports whether the function call should place
 // each argument on its own line because one of them is a multi-line
 // key/value call.
