@@ -463,8 +463,8 @@ AS $$
 		r.updated_at
 	FROM
 		p_pbx_voicemail_recording AS r
-		CROSS JOIN p_pbx_voicemail_user AS vu USING (pbx_voicemail_id)
-		CROSS JOIN p_pbx_user AS u USING (pbx_user_id)
+		JOIN p_pbx_voicemail_user AS vu USING (pbx_voicemail_id)
+		JOIN p_pbx_user AS u USING (pbx_user_id)
 		LEFT JOIN p_pbx_voicemail_user_recording_status AS s USING (pbx_voicemail_recording_id, pbx_user_id)
 		LEFT JOIN p_pbx_voicemail_recording_alternative AS a ON (r.pbx_voicemail_recording_id = a.pbx_voicemail_recording_id)
 	AND (a.content_type = contenttype)
@@ -555,7 +555,7 @@ AS $$
 		LEFT JOIN p_pbx_user AS u ON (u.call_profile_available_id = cp.pbx_call_profile_id)
 	OR (u.call_profile_unavailable_id = cp.pbx_call_profile_id)
 		LEFT JOIN p_pbx_route_user AS ru ON u.pbx_user_id = ru.pbx_user_id
-		LEFT JOIN unnest(call_profile_ids) WITH ORDINALITY so(pbx_call_profile_idsort_order) ON cp.pbx_call_profile_id = so.pbx_call_profile_id
+		LEFT JOIN unnest(call_profile_ids) WITH ORDINALITY so(pbx_call_profile_id, sort_order) ON cp.pbx_call_profile_id = so.pbx_call_profile_id
 	WHERE
 		cp.pbx_call_profile_id = ANY (call_profile_ids)
 	GROUP BY

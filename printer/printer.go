@@ -334,6 +334,30 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.NullTestType_IS_NULL:
 			output.Builder.WriteString(" IS NULL")
 		}
+	case *pg_query.Node_CollateClause:
+		output.writeExprWithParensIfNeeded(n.CollateClause.Arg)
+		output.Builder.WriteString(" COLLATE ")
+		output.writeQuotedQualifiedName(n.CollateClause.Collname)
+	case *pg_query.Node_BooleanTest:
+		// AND/OR and comparison arguments need parens: IS binds tighter
+		// than AND/OR, so "a AND b IS TRUE" would change meaning.
+		output.writeExprWithParensIfNeeded(n.BooleanTest.Arg)
+		switch n.BooleanTest.Booltesttype {
+		case pg_query.BoolTestType_IS_TRUE:
+			output.Builder.WriteString(" IS TRUE")
+		case pg_query.BoolTestType_IS_NOT_TRUE:
+			output.Builder.WriteString(" IS NOT TRUE")
+		case pg_query.BoolTestType_IS_FALSE:
+			output.Builder.WriteString(" IS FALSE")
+		case pg_query.BoolTestType_IS_NOT_FALSE:
+			output.Builder.WriteString(" IS NOT FALSE")
+		case pg_query.BoolTestType_IS_UNKNOWN:
+			output.Builder.WriteString(" IS UNKNOWN")
+		case pg_query.BoolTestType_IS_NOT_UNKNOWN:
+			output.Builder.WriteString(" IS NOT UNKNOWN")
+		default:
+			warn("unsupported boolean test type: %s", n.BooleanTest.Booltesttype.String())
+		}
 	case *pg_query.Node_Integer:
 		output.Builder.WriteString(strconv.Itoa(int(n.Integer.Ival)))
 	case *pg_query.Node_ParamRef:
@@ -570,16 +594,23 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			if i > 0 {
 				output.Builder.WriteString(".")
 			}
-			output.writeNode(f)
+			if s := f.GetString_(); s != nil {
+				output.Builder.WriteString(quoteIdentifier(s.Sval))
+			} else {
+				output.writeNode(f)
+			}
 		}
 
 	case *pg_query.Node_CommonTableExpr:
-		output.Builder.WriteString(n.CommonTableExpr.Ctename) // TODO deparseColId
+		output.Builder.WriteString(quoteIdentifier(n.CommonTableExpr.Ctename))
 
 		if len(n.CommonTableExpr.Aliascolnames) > 0 {
 			output.Builder.WriteString("(")
-			for _, f := range n.CommonTableExpr.Aliascolnames {
-				output.writeNode(f)
+			for i, f := range n.CommonTableExpr.Aliascolnames {
+				if i > 0 {
+					output.Builder.WriteString(", ")
+				}
+				output.Builder.WriteString(quoteIdentifier(f.GetString_().GetSval()))
 			}
 			output.Builder.WriteString(")")
 		}
@@ -631,9 +662,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 		if len(n.IndexElem.Collation) > 0 {
 			output.Builder.WriteString(" COLLATE ")
-			for _, o := range n.IndexElem.Collation {
-				output.writeNode(o)
-			}
+			output.writeQuotedQualifiedName(n.IndexElem.Collation)
 		}
 
 		if len(n.IndexElem.Opclass) > 0 {
@@ -695,10 +724,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 		if len(n.IndexStmt.Options) > 0 {
-			output.Builder.WriteString(" WITH ")
-			for _, o := range n.IndexStmt.Options {
-				output.writeNode(o)
-			}
+			output.Builder.WriteString(" WITH (")
+			output.writeCommaSeparatedList(n.IndexStmt.Options)
+			output.Builder.WriteString(")")
 		}
 
 		if n.IndexStmt.TableSpace != "" {
@@ -709,6 +737,73 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if n.IndexStmt.WhereClause != nil {
 			output.Builder.WriteString(" WHERE ")
 			output.writeNode(n.IndexStmt.WhereClause)
+		}
+
+	case *pg_query.Node_TableLikeClause:
+		output.Builder.WriteString("LIKE ")
+		output.writeRangeVar(n.TableLikeClause.Relation)
+		const likeAll = 0x7FFFFFFF
+		if n.TableLikeClause.Options == likeAll {
+			output.Builder.WriteString(" INCLUDING ALL")
+		} else {
+			// Bit positions follow the CREATE_TABLE_LIKE_* C enum order.
+			names := []string{"COMMENTS", "COMPRESSION", "CONSTRAINTS", "DEFAULTS",
+				"GENERATED", "IDENTITY", "INDEXES", "STATISTICS", "STORAGE"}
+			for bit, name := range names {
+				if n.TableLikeClause.Options&(1<<bit) != 0 {
+					output.Builder.WriteString(" INCLUDING ")
+					output.Builder.WriteString(name)
+				}
+			}
+		}
+
+	case *pg_query.Node_PartitionElem:
+		if n.PartitionElem.Name != "" {
+			output.Builder.WriteString(quoteIdentifier(n.PartitionElem.Name))
+		} else if n.PartitionElem.Expr != nil {
+			// The grammar only allows "windowless" function calls without
+			// parentheses; anything else must be wrapped.
+			bare := false
+			switch e := n.PartitionElem.Expr.GetNode().(type) {
+			case *pg_query.Node_FuncCall:
+				bare = e.FuncCall.Over == nil && e.FuncCall.AggFilter == nil &&
+					!e.FuncCall.AggWithinGroup && len(e.FuncCall.AggOrder) == 0
+			case *pg_query.Node_SqlvalueFunction,
+				*pg_query.Node_CoalesceExpr,
+				*pg_query.Node_MinMaxExpr,
+				*pg_query.Node_XmlExpr:
+				bare = true
+			}
+			if bare {
+				output.writeNode(n.PartitionElem.Expr)
+			} else {
+				output.Builder.WriteString("(")
+				output.writeNode(n.PartitionElem.Expr)
+				output.Builder.WriteString(")")
+			}
+		}
+		if len(n.PartitionElem.Collation) > 0 {
+			output.Builder.WriteString(" COLLATE ")
+			for i, o := range n.PartitionElem.Collation {
+				if i > 0 {
+					output.Builder.WriteString(".")
+				}
+				output.Builder.WriteString(quoteIdentifier(o.GetString_().GetSval()))
+			}
+		}
+		if len(n.PartitionElem.Opclass) > 0 {
+			output.Builder.WriteString(" ")
+			output.writeListWithSeparator(n.PartitionElem.Opclass, ".")
+		}
+
+	case *pg_query.Node_PartitionRangeDatum:
+		switch n.PartitionRangeDatum.Kind {
+		case pg_query.PartitionRangeDatumKind_PARTITION_RANGE_DATUM_MINVALUE:
+			output.Builder.WriteString("MINVALUE")
+		case pg_query.PartitionRangeDatumKind_PARTITION_RANGE_DATUM_MAXVALUE:
+			output.Builder.WriteString("MAXVALUE")
+		default:
+			output.writeNode(n.PartitionRangeDatum.Value)
 		}
 
 	case *pg_query.Node_RangeVar:
@@ -755,30 +850,37 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 	case *pg_query.Node_JoinExpr:
+		// A join with its own alias is a parenthesized join: (a JOIN b) AS x.
+		// Without the parens the alias would bind to the right-hand table.
+		if n.JoinExpr.Alias != nil {
+			output.Builder.WriteString("(")
+		}
 		output.writeNode(n.JoinExpr.Larg)
+		natural := ""
+		if n.JoinExpr.IsNatural {
+			natural = "NATURAL "
+		}
 		switch n.JoinExpr.Jointype {
 		case pg_query.JoinType_JOIN_INNER:
-			if n.JoinExpr.IsNatural {
-				output.Builder.WriteString(" NATURAL JOIN ")
-			} else if n.JoinExpr.Quals != nil {
-				output.writeNewlineIndent()
-				output.Builder.WriteString("\tJOIN ")
-			} else {
+			if !n.JoinExpr.IsNatural && n.JoinExpr.Quals == nil && len(n.JoinExpr.UsingClause) == 0 {
 				output.writeNewlineIndent()
 				output.Builder.WriteString("\tCROSS JOIN ")
+			} else {
+				output.writeNewlineIndent()
+				output.Builder.WriteString("\t" + natural + "JOIN ")
 			}
 		case pg_query.JoinType_JOIN_LEFT:
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\tLEFT JOIN ")
+			output.Builder.WriteString("\t" + natural + "LEFT JOIN ")
 		case pg_query.JoinType_JOIN_FULL:
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\tFULL JOIN ")
+			output.Builder.WriteString("\t" + natural + "FULL JOIN ")
 		case pg_query.JoinType_JOIN_RIGHT:
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\tRIGHT JOIN ")
+			output.Builder.WriteString("\t" + natural + "RIGHT JOIN ")
 		default:
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\tJOIN ")
+			output.Builder.WriteString("\t" + natural + "JOIN ")
 		}
 		output.writeNode(n.JoinExpr.Rarg)
 		if n.JoinExpr.Quals != nil {
@@ -789,9 +891,13 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(" USING (")
 			output.writeCommaSeparatedList(n.JoinExpr.UsingClause)
 			output.Builder.WriteString(")")
+			if n.JoinExpr.JoinUsingAlias != nil {
+				output.Builder.WriteString(" AS ")
+				output.writeAlias(n.JoinExpr.JoinUsingAlias)
+			}
 		}
 		if n.JoinExpr.Alias != nil {
-			output.Builder.WriteString(" AS ")
+			output.Builder.WriteString(") AS ")
 			output.writeAlias(n.JoinExpr.Alias)
 		}
 
@@ -799,7 +905,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.writeNode(n.ResTarget.Val)
 		if n.ResTarget.Name != "" {
 			output.Builder.WriteString(" AS ")
-			output.Builder.WriteString(n.ResTarget.Name)
+			output.Builder.WriteString(quoteIdentifier(n.ResTarget.Name))
 		}
 
 	case *pg_query.Node_BoolExpr:
@@ -974,27 +1080,80 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("IF NOT EXISTS ")
 		}
 		output.writeRangeVar(n.CreateStmt.Relation)
-		output.Builder.WriteString(" (")
-		output.indent++
-		for i, elt := range n.CreateStmt.TableElts {
-			output.writeNewlineIndent()
-			output.writeNode(elt)
-			if i != len(n.CreateStmt.TableElts)-1 {
-				output.Builder.WriteString(",")
-			}
+
+		// With a partition bound, InhRelations holds the parent table of a
+		// PARTITION OF clause rather than INHERITS.
+		partitionOf := n.CreateStmt.Partbound != nil && len(n.CreateStmt.InhRelations) > 0
+		if partitionOf {
+			output.Builder.WriteString(" PARTITION OF ")
+			output.writeNode(n.CreateStmt.InhRelations[0])
+		} else if n.CreateStmt.OfTypename != nil {
+			output.Builder.WriteString(" OF ")
+			output.writeTypeName(n.CreateStmt.OfTypename)
 		}
-		output.indent--
-		output.Builder.WriteString("\n)")
-		if len(n.CreateStmt.InhRelations) > 0 {
+
+		// PARTITION OF and OF type_name tables omit the column list entirely
+		// when there are no constraint entries; a plain empty list is valid
+		// (and required) otherwise.
+		if len(n.CreateStmt.TableElts) > 0 || (!partitionOf && n.CreateStmt.OfTypename == nil) {
+			output.Builder.WriteString(" (")
+			output.indent++
+			for i, elt := range n.CreateStmt.TableElts {
+				output.writeNewlineIndent()
+				output.writeNode(elt)
+				if i != len(n.CreateStmt.TableElts)-1 {
+					output.Builder.WriteString(",")
+				}
+			}
+			output.indent--
+			output.Builder.WriteString("\n)")
+		}
+
+		if !partitionOf && len(n.CreateStmt.InhRelations) > 0 {
 			output.Builder.WriteString(" INHERITS (")
 			output.writeCommaSeparatedList(n.CreateStmt.InhRelations)
 			output.Builder.WriteString(")")
 		}
+		if n.CreateStmt.Partbound != nil {
+			output.writePartitionBound(n.CreateStmt.Partbound)
+		}
+		if n.CreateStmt.Partspec != nil {
+			output.writePartitionSpec(n.CreateStmt.Partspec)
+		}
+		if n.CreateStmt.AccessMethod != "" {
+			output.Builder.WriteString(" USING ")
+			output.Builder.WriteString(quoteIdentifier(n.CreateStmt.AccessMethod))
+		}
+		if len(n.CreateStmt.Options) > 0 {
+			output.Builder.WriteString(" WITH (")
+			output.writeCommaSeparatedList(n.CreateStmt.Options)
+			output.Builder.WriteString(")")
+		}
+		switch n.CreateStmt.Oncommit {
+		case pg_query.OnCommitAction_ONCOMMIT_PRESERVE_ROWS:
+			output.Builder.WriteString(" ON COMMIT PRESERVE ROWS")
+		case pg_query.OnCommitAction_ONCOMMIT_DELETE_ROWS:
+			output.Builder.WriteString(" ON COMMIT DELETE ROWS")
+		case pg_query.OnCommitAction_ONCOMMIT_DROP:
+			output.Builder.WriteString(" ON COMMIT DROP")
+		}
+		if n.CreateStmt.Tablespacename != "" {
+			output.Builder.WriteString(" TABLESPACE ")
+			output.Builder.WriteString(quoteIdentifier(n.CreateStmt.Tablespacename))
+		}
 
 	case *pg_query.Node_ColumnDef:
 		output.Builder.WriteString(quoteIdentifier(n.ColumnDef.Colname))
-		output.Builder.WriteString(" ")
-		output.writeTypeName(n.ColumnDef.TypeName)
+		// TypeName is nil for column entries that only attach constraints to
+		// an inherited column (CREATE TABLE ... PARTITION OF / OF type_name).
+		if n.ColumnDef.TypeName != nil {
+			output.Builder.WriteString(" ")
+			output.writeTypeName(n.ColumnDef.TypeName)
+		}
+		if n.ColumnDef.CollClause != nil {
+			output.Builder.WriteString(" COLLATE ")
+			output.writeQuotedQualifiedName(n.ColumnDef.CollClause.Collname)
+		}
 		for _, c := range n.ColumnDef.Constraints {
 			output.Builder.WriteString(" ")
 			output.writeNode(c)
@@ -1042,6 +1201,12 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.writeNode(n.Constraint.RawExpr)
 				output.Builder.WriteString(")")
 			}
+			if n.Constraint.IsNoInherit {
+				output.Builder.WriteString(" NO INHERIT")
+			}
+			if n.Constraint.SkipValidation {
+				output.Builder.WriteString(" NOT VALID")
+			}
 		case pg_query.ConstrType_CONSTR_PRIMARY:
 			if n.Constraint.Conname != "" {
 				output.Builder.WriteString("CONSTRAINT ")
@@ -1054,6 +1219,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.writeCommaSeparatedList(n.Constraint.Keys)
 				output.Builder.WriteString(")")
 			}
+			output.writeIndexConstraintTail(n.Constraint)
 		case pg_query.ConstrType_CONSTR_UNIQUE:
 			if n.Constraint.Conname != "" {
 				output.Builder.WriteString("CONSTRAINT ")
@@ -1061,16 +1227,66 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.Builder.WriteString(" ")
 			}
 			output.Builder.WriteString("UNIQUE")
+			if n.Constraint.NullsNotDistinct {
+				output.Builder.WriteString(" NULLS NOT DISTINCT")
+			}
 			if len(n.Constraint.Keys) > 0 {
 				output.Builder.WriteString(" (")
 				output.writeCommaSeparatedList(n.Constraint.Keys)
 				output.Builder.WriteString(")")
 			}
+			output.writeIndexConstraintTail(n.Constraint)
+		case pg_query.ConstrType_CONSTR_EXCLUSION:
+			if n.Constraint.Conname != "" {
+				output.Builder.WriteString("CONSTRAINT ")
+				output.Builder.WriteString(n.Constraint.Conname)
+				output.Builder.WriteString(" ")
+			}
+			output.Builder.WriteString("EXCLUDE")
+			if n.Constraint.AccessMethod != "" {
+				output.Builder.WriteString(" USING ")
+				output.Builder.WriteString(n.Constraint.AccessMethod)
+			}
+			output.Builder.WriteString(" (")
+			for i, ex := range n.Constraint.Exclusions {
+				// Each exclusion is a two-item list: [IndexElem, operator name list].
+				if i > 0 {
+					output.Builder.WriteString(", ")
+				}
+				items := ex.GetList().GetItems()
+				if len(items) != 2 {
+					warn("unexpected exclusion structure")
+					continue
+				}
+				output.writeNode(items[0])
+				output.Builder.WriteString(" WITH ")
+				output.writeAnyOperator(items[1].GetList().GetItems())
+			}
+			output.Builder.WriteString(")")
+			if n.Constraint.WhereClause != nil {
+				output.Builder.WriteString(" WHERE (")
+				output.writeNode(n.Constraint.WhereClause)
+				output.Builder.WriteString(")")
+			}
+			output.writeIndexConstraintTail(n.Constraint)
+		case pg_query.ConstrType_CONSTR_ATTR_DEFERRABLE:
+			output.Builder.WriteString("DEFERRABLE")
+		case pg_query.ConstrType_CONSTR_ATTR_NOT_DEFERRABLE:
+			output.Builder.WriteString("NOT DEFERRABLE")
+		case pg_query.ConstrType_CONSTR_ATTR_DEFERRED:
+			output.Builder.WriteString("INITIALLY DEFERRED")
+		case pg_query.ConstrType_CONSTR_ATTR_IMMEDIATE:
+			output.Builder.WriteString("INITIALLY IMMEDIATE")
 		case pg_query.ConstrType_CONSTR_FOREIGN:
 			if n.Constraint.Conname != "" {
 				output.Builder.WriteString("CONSTRAINT ")
 				output.Builder.WriteString(n.Constraint.Conname)
 				output.Builder.WriteString(" ")
+			}
+			if len(n.Constraint.FkAttrs) > 0 {
+				output.Builder.WriteString("FOREIGN KEY (")
+				output.writeCommaSeparatedList(n.Constraint.FkAttrs)
+				output.Builder.WriteString(") ")
 			}
 			output.Builder.WriteString("REFERENCES ")
 			output.writeRangeVar(n.Constraint.Pktable)
@@ -1087,14 +1303,54 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			}
 			output.writeFkAction("ON DELETE", n.Constraint.FkDelAction, n.Constraint.FkDelSetCols)
 			output.writeFkAction("ON UPDATE", n.Constraint.FkUpdAction, nil)
+			if n.Constraint.Deferrable {
+				output.Builder.WriteString(" DEFERRABLE")
+			}
+			if n.Constraint.Initdeferred {
+				output.Builder.WriteString(" INITIALLY DEFERRED")
+			}
+			if n.Constraint.SkipValidation {
+				output.Builder.WriteString(" NOT VALID")
+			}
 		default:
 			warn("unsupported constraint type: %s", n.Constraint.Contype.String())
 		}
 
 	case *pg_query.Node_AlterTableStmt:
-		output.Builder.WriteString("ALTER TABLE ")
+		// If any subcommand is unsupported, emitting a partial statement
+		// would produce invalid SQL (e.g. "ALTER TABLE t\n\t;"). Fall back
+		// to deparsing the whole statement instead.
+		unsupported := false
+		for _, cmd := range n.AlterTableStmt.Cmds {
+			if c := cmd.GetAlterTableCmd(); c != nil && !alterTableCmdSupported(c) {
+				warn("unsupported alter table cmd: %s", c.Subtype.String())
+				unsupported = true
+			}
+		}
+		if unsupported && output.tryStatementFallback() {
+			return
+		}
+
+		output.Builder.WriteString("ALTER ")
+		switch n.AlterTableStmt.Objtype {
+		case pg_query.ObjectType_OBJECT_INDEX:
+			output.Builder.WriteString("INDEX ")
+		case pg_query.ObjectType_OBJECT_SEQUENCE:
+			output.Builder.WriteString("SEQUENCE ")
+		case pg_query.ObjectType_OBJECT_VIEW:
+			output.Builder.WriteString("VIEW ")
+		case pg_query.ObjectType_OBJECT_MATVIEW:
+			output.Builder.WriteString("MATERIALIZED VIEW ")
+		case pg_query.ObjectType_OBJECT_FOREIGN_TABLE:
+			output.Builder.WriteString("FOREIGN TABLE ")
+		default:
+			output.Builder.WriteString("TABLE ")
+		}
 		if n.AlterTableStmt.MissingOk {
 			output.Builder.WriteString("IF EXISTS ")
+		}
+		if !n.AlterTableStmt.Relation.Inh && n.AlterTableStmt.Objtype == pg_query.ObjectType_OBJECT_TABLE {
+			output.Builder.WriteString("ONLY ")
 		}
 		output.writeRangeVar(n.AlterTableStmt.Relation)
 		for i, cmd := range n.AlterTableStmt.Cmds {
@@ -1126,6 +1382,19 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			if def := n.AlterTableCmd.Def; def != nil {
 				if cd := def.GetColumnDef(); cd != nil {
 					output.writeTypeName(cd.TypeName)
+					if cd.CollClause != nil {
+						output.Builder.WriteString(" COLLATE ")
+						for i, o := range cd.CollClause.Collname {
+							if i > 0 {
+								output.Builder.WriteString(".")
+							}
+							output.Builder.WriteString(quoteIdentifier(o.GetString_().GetSval()))
+						}
+					}
+					if cd.RawDefault != nil {
+						output.Builder.WriteString(" USING ")
+						output.writeNode(cd.RawDefault)
+					}
 				}
 			}
 		case pg_query.AlterTableType_AT_ColumnDefault:
@@ -1159,7 +1428,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeNode(n.AlterTableCmd.Def)
 		case pg_query.AlterTableType_AT_ChangeOwner:
 			output.Builder.WriteString("OWNER TO ")
-			output.writeNode(n.AlterTableCmd.Def)
+			output.writeRoleSpec(n.AlterTableCmd.Newowner)
 		case pg_query.AlterTableType_AT_AddIdentity:
 			output.Builder.WriteString("ALTER COLUMN ")
 			output.Builder.WriteString(n.AlterTableCmd.Name)
@@ -1167,6 +1436,154 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeNode(n.AlterTableCmd.Def)
 		case pg_query.AlterTableType_AT_EnableRowSecurity:
 			output.Builder.WriteString("ENABLE ROW LEVEL SECURITY")
+		case pg_query.AlterTableType_AT_DisableRowSecurity:
+			output.Builder.WriteString("DISABLE ROW LEVEL SECURITY")
+		case pg_query.AlterTableType_AT_ForceRowSecurity:
+			output.Builder.WriteString("FORCE ROW LEVEL SECURITY")
+		case pg_query.AlterTableType_AT_NoForceRowSecurity:
+			output.Builder.WriteString("NO FORCE ROW LEVEL SECURITY")
+		case pg_query.AlterTableType_AT_ValidateConstraint:
+			output.Builder.WriteString("VALIDATE CONSTRAINT ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_AttachPartition:
+			pc := n.AlterTableCmd.Def.GetPartitionCmd()
+			output.Builder.WriteString("ATTACH PARTITION ")
+			output.writeRangeVar(pc.Name)
+			if pc.Bound != nil {
+				output.writePartitionBound(pc.Bound)
+			}
+		case pg_query.AlterTableType_AT_DetachPartition:
+			pc := n.AlterTableCmd.Def.GetPartitionCmd()
+			output.Builder.WriteString("DETACH PARTITION ")
+			output.writeRangeVar(pc.Name)
+			if pc.Concurrent {
+				output.Builder.WriteString(" CONCURRENTLY")
+			}
+		case pg_query.AlterTableType_AT_DetachPartitionFinalize:
+			pc := n.AlterTableCmd.Def.GetPartitionCmd()
+			output.Builder.WriteString("DETACH PARTITION ")
+			output.writeRangeVar(pc.Name)
+			output.Builder.WriteString(" FINALIZE")
+		case pg_query.AlterTableType_AT_SetStatistics:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.writeAlterColumnRef(n.AlterTableCmd)
+			output.Builder.WriteString(" SET STATISTICS ")
+			output.writeNode(n.AlterTableCmd.Def)
+		case pg_query.AlterTableType_AT_SetStorage:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(" SET STORAGE ")
+			output.Builder.WriteString(strings.ToUpper(n.AlterTableCmd.Def.GetString_().GetSval()))
+		case pg_query.AlterTableType_AT_SetCompression:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(" SET COMPRESSION ")
+			output.Builder.WriteString(n.AlterTableCmd.Def.GetString_().GetSval())
+		case pg_query.AlterTableType_AT_DropIdentity:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(" DROP IDENTITY")
+			if n.AlterTableCmd.MissingOk {
+				output.Builder.WriteString(" IF EXISTS")
+			}
+		case pg_query.AlterTableType_AT_DropExpression:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(" DROP EXPRESSION")
+			if n.AlterTableCmd.MissingOk {
+				output.Builder.WriteString(" IF EXISTS")
+			}
+		case pg_query.AlterTableType_AT_SetLogged:
+			output.Builder.WriteString("SET LOGGED")
+		case pg_query.AlterTableType_AT_SetUnLogged:
+			output.Builder.WriteString("SET UNLOGGED")
+		case pg_query.AlterTableType_AT_SetRelOptions:
+			output.Builder.WriteString("SET (")
+			output.writeCommaSeparatedList(n.AlterTableCmd.Def.GetList().GetItems())
+			output.Builder.WriteString(")")
+		case pg_query.AlterTableType_AT_ResetRelOptions:
+			output.Builder.WriteString("RESET (")
+			output.writeCommaSeparatedList(n.AlterTableCmd.Def.GetList().GetItems())
+			output.Builder.WriteString(")")
+		case pg_query.AlterTableType_AT_SetOptions:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.writeAlterColumnRef(n.AlterTableCmd)
+			output.Builder.WriteString(" SET (")
+			output.writeCommaSeparatedList(n.AlterTableCmd.Def.GetList().GetItems())
+			output.Builder.WriteString(")")
+		case pg_query.AlterTableType_AT_ResetOptions:
+			output.Builder.WriteString("ALTER COLUMN ")
+			output.writeAlterColumnRef(n.AlterTableCmd)
+			output.Builder.WriteString(" RESET (")
+			output.writeCommaSeparatedList(n.AlterTableCmd.Def.GetList().GetItems())
+			output.Builder.WriteString(")")
+		case pg_query.AlterTableType_AT_AddInherit:
+			output.Builder.WriteString("INHERIT ")
+			output.writeNode(n.AlterTableCmd.Def)
+		case pg_query.AlterTableType_AT_DropInherit:
+			output.Builder.WriteString("NO INHERIT ")
+			output.writeNode(n.AlterTableCmd.Def)
+		case pg_query.AlterTableType_AT_ClusterOn:
+			output.Builder.WriteString("CLUSTER ON ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_DropCluster:
+			output.Builder.WriteString("SET WITHOUT CLUSTER")
+		case pg_query.AlterTableType_AT_SetTableSpace:
+			output.Builder.WriteString("SET TABLESPACE ")
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
+		case pg_query.AlterTableType_AT_SetAccessMethod:
+			output.Builder.WriteString("SET ACCESS METHOD ")
+			if n.AlterTableCmd.Name == "" {
+				output.Builder.WriteString("DEFAULT")
+			} else {
+				output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
+			}
+		case pg_query.AlterTableType_AT_EnableTrig:
+			output.Builder.WriteString("ENABLE TRIGGER ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_EnableAlwaysTrig:
+			output.Builder.WriteString("ENABLE ALWAYS TRIGGER ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_EnableReplicaTrig:
+			output.Builder.WriteString("ENABLE REPLICA TRIGGER ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_DisableTrig:
+			output.Builder.WriteString("DISABLE TRIGGER ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_EnableTrigAll:
+			output.Builder.WriteString("ENABLE TRIGGER ALL")
+		case pg_query.AlterTableType_AT_DisableTrigAll:
+			output.Builder.WriteString("DISABLE TRIGGER ALL")
+		case pg_query.AlterTableType_AT_EnableTrigUser:
+			output.Builder.WriteString("ENABLE TRIGGER USER")
+		case pg_query.AlterTableType_AT_DisableTrigUser:
+			output.Builder.WriteString("DISABLE TRIGGER USER")
+		case pg_query.AlterTableType_AT_EnableRule:
+			output.Builder.WriteString("ENABLE RULE ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_EnableAlwaysRule:
+			output.Builder.WriteString("ENABLE ALWAYS RULE ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_EnableReplicaRule:
+			output.Builder.WriteString("ENABLE REPLICA RULE ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_DisableRule:
+			output.Builder.WriteString("DISABLE RULE ")
+			output.Builder.WriteString(n.AlterTableCmd.Name)
+		case pg_query.AlterTableType_AT_ReplicaIdentity:
+			ris := n.AlterTableCmd.Def.GetReplicaIdentityStmt()
+			output.Builder.WriteString("REPLICA IDENTITY ")
+			switch ris.GetIdentityType() {
+			case "d":
+				output.Builder.WriteString("DEFAULT")
+			case "n":
+				output.Builder.WriteString("NOTHING")
+			case "f":
+				output.Builder.WriteString("FULL")
+			case "i":
+				output.Builder.WriteString("USING INDEX ")
+				output.Builder.WriteString(ris.Name)
+			}
 		default:
 			warn("unsupported alter table cmd: %s", n.AlterTableCmd.Subtype.String())
 		}
@@ -1206,57 +1623,27 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString(")")
 
 	case *pg_query.Node_DropStmt:
-		output.Builder.WriteString("DROP ")
-		switch n.DropStmt.RemoveType {
-		case pg_query.ObjectType_OBJECT_TABLE:
-			output.Builder.WriteString("TABLE ")
-		case pg_query.ObjectType_OBJECT_INDEX:
-			output.Builder.WriteString("INDEX ")
-		case pg_query.ObjectType_OBJECT_SEQUENCE:
-			output.Builder.WriteString("SEQUENCE ")
-		case pg_query.ObjectType_OBJECT_VIEW:
-			output.Builder.WriteString("VIEW ")
-		case pg_query.ObjectType_OBJECT_MATVIEW:
-			output.Builder.WriteString("MATERIALIZED VIEW ")
-		case pg_query.ObjectType_OBJECT_TYPE:
-			output.Builder.WriteString("TYPE ")
-		case pg_query.ObjectType_OBJECT_SCHEMA:
-			output.Builder.WriteString("SCHEMA ")
-		case pg_query.ObjectType_OBJECT_FUNCTION:
-			output.Builder.WriteString("FUNCTION ")
-		case pg_query.ObjectType_OBJECT_PROCEDURE:
-			output.Builder.WriteString("PROCEDURE ")
-		case pg_query.ObjectType_OBJECT_TRIGGER:
-			output.Builder.WriteString("TRIGGER ")
-		case pg_query.ObjectType_OBJECT_EXTENSION:
-			output.Builder.WriteString("EXTENSION ")
-		case pg_query.ObjectType_OBJECT_DOMAIN:
-			output.Builder.WriteString("DOMAIN ")
-		default:
+		kw, ok := objectTypeKeyword(n.DropStmt.RemoveType)
+		if !ok {
 			warn("unsupported drop type: %s", n.DropStmt.RemoveType.String())
+			if output.tryStatementFallback() {
+				return
+			}
 		}
+		output.Builder.WriteString("DROP ")
+		output.Builder.WriteString(kw)
+		if n.DropStmt.Concurrent {
+			output.Builder.WriteString(" CONCURRENTLY")
+		}
+		output.Builder.WriteString(" ")
 		if n.DropStmt.MissingOk {
 			output.Builder.WriteString("IF EXISTS ")
 		}
-		isTrigger := n.DropStmt.RemoveType == pg_query.ObjectType_OBJECT_TRIGGER
 		for i, obj := range n.DropStmt.Objects {
-			if tn := obj.GetTypeName(); tn != nil {
-				output.writeListWithSeparator(tn.Names, ".")
-			} else if l := obj.GetList(); l != nil {
-				if isTrigger && len(l.Items) >= 2 {
-					// DROP TRIGGER: list is [schema?, table, trigger] → "trigger ON schema.table"
-					output.writeNode(l.Items[len(l.Items)-1])
-					output.Builder.WriteString(" ON ")
-					output.writeListWithSeparator(l.Items[:len(l.Items)-1], ".")
-				} else {
-					output.writeListWithSeparator(l.Items, ".")
-				}
-			} else {
-				output.writeNode(obj)
-			}
-			if i != len(n.DropStmt.Objects)-1 {
+			if i > 0 {
 				output.Builder.WriteString(", ")
 			}
+			output.writeObjectRef(n.DropStmt.RemoveType, obj)
 		}
 		switch n.DropStmt.Behavior {
 		case pg_query.DropBehavior_DROP_CASCADE:
@@ -1748,50 +2135,25 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 	case *pg_query.Node_CommentStmt:
-		output.Builder.WriteString("COMMENT ON ")
-		switch n.CommentStmt.Objtype {
-		case pg_query.ObjectType_OBJECT_TABLE:
-			output.Builder.WriteString("TABLE ")
-		case pg_query.ObjectType_OBJECT_COLUMN:
-			output.Builder.WriteString("COLUMN ")
-		case pg_query.ObjectType_OBJECT_INDEX:
-			output.Builder.WriteString("INDEX ")
-		case pg_query.ObjectType_OBJECT_FUNCTION:
-			output.Builder.WriteString("FUNCTION ")
-		case pg_query.ObjectType_OBJECT_SCHEMA:
-			output.Builder.WriteString("SCHEMA ")
-		case pg_query.ObjectType_OBJECT_SEQUENCE:
-			output.Builder.WriteString("SEQUENCE ")
-		case pg_query.ObjectType_OBJECT_VIEW:
-			output.Builder.WriteString("VIEW ")
-		case pg_query.ObjectType_OBJECT_TYPE:
-			output.Builder.WriteString("TYPE ")
-		case pg_query.ObjectType_OBJECT_DOMAIN:
-			output.Builder.WriteString("DOMAIN ")
-		case pg_query.ObjectType_OBJECT_TRIGGER:
-			output.Builder.WriteString("TRIGGER ")
-		case pg_query.ObjectType_OBJECT_EXTENSION:
-			output.Builder.WriteString("EXTENSION ")
-		case pg_query.ObjectType_OBJECT_TABCONSTRAINT:
-			output.Builder.WriteString("CONSTRAINT ")
-		default:
+		kw, ok := objectTypeKeyword(n.CommentStmt.Objtype)
+		if !ok {
 			warn("unsupported comment object type: %s", n.CommentStmt.Objtype.String())
-		}
-		if n.CommentStmt.Objtype == pg_query.ObjectType_OBJECT_TABCONSTRAINT {
-			// COMMENT ON CONSTRAINT constraint_name ON table_name
-			if l := n.CommentStmt.Object.GetList(); l != nil && len(l.Items) == 2 {
-				output.writeNode(l.Items[1]) // constraint name
-				output.Builder.WriteString(" ON ")
-				output.writeNode(l.Items[0]) // table name
+			if output.tryStatementFallback() {
+				return
 			}
-		} else if l := n.CommentStmt.Object.GetList(); l != nil {
-			output.writeListWithSeparator(l.Items, ".")
-		} else {
-			output.writeNode(n.CommentStmt.Object)
 		}
-		output.Builder.WriteString(" IS '")
-		output.Builder.WriteString(strings.ReplaceAll(n.CommentStmt.Comment, "'", "''"))
-		output.Builder.WriteString("'")
+		output.Builder.WriteString("COMMENT ON ")
+		output.Builder.WriteString(kw)
+		output.Builder.WriteString(" ")
+		output.writeObjectRef(n.CommentStmt.Objtype, n.CommentStmt.Object)
+		if n.CommentStmt.Comment == "" {
+			// An empty comment means removal; deparse emits NULL as well.
+			output.Builder.WriteString(" IS NULL")
+		} else {
+			output.Builder.WriteString(" IS '")
+			output.Builder.WriteString(strings.ReplaceAll(n.CommentStmt.Comment, "'", "''"))
+			output.Builder.WriteString("'")
+		}
 
 	case *pg_query.Node_TruncateStmt:
 		output.Builder.WriteString("TRUNCATE TABLE ")
@@ -2204,6 +2566,22 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(n.ClusterStmt.Indexname)
 		}
 
+	case *pg_query.Node_XmlSerialize:
+		output.Builder.WriteString("XMLSERIALIZE(")
+		switch n.XmlSerialize.Xmloption {
+		case pg_query.XmlOptionType_XMLOPTION_DOCUMENT:
+			output.Builder.WriteString("DOCUMENT ")
+		case pg_query.XmlOptionType_XMLOPTION_CONTENT:
+			output.Builder.WriteString("CONTENT ")
+		}
+		output.writeNode(n.XmlSerialize.Expr)
+		output.Builder.WriteString(" AS ")
+		output.writeTypeName(n.XmlSerialize.TypeName)
+		if n.XmlSerialize.Indent {
+			output.Builder.WriteString(" INDENT")
+		}
+		output.Builder.WriteString(")")
+
 	case *pg_query.Node_XmlExpr:
 		switch n.XmlExpr.Op {
 		case pg_query.XmlExprOp_IS_XMLCONCAT:
@@ -2360,36 +2738,296 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				return
 			}
 		}
-		// Fallback 1: use pre-computed deparsed text (from augmented AST)
-		if output.Deparsed != "" {
-			output.Builder.WriteString(output.Deparsed)
+		if output.tryStatementFallback() {
 			return
 		}
-		// Fallback 2: deparse via pg_query (native)
-		if output.RawStmt != nil {
-			deparsed, err := pgDeparse(&pg_query.ParseResult{
-				Stmts: []*pg_query.RawStmt{output.RawStmt},
-			})
-			if err == nil {
-				output.Builder.WriteString(deparsed)
-				return
-			}
-		}
-		// Fallback 3: extract original SQL text (WASM, where deparse is unavailable)
-		if output.RawStmt != nil && output.OriginalSQL != "" {
-			start := output.RawStmt.StmtLocation
-			end := start + output.RawStmt.StmtLen
-			if output.RawStmt.StmtLen == 0 {
-				end = int32(len(output.OriginalSQL))
-			}
-			if start >= 0 && int(end) <= len(output.OriginalSQL) {
-				raw := strings.TrimRight(output.OriginalSQL[start:end], "; \t\n")
-				warn("unsupported node %T, using original SQL", n)
-				output.Builder.WriteString(raw)
-				return
-			}
-		}
 		warn("unexpected node: %T", n)
+	}
+}
+
+// tryStatementFallback writes the entire current statement using pre-computed
+// deparse text, native deparse, or the original SQL text, in that order.
+// Returns false when no fallback source is available.
+func (output *Printer) tryStatementFallback() bool {
+	// Fallback 1: use pre-computed deparsed text (from augmented AST)
+	if output.Deparsed != "" {
+		output.Builder.WriteString(output.Deparsed)
+		return true
+	}
+	// Fallback 2: deparse via pg_query (native)
+	if output.RawStmt != nil {
+		deparsed, err := pgDeparse(&pg_query.ParseResult{
+			Stmts: []*pg_query.RawStmt{output.RawStmt},
+		})
+		if err == nil {
+			output.Builder.WriteString(deparsed)
+			return true
+		}
+	}
+	// Fallback 3: extract original SQL text (WASM, where deparse is unavailable)
+	if output.RawStmt != nil && output.OriginalSQL != "" {
+		start := output.RawStmt.StmtLocation
+		end := start + output.RawStmt.StmtLen
+		if output.RawStmt.StmtLen == 0 {
+			end = int32(len(output.OriginalSQL))
+		}
+		if start >= 0 && int(end) <= len(output.OriginalSQL) {
+			raw := strings.TrimRight(output.OriginalSQL[start:end], "; \t\n")
+			output.Builder.WriteString(raw)
+			return true
+		}
+	}
+	return false
+}
+
+// alterTableCmdSupported reports whether the AlterTableCmd writer handles
+// the subcommand. Must stay in sync with the Node_AlterTableCmd switch.
+func alterTableCmdSupported(c *pg_query.AlterTableCmd) bool {
+	switch c.Subtype {
+	case pg_query.AlterTableType_AT_AddColumn,
+		pg_query.AlterTableType_AT_DropColumn,
+		pg_query.AlterTableType_AT_AlterColumnType,
+		pg_query.AlterTableType_AT_ColumnDefault,
+		pg_query.AlterTableType_AT_SetNotNull,
+		pg_query.AlterTableType_AT_DropNotNull,
+		pg_query.AlterTableType_AT_AddConstraint,
+		pg_query.AlterTableType_AT_DropConstraint,
+		pg_query.AlterTableType_AT_AddIndex,
+		pg_query.AlterTableType_AT_ChangeOwner,
+		pg_query.AlterTableType_AT_AddIdentity,
+		pg_query.AlterTableType_AT_EnableRowSecurity,
+		pg_query.AlterTableType_AT_DisableRowSecurity,
+		pg_query.AlterTableType_AT_ForceRowSecurity,
+		pg_query.AlterTableType_AT_NoForceRowSecurity,
+		pg_query.AlterTableType_AT_ValidateConstraint,
+		pg_query.AlterTableType_AT_AttachPartition,
+		pg_query.AlterTableType_AT_DetachPartition,
+		pg_query.AlterTableType_AT_DetachPartitionFinalize,
+		pg_query.AlterTableType_AT_SetStatistics,
+		pg_query.AlterTableType_AT_SetStorage,
+		pg_query.AlterTableType_AT_SetCompression,
+		pg_query.AlterTableType_AT_DropIdentity,
+		pg_query.AlterTableType_AT_DropExpression,
+		pg_query.AlterTableType_AT_SetLogged,
+		pg_query.AlterTableType_AT_SetUnLogged,
+		pg_query.AlterTableType_AT_SetRelOptions,
+		pg_query.AlterTableType_AT_ResetRelOptions,
+		pg_query.AlterTableType_AT_SetOptions,
+		pg_query.AlterTableType_AT_ResetOptions,
+		pg_query.AlterTableType_AT_AddInherit,
+		pg_query.AlterTableType_AT_DropInherit,
+		pg_query.AlterTableType_AT_ClusterOn,
+		pg_query.AlterTableType_AT_DropCluster,
+		pg_query.AlterTableType_AT_SetTableSpace,
+		pg_query.AlterTableType_AT_SetAccessMethod,
+		pg_query.AlterTableType_AT_EnableTrig,
+		pg_query.AlterTableType_AT_EnableAlwaysTrig,
+		pg_query.AlterTableType_AT_EnableReplicaTrig,
+		pg_query.AlterTableType_AT_DisableTrig,
+		pg_query.AlterTableType_AT_EnableTrigAll,
+		pg_query.AlterTableType_AT_DisableTrigAll,
+		pg_query.AlterTableType_AT_EnableTrigUser,
+		pg_query.AlterTableType_AT_DisableTrigUser,
+		pg_query.AlterTableType_AT_EnableRule,
+		pg_query.AlterTableType_AT_EnableAlwaysRule,
+		pg_query.AlterTableType_AT_EnableReplicaRule,
+		pg_query.AlterTableType_AT_DisableRule,
+		pg_query.AlterTableType_AT_ReplicaIdentity:
+		return true
+	}
+	return false
+}
+
+// writeIndexConstraintTail emits the clauses shared by PRIMARY KEY, UNIQUE,
+// and EXCLUDE constraints: INCLUDE, USING INDEX, and deferrability.
+func (output *Printer) writeIndexConstraintTail(c *pg_query.Constraint) {
+	if len(c.Including) > 0 {
+		output.Builder.WriteString(" INCLUDE (")
+		output.writeCommaSeparatedList(c.Including)
+		output.Builder.WriteString(")")
+	}
+	if c.Indexname != "" {
+		output.Builder.WriteString(" USING INDEX ")
+		output.Builder.WriteString(c.Indexname)
+	}
+	if c.Deferrable {
+		output.Builder.WriteString(" DEFERRABLE")
+	}
+	if c.Initdeferred {
+		output.Builder.WriteString(" INITIALLY DEFERRED")
+	}
+}
+
+// objectTypeKeyword maps an ObjectType to its DDL keyword (as used in DROP
+// and COMMENT ON). The second return value is false for object types the
+// printer cannot reference yet.
+func objectTypeKeyword(t pg_query.ObjectType) (string, bool) {
+	switch t {
+	case pg_query.ObjectType_OBJECT_TABLE:
+		return "TABLE", true
+	case pg_query.ObjectType_OBJECT_COLUMN:
+		return "COLUMN", true
+	case pg_query.ObjectType_OBJECT_INDEX:
+		return "INDEX", true
+	case pg_query.ObjectType_OBJECT_SEQUENCE:
+		return "SEQUENCE", true
+	case pg_query.ObjectType_OBJECT_VIEW:
+		return "VIEW", true
+	case pg_query.ObjectType_OBJECT_MATVIEW:
+		return "MATERIALIZED VIEW", true
+	case pg_query.ObjectType_OBJECT_FOREIGN_TABLE:
+		return "FOREIGN TABLE", true
+	case pg_query.ObjectType_OBJECT_TYPE:
+		return "TYPE", true
+	case pg_query.ObjectType_OBJECT_DOMAIN:
+		return "DOMAIN", true
+	case pg_query.ObjectType_OBJECT_SCHEMA:
+		return "SCHEMA", true
+	case pg_query.ObjectType_OBJECT_FUNCTION:
+		return "FUNCTION", true
+	case pg_query.ObjectType_OBJECT_PROCEDURE:
+		return "PROCEDURE", true
+	case pg_query.ObjectType_OBJECT_ROUTINE:
+		return "ROUTINE", true
+	case pg_query.ObjectType_OBJECT_AGGREGATE:
+		return "AGGREGATE", true
+	case pg_query.ObjectType_OBJECT_TRIGGER:
+		return "TRIGGER", true
+	case pg_query.ObjectType_OBJECT_RULE:
+		return "RULE", true
+	case pg_query.ObjectType_OBJECT_POLICY:
+		return "POLICY", true
+	case pg_query.ObjectType_OBJECT_EVENT_TRIGGER:
+		return "EVENT TRIGGER", true
+	case pg_query.ObjectType_OBJECT_EXTENSION:
+		return "EXTENSION", true
+	case pg_query.ObjectType_OBJECT_TABCONSTRAINT, pg_query.ObjectType_OBJECT_DOMCONSTRAINT:
+		return "CONSTRAINT", true
+	case pg_query.ObjectType_OBJECT_COLLATION:
+		return "COLLATION", true
+	case pg_query.ObjectType_OBJECT_CONVERSION:
+		return "CONVERSION", true
+	case pg_query.ObjectType_OBJECT_LANGUAGE:
+		return "LANGUAGE", true
+	case pg_query.ObjectType_OBJECT_LARGEOBJECT:
+		return "LARGE OBJECT", true
+	case pg_query.ObjectType_OBJECT_ROLE:
+		return "ROLE", true
+	case pg_query.ObjectType_OBJECT_DATABASE:
+		return "DATABASE", true
+	case pg_query.ObjectType_OBJECT_TABLESPACE:
+		return "TABLESPACE", true
+	case pg_query.ObjectType_OBJECT_STATISTIC_EXT:
+		return "STATISTICS", true
+	case pg_query.ObjectType_OBJECT_OPCLASS:
+		return "OPERATOR CLASS", true
+	case pg_query.ObjectType_OBJECT_OPFAMILY:
+		return "OPERATOR FAMILY", true
+	case pg_query.ObjectType_OBJECT_FDW:
+		return "FOREIGN DATA WRAPPER", true
+	case pg_query.ObjectType_OBJECT_FOREIGN_SERVER:
+		return "SERVER", true
+	case pg_query.ObjectType_OBJECT_PUBLICATION:
+		return "PUBLICATION", true
+	case pg_query.ObjectType_OBJECT_ACCESS_METHOD:
+		return "ACCESS METHOD", true
+	case pg_query.ObjectType_OBJECT_TSCONFIGURATION:
+		return "TEXT SEARCH CONFIGURATION", true
+	case pg_query.ObjectType_OBJECT_TSDICTIONARY:
+		return "TEXT SEARCH DICTIONARY", true
+	case pg_query.ObjectType_OBJECT_TSPARSER:
+		return "TEXT SEARCH PARSER", true
+	case pg_query.ObjectType_OBJECT_TSTEMPLATE:
+		return "TEXT SEARCH TEMPLATE", true
+	case pg_query.ObjectType_OBJECT_CAST:
+		return "CAST", true
+	}
+	return "", false
+}
+
+// writeObjectRef emits the object reference of a DROP or COMMENT ON
+// statement, handling the sub-object syntaxes (name ON table, USING method,
+// CAST (a AS b)).
+func (output *Printer) writeObjectRef(t pg_query.ObjectType, obj *pg_query.Node) {
+	switch t {
+	case pg_query.ObjectType_OBJECT_TRIGGER,
+		pg_query.ObjectType_OBJECT_RULE,
+		pg_query.ObjectType_OBJECT_POLICY,
+		pg_query.ObjectType_OBJECT_TABCONSTRAINT:
+		// [schema?, table, name] → "name ON schema.table"
+		if l := obj.GetList(); l != nil && len(l.Items) >= 2 {
+			items := l.Items
+			output.Builder.WriteString(quoteIdentifier(items[len(items)-1].GetString_().GetSval()))
+			output.Builder.WriteString(" ON ")
+			output.writeListWithSeparator(items[:len(items)-1], ".")
+			return
+		}
+	case pg_query.ObjectType_OBJECT_DOMCONSTRAINT:
+		// [domain TypeName, name] → "name ON DOMAIN domain"
+		if l := obj.GetList(); l != nil && len(l.Items) == 2 {
+			output.Builder.WriteString(quoteIdentifier(l.Items[1].GetString_().GetSval()))
+			output.Builder.WriteString(" ON DOMAIN ")
+			output.writeNode(l.Items[0])
+			return
+		}
+	case pg_query.ObjectType_OBJECT_OPCLASS,
+		pg_query.ObjectType_OBJECT_OPFAMILY:
+		// [method, name...] → "name USING method"
+		if l := obj.GetList(); l != nil && len(l.Items) >= 2 {
+			output.writeListWithSeparator(l.Items[1:], ".")
+			output.Builder.WriteString(" USING ")
+			output.writeNode(l.Items[0])
+			return
+		}
+	case pg_query.ObjectType_OBJECT_CAST:
+		// [source TypeName, target TypeName] → "(source AS target)"
+		if l := obj.GetList(); l != nil && len(l.Items) == 2 {
+			output.Builder.WriteString("(")
+			output.writeNode(l.Items[0])
+			output.Builder.WriteString(" AS ")
+			output.writeNode(l.Items[1])
+			output.Builder.WriteString(")")
+			return
+		}
+	}
+	if tn := obj.GetTypeName(); tn != nil {
+		output.writeListWithSeparator(tn.Names, ".")
+		return
+	}
+	if l := obj.GetList(); l != nil {
+		output.writeListWithSeparator(l.Items, ".")
+		return
+	}
+	output.writeNode(obj)
+}
+
+// writeRoleSpec emits a role reference (owner, grantee, ...).
+func (output *Printer) writeRoleSpec(r *pg_query.RoleSpec) {
+	if r == nil {
+		warn("missing role spec")
+		return
+	}
+	switch r.Roletype {
+	case pg_query.RoleSpecType_ROLESPEC_CURRENT_ROLE:
+		output.Builder.WriteString("CURRENT_ROLE")
+	case pg_query.RoleSpecType_ROLESPEC_CURRENT_USER:
+		output.Builder.WriteString("CURRENT_USER")
+	case pg_query.RoleSpecType_ROLESPEC_SESSION_USER:
+		output.Builder.WriteString("SESSION_USER")
+	case pg_query.RoleSpecType_ROLESPEC_PUBLIC:
+		output.Builder.WriteString("PUBLIC")
+	default:
+		output.Builder.WriteString(quoteIdentifier(r.Rolename))
+	}
+}
+
+// writeAlterColumnRef emits the column reference of an ALTER COLUMN
+// subcommand: a name, or a column number for ALTER INDEX.
+func (output *Printer) writeAlterColumnRef(c *pg_query.AlterTableCmd) {
+	if c.Name != "" {
+		output.Builder.WriteString(c.Name)
+	} else {
+		output.Builder.WriteString(strconv.Itoa(int(c.Num)))
 	}
 }
 
