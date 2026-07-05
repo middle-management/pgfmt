@@ -59,7 +59,7 @@ func (s *Server) Run() error {
 					DocumentFormattingProvider:      true,
 					DocumentRangeFormattingProvider: true,
 				},
-				ServerInfo: ServerInfo{Name: "pgfmt-lsp", Version: "0.3.3"},
+				ServerInfo: ServerInfo{Name: "pgfmt-lsp", Version: "0.4.0"},
 			})
 
 		case "initialized":

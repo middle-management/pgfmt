@@ -1,6 +1,6 @@
 id = "pgfmt-lsp"
 name = "pgfmt"
-version = "0.3.3"
+version = "0.4.0"
 schema_version = 1
 authors = ["middle-management"]
 description = "PostgreSQL SQL formatting and diagnostics via pgfmt-lsp"
