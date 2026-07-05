@@ -66,7 +66,9 @@ CREATE TEMPORARY TABLE tmp_results (
 INSERT INTO
 	settings (key, value)
 VALUES ('theme', 'dark')
-ON CONFLICT (key) DO UPDATE SET excluded.value AS value;
+ON CONFLICT (key)
+DO UPDATE SET
+	value = excluded.value;
 
 -- INSERT with ON CONFLICT DO NOTHING
 INSERT INTO
