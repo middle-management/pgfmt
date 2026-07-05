@@ -84,11 +84,17 @@ jobs:
           git commit -m "Update pgfmt-lsp to v${VERSION}"
           git push --force -u origin "${BRANCH}"
 
-          # Create the PR unless one is already open for this branch
-          if ! gh pr list --repo "${UPSTREAM}" --head "middle-management:${BRANCH}" --state open --json number --jq '.[0].number' | grep -q .; then
+          # Create the PR unless one is already open for this branch. The
+          # REST pulls list is authoritative; `gh pr list --head` relies on
+          # the search index and can miss just-pushed branches, making a
+          # retry fail on "pull request already exists".
+          OPEN=$(gh api "repos/${UPSTREAM}/pulls?head=middle-management:${BRANCH}&state=open" --jq 'length')
+          if [ "${OPEN}" = "0" ]; then
             gh pr create \
               --repo "${UPSTREAM}" \
               --head "middle-management:${BRANCH}" \
               --title "Update pgfmt-lsp to v${VERSION}" \
               --body "Bumps pgfmt-lsp to v${VERSION}. Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+          else
+            echo "Registry PR already open for ${BRANCH}; branch was force-pushed, PR refreshed in place."
           fi
