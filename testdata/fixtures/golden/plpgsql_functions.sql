@@ -1,7 +1,6 @@
 -- Simple function with DECLARE and IF/ELSE
 CREATE FUNCTION get_user_label(p_id int)
 RETURNS text
-LANGUAGE plpgsql
 AS $$
 DECLARE
 	result text;
@@ -15,12 +14,12 @@ BEGIN
 	END IF;
 	RETURN result;
 END
-$$;
+$$
+LANGUAGE plpgsql;
 
 -- Function with loops
 CREATE FUNCTION loop_demo()
 RETURNS void
-LANGUAGE plpgsql
 AS $$
 DECLARE
 	counter integer := 0;
@@ -38,13 +37,12 @@ BEGIN
 		v := v + 1;
 	END LOOP;
 END
-$$;
+$$
+LANGUAGE plpgsql;
 
 -- Function with EXCEPTION handling
 CREATE OR REPLACE FUNCTION safe_divide(a int, b int)
 RETURNS numeric
-LANGUAGE plpgsql
-STRICT
 AS $$
 DECLARE
 	result numeric;
@@ -57,12 +55,13 @@ EXCEPTION
 	WHEN others THEN
 		RAISE;
 END
-$$;
+$$
+LANGUAGE plpgsql
+STRICT;
 
 -- Function with PERFORM, EXECUTE, CASE
 CREATE FUNCTION kitchen_sink(p_mode int)
 RETURNS void
-LANGUAGE plpgsql
 AS $$
 DECLARE
 	v integer := 0;
@@ -85,12 +84,12 @@ BEGIN
 			RAISE DEBUG 'non-positive';
 	END CASE;
 END
-$$;
+$$
+LANGUAGE plpgsql;
 
 -- Function with FOR-query and FOREACH
 CREATE FUNCTION iter_demo()
 RETURNS void
-LANGUAGE plpgsql
 AS $$
 DECLARE
 	r record;
@@ -104,36 +103,37 @@ BEGIN
 		RAISE NOTICE 'val=%', v;
 	END LOOP;
 END
-$$;
+$$
+LANGUAGE plpgsql;
 
 -- Procedure (not function)
 CREATE PROCEDURE refresh_cache()
-LANGUAGE plpgsql
 AS $$
 BEGIN
 	PERFORM pg_notify('cache', 'refresh');
 END
-$$;
+$$
+LANGUAGE plpgsql;
 
 -- Non-plpgsql language should preserve raw body
 CREATE FUNCTION test_py()
 RETURNS void
-LANGUAGE plpython3u
 AS $$
 import sys
 print("hello")
-$$;
+$$
+LANGUAGE plpython3u;
 
 -- Function with RETURN QUERY
 CREATE FUNCTION get_active_users()
 RETURNS SETOF record
-LANGUAGE plpgsql
-STABLE
 AS $$
 BEGIN
 	RETURN QUERY SELECT id, name FROM users WHERE active = true;
 END
-$$;
+$$
+LANGUAGE plpgsql
+STABLE;
 
 -- Function options: SET ... TO, SET ... FROM CURRENT (previously dropped)
 CREATE OR REPLACE FUNCTION add_schedule_tick()
@@ -149,29 +149,28 @@ $$;
 
 CREATE FUNCTION with_current_setting()
 RETURNS void
-LANGUAGE plpgsql
-SET work_mem FROM CURRENT
-SET statement_timeout TO DEFAULT
 AS $$
 BEGIN
 	PERFORM 1;
 END
-$$;
+$$
+LANGUAGE plpgsql
+SET work_mem FROM CURRENT
+SET statement_timeout TO DEFAULT;
 
 -- NULL statements are compiled away by the parser; empty bodies must
 -- round-trip as NULL; instead of being dropped.
 CREATE FUNCTION do_nothing()
 RETURNS void
-LANGUAGE plpgsql
 AS $$
 BEGIN
 	NULL;
 END
-$$;
+$$
+LANGUAGE plpgsql;
 
 CREATE FUNCTION null_branches(x int)
 RETURNS void
-LANGUAGE plpgsql
 AS $$
 BEGIN
 	IF x > 0 THEN
@@ -190,5 +189,6 @@ BEGIN
 			NULL;
 	END;
 END
-$$;
+$$
+LANGUAGE plpgsql;
 

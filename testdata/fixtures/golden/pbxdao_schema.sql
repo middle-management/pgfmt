@@ -47,17 +47,17 @@ CREATE TABLE p_pbx_call_profile (
 	mex_call_as_msisdn varchar,
 	mex_call_as varchar,
 	available_by_default boolean NOT NULL DEFAULT true,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
-	deleted_at timestamptz
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
+	deleted_at timestamp with time zone
 );
 
 CREATE TABLE p_pbx_call_profile_mex_accept_call (
 	pbx_call_profile_id uuid NOT NULL REFERENCES p_pbx_call_profile ON DELETE CASCADE,
 	subscription_id uuid,
 	accept_calls boolean NOT NULL DEFAULT true,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
 	PRIMARY KEY (pbx_call_profile_id, subscription_id)
 );
 
@@ -67,13 +67,13 @@ CREATE TABLE p_pbx_user (
 	msisdn varchar,
 	reason varchar,
 	level varchar,
-	available_at timestamptz,
+	available_at timestamp with time zone,
 	organisation_id uuid NOT NULL,
 	call_profile_available_id uuid REFERENCES p_pbx_call_profile ON DELETE SET NULL,
 	call_profile_unavailable_id uuid REFERENCES p_pbx_call_profile ON DELETE SET NULL,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
-	deleted_at timestamptz
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
+	deleted_at timestamp with time zone
 );
 
 CREATE UNIQUE INDEX ON p_pbx_user USING btree (msisdn, organisation_id) WHERE deleted_at IS NULL;
@@ -83,9 +83,9 @@ CREATE TABLE p_pbx_prompt (
 	description varchar,
 	extension varchar,
 	organisation_id uuid,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
-	deleted_at timestamptz
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
+	deleted_at timestamp with time zone
 );
 
 CREATE TABLE p_pbx_voicemail (
@@ -96,9 +96,9 @@ CREATE TABLE p_pbx_voicemail (
 	msisdn varchar,
 	pbx_prompt_id uuid REFERENCES p_pbx_prompt ON DELETE SET NULL,
 	organisation_id uuid NOT NULL,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
-	deleted_at timestamptz
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
+	deleted_at timestamp with time zone
 );
 
 CREATE TABLE p_pbx_route (
@@ -113,8 +113,8 @@ CREATE TABLE p_pbx_route (
 	pbx_voicemail_id uuid REFERENCES p_pbx_voicemail ON DELETE SET NULL,
 	organisation_id uuid,
 	subscription_id uuid,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL
 );
 
 CREATE INDEX ON p_pbx_route USING btree (organisation_id);
@@ -128,8 +128,8 @@ CREATE TABLE p_pbx_call_profile_route_accept_call (
 	pbx_call_profile_id uuid NOT NULL REFERENCES p_pbx_call_profile ON DELETE CASCADE,
 	pbx_route_id uuid NOT NULL REFERENCES p_pbx_route ON DELETE CASCADE,
 	accept_calls boolean NOT NULL,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
 	PRIMARY KEY (pbx_call_profile_id, pbx_route_id)
 );
 
@@ -147,12 +147,12 @@ CREATE TABLE p_pbx_route_schedule (
 	recurrence_sat bool,
 	recurrence_sun bool,
 	next uuid REFERENCES p_pbx_route (pbx_route_id) ON DELETE SET NULL,
-	start_time timetz,
+	start_time time with time zone,
 	start_date date,
-	end_time timetz,
+	end_time time with time zone,
 	end_date date,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL
 );
 
 CREATE INDEX ON p_pbx_route_schedule USING btree (pbx_route_id);
@@ -160,16 +160,16 @@ CREATE INDEX ON p_pbx_route_schedule USING btree (pbx_route_id);
 CREATE TABLE p_pbx_route_queue (
 	pbx_route_id uuid PRIMARY KEY REFERENCES p_pbx_route ON DELETE CASCADE,
 	max_waiting_callers int NOT NULL,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE p_pbx_route_menu (
 	pbx_route_id uuid NOT NULL REFERENCES p_pbx_route ON DELETE CASCADE,
 	type varchar NOT NULL, -- 1,2,3,4,5,6,7,8,9,0,#,*
 	next uuid REFERENCES p_pbx_route (pbx_route_id) ON DELETE SET NULL,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
 	PRIMARY KEY (pbx_route_id, type)
 );
 
@@ -178,8 +178,8 @@ CREATE INDEX ON p_pbx_route_menu USING btree (pbx_route_id);
 CREATE TABLE p_pbx_route_user (
 	pbx_user_id uuid NOT NULL REFERENCES p_pbx_user ON DELETE CASCADE,
 	pbx_route_id uuid NOT NULL REFERENCES p_pbx_route ON DELETE CASCADE,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
 	connected boolean NOT NULL,
 	PRIMARY KEY (pbx_user_id, pbx_route_id)
 );
@@ -192,8 +192,8 @@ CREATE TABLE p_pbx_voicemail_user (
 	notify_sms boolean NOT NULL DEFAULT false,
 	notify_email boolean NOT NULL DEFAULT false,
 	email varchar,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
 	PRIMARY KEY (pbx_user_id, pbx_voicemail_id)
 );
 
@@ -204,16 +204,16 @@ CREATE TABLE p_pbx_prompt_recording (
 	content_type varchar,
 	language varchar,
 	duration bigint,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE p_pbx_prompt_recording_alternative (
 	pbx_prompt_recording_id uuid REFERENCES p_pbx_prompt_recording ON DELETE CASCADE,
 	url varchar NOT NULL,
 	content_type varchar NOT NULL,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
 	PRIMARY KEY (pbx_prompt_recording_id, content_type)
 );
 
@@ -225,8 +225,8 @@ CREATE TABLE p_pbx_prompt_callback (
 	msisdn varchar NOT NULL,
 	recording_id varchar,
 	service_id varchar,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE p_pbx_voicemail_recording (
@@ -237,17 +237,17 @@ CREATE TABLE p_pbx_voicemail_recording (
 	msisdn varchar, -- called phone number
 	duration bigint,
 	label varchar,
-	recorded_at timestamptz NOT NULL,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL
+	recorded_at timestamp with time zone NOT NULL,
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE p_pbx_voicemail_recording_alternative (
 	pbx_voicemail_recording_id uuid REFERENCES p_pbx_voicemail_recording ON DELETE CASCADE,
 	url varchar NOT NULL,
 	content_type varchar NOT NULL,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
 	PRIMARY KEY (pbx_voicemail_recording_id, content_type)
 );
 
@@ -255,8 +255,8 @@ CREATE TABLE p_pbx_voicemail_user_recording_status (
 	pbx_voicemail_recording_id uuid NOT NULL REFERENCES p_pbx_voicemail_recording ON DELETE CASCADE,
 	pbx_user_id uuid NOT NULL REFERENCES p_pbx_user ON DELETE CASCADE,
 	read boolean NOT NULL,
-	created_at timestamptz NOT NULL,
-	updated_at timestamptz NOT NULL,
+	created_at timestamp with time zone NOT NULL,
+	updated_at timestamp with time zone NOT NULL,
 	PRIMARY KEY (pbx_voicemail_recording_id, pbx_user_id)
 );
 
@@ -294,7 +294,6 @@ RETURNS TABLE (
 	created_at timestamptz,
 	updated_at timestamptz
 )
-LANGUAGE sql
 AS $$
 	SELECT
 		r.pbx_route_id,
@@ -335,7 +334,8 @@ AS $$
 		r.pbx_route_id = ANY (route_id)
 	GROUP BY
 		r.pbx_route_id
-$$;
+$$
+LANGUAGE sql;
 
 CREATE OR REPLACE FUNCTION pbx_prompt_select(prompt_ids uuid[], contenttype varchar)
 RETURNS TABLE (
@@ -348,7 +348,6 @@ RETURNS TABLE (
 	created_at timestamptz,
 	updated_at timestamptz
 )
-LANGUAGE sql
 AS $$
 	SELECT
 		p.pbx_prompt_id,
@@ -387,7 +386,8 @@ AS $$
 		p.pbx_prompt_id = ANY (prompt_ids)
 	GROUP BY
 		p.pbx_prompt_id
-$$;
+$$
+LANGUAGE sql;
 
 CREATE OR REPLACE FUNCTION pbx_voicemail_recording_select(
 	voicemail_recording_ids uuid[],
@@ -405,7 +405,6 @@ RETURNS TABLE (
 	created_at timestamptz,
 	updated_at timestamptz
 )
-LANGUAGE sql
 AS $$
 	SELECT
 		r.pbx_voicemail_recording_id,
@@ -429,7 +428,8 @@ AS $$
 			OR (r.content_type = contenttype)
 			OR (a.content_type = contenttype)
 		)
-$$;
+$$
+LANGUAGE sql;
 
 CREATE OR REPLACE FUNCTION pbx_voicemail_recording_with_read_select(
 	voicemail_recording_ids uuid[],
@@ -448,7 +448,6 @@ RETURNS TABLE (
 	created_at timestamptz,
 	updated_at timestamptz
 )
-LANGUAGE sql
 AS $$
 	SELECT
 		r.pbx_voicemail_recording_id,
@@ -476,7 +475,8 @@ AS $$
 			OR (r.content_type = contenttype)
 			OR (a.content_type = contenttype)
 		)
-$$;
+$$
+LANGUAGE sql;
 
 CREATE OR REPLACE FUNCTION pbx_voicemail_select(voicemail_ids uuid[])
 RETURNS TABLE (
@@ -490,7 +490,6 @@ RETURNS TABLE (
 	created_at timestamptz,
 	updated_at timestamptz
 )
-LANGUAGE sql
 AS $$
 	SELECT
 		v.pbx_voicemail_id,
@@ -509,7 +508,8 @@ AS $$
 		v.pbx_voicemail_id = ANY (voicemail_ids)
 	GROUP BY
 		v.pbx_voicemail_id
-$$;
+$$
+LANGUAGE sql;
 
 COMMIT;
 
@@ -532,7 +532,6 @@ RETURNS TABLE (
 	updated_at timestamptz,
 	deleted_at timestamptz
 )
-LANGUAGE sql
 AS $$
 	SELECT
 		cp.pbx_call_profile_id,
@@ -562,5 +561,6 @@ AS $$
 		cp.pbx_call_profile_id, u.pbx_user_id, so.sort_order
 	ORDER BY
 		so.sort_order ASC
-$$;
+$$
+LANGUAGE sql;
 
