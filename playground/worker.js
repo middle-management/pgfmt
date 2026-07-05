@@ -9,6 +9,27 @@ import {
 } from "./vendor/browser_wasi_shim/index.js";
 import pgQueryInit from "./pg_query.js";
 
+// WebKit (Safari, iOS Safari) throws "TypeError: Type error" when
+// TextDecoder.decode is given a view backed by a resizable ArrayBuffer.
+// Recent Emscripten glue uses wasmMemory.toResizableBuffer() when the engine
+// supports it, so every string coming out of pg-query-emscripten hits this
+// on WebKit. Retry with a copy into a fresh (non-resizable) buffer.
+const origDecode = TextDecoder.prototype.decode;
+TextDecoder.prototype.decode = function (input, options) {
+  try {
+    return origDecode.call(this, input, options);
+  } catch (err) {
+    if (input && ArrayBuffer.isView(input)) {
+      const copy = input.buffer.slice(
+        input.byteOffset,
+        input.byteOffset + input.byteLength,
+      );
+      return origDecode.call(this, copy, options);
+    }
+    throw err;
+  }
+};
+
 let pgQuery;
 let wasmModule; // Compiled WebAssembly.Module (compiled once, instantiated per call)
 
