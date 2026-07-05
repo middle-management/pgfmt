@@ -120,10 +120,8 @@ CREATE FUNCTION test_py()
 RETURNS void
 LANGUAGE plpython3u
 AS $$
-
 import sys
 print("hello")
-
 $$;
 
 -- Function with RETURN QUERY

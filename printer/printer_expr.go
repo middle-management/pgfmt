@@ -32,6 +32,20 @@ func (output *Printer) writeExprWithParensIfNeeded(node *pg_query.Node) {
 	}
 }
 
+// writeAExprOperand writes an operand of a binary/comparison operator.
+// IS NULL / IS TRUE bind looser than comparison operators, so those tests
+// (and nested boolean/comparison expressions) need parentheses here.
+func (output *Printer) writeAExprOperand(node *pg_query.Node) {
+	switch node.GetNode().(type) {
+	case *pg_query.Node_NullTest, *pg_query.Node_BooleanTest:
+		output.Builder.WriteString("(")
+		output.writeNode(node)
+		output.Builder.WriteString(")")
+	default:
+		output.writeExprWithParensIfNeeded(node)
+	}
+}
+
 // keyValuePairFuncs are functions taking alternating key/value arguments.
 // Calls with two or more pairs are formatted with one pair per line.
 var keyValuePairFuncs = map[string]bool{

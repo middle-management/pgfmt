@@ -88,6 +88,9 @@ func dollarQuote(body string) string {
 }
 
 func (output *Printer) formatSQLBody(body string, indentLevel int) {
+	if strings.TrimSpace(body) == "" {
+		return
+	}
 	var result *pg_query.ParseResult
 	var err error
 
@@ -102,24 +105,31 @@ func (output *Printer) formatSQLBody(body string, indentLevel int) {
 		result, err = pgParse(body)
 		if err != nil {
 			warn("failed to parse SQL function body: %v", err)
-			output.Builder.WriteString(body)
+			output.Builder.WriteString(strings.Trim(body, "\n"))
 			return
 		}
 	}
 
-	for i, stmt := range result.Stmts {
+	first := true
+	for _, stmt := range result.Stmts {
 		b := &strings.Builder{}
 		p := &Printer{Builder: b, indent: indentLevel}
 		p.Print(stmt.Stmt)
+		if b.Len() == 0 {
+			// Empty statements (stray semicolons) print nothing; emitting
+			// a separator for them would not be idempotent.
+			continue
+		}
+		if !first {
+			output.Builder.WriteString(";")
+		}
+		first = false
 		// Add newline + indent before each statement
 		output.Builder.WriteString("\n")
 		for j := 0; j < indentLevel; j++ {
 			output.Builder.WriteString("\t")
 		}
 		output.Builder.WriteString(b.String())
-		if i != len(result.Stmts)-1 {
-			output.Builder.WriteString(";")
-		}
 	}
 }
 
@@ -206,6 +216,40 @@ func (output *Printer) writeBExpr(node *pg_query.Node) {
 		output.Builder.WriteString(")")
 	} else {
 		output.writeNode(node)
+	}
+}
+
+// writeTransactionModes emits BEGIN/START TRANSACTION/SET TRANSACTION mode
+// options (isolation level, read only/write, deferrable).
+func (output *Printer) writeTransactionModes(opts []*pg_query.Node) {
+	for i, opt := range opts {
+		de := opt.GetDefElem()
+		if de == nil {
+			continue
+		}
+		if i > 0 {
+			output.Builder.WriteString(",")
+		}
+		output.Builder.WriteString(" ")
+		switch de.Defname {
+		case "transaction_isolation":
+			output.Builder.WriteString("ISOLATION LEVEL ")
+			output.Builder.WriteString(strings.ToUpper(de.Arg.GetAConst().GetSval().GetSval()))
+		case "transaction_read_only":
+			if de.Arg.GetAConst().GetIval().GetIval() == 1 {
+				output.Builder.WriteString("READ ONLY")
+			} else {
+				output.Builder.WriteString("READ WRITE")
+			}
+		case "transaction_deferrable":
+			if de.Arg.GetAConst().GetIval().GetIval() == 1 {
+				output.Builder.WriteString("DEFERRABLE")
+			} else {
+				output.Builder.WriteString("NOT DEFERRABLE")
+			}
+		default:
+			warn("unsupported transaction mode: %s", de.Defname)
+		}
 	}
 }
 
