@@ -245,23 +245,21 @@ function extractBody(sql) {
 function safeParse(sql) {
   parseCallCount++;
   if (parseCallCount > MAX_PARSE_CALLS) {
-    console.warn(
-      `[pgfmt] parse limit reached (${parseCallCount}/${MAX_PARSE_CALLS})`,
-    );
+    lastParseError = `parse limit reached (${parseCallCount}/${MAX_PARSE_CALLS})`;
+    console.warn("[pgfmt]", lastParseError);
     return null;
   }
   try {
     const result = pgQuery.parse(sql);
     if (!result || result.error) {
-      console.warn(
-        "[pgfmt] pg_query error:",
-        result?.error?.message || "unknown",
-      );
+      lastParseError = result?.error?.message || "unknown pg_query error";
+      console.warn("[pgfmt] pg_query error:", lastParseError);
       return null;
     }
     return result;
   } catch (e) {
-    console.warn("[pgfmt] pg_query threw:", e);
+    lastParseError = "pg_query threw: " + String(e);
+    console.warn("[pgfmt]", lastParseError);
     return null;
   }
 }
@@ -465,7 +463,13 @@ function runWASI(stdinData) {
     if (e instanceof WASIProcExit && e.code === 0) {
       // Normal exit.
     } else {
-      throw e;
+      // Attach stderr (the Go error / panic text) — it is the only real
+      // diagnostic, and consoles are hard to reach on mobile browsers.
+      const stderr = decoder
+        .decode(new Uint8Array(stderrFile.data))
+        .trim()
+        .slice(0, 500);
+      throw new Error(stderr ? String(e.message || e) + " — " + stderr : String(e));
     }
   }
 
@@ -475,12 +479,13 @@ function runWASI(stdinData) {
 // Last per-statement failure reason, surfaced to the UI so fallbacks to raw
 // text are visible rather than silent.
 let lastFormatError = null;
+let lastParseError = null;
 
 // Format a single SQL string via the augmented AST pipeline.
 function formatOne(sql) {
   const augmented = buildAugmentedAST(sql);
   if (!augmented) {
-    lastFormatError = "parse failed";
+    lastFormatError = "parse failed: " + (lastParseError || "unknown");
     console.warn("[pgfmt] parse failed:", sql);
     return null;
   }
