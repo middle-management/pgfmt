@@ -2204,6 +2204,22 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(n.ClusterStmt.Indexname)
 		}
 
+	case *pg_query.Node_XmlSerialize:
+		output.Builder.WriteString("XMLSERIALIZE(")
+		switch n.XmlSerialize.Xmloption {
+		case pg_query.XmlOptionType_XMLOPTION_DOCUMENT:
+			output.Builder.WriteString("DOCUMENT ")
+		case pg_query.XmlOptionType_XMLOPTION_CONTENT:
+			output.Builder.WriteString("CONTENT ")
+		}
+		output.writeNode(n.XmlSerialize.Expr)
+		output.Builder.WriteString(" AS ")
+		output.writeTypeName(n.XmlSerialize.TypeName)
+		if n.XmlSerialize.Indent {
+			output.Builder.WriteString(" INDENT")
+		}
+		output.Builder.WriteString(")")
+
 	case *pg_query.Node_XmlExpr:
 		switch n.XmlExpr.Op {
 		case pg_query.XmlExprOp_IS_XMLCONCAT:
