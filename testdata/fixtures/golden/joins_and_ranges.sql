@@ -51,7 +51,8 @@ FROM
 SELECT
 	*
 FROM
-	users NATURAL JOIN profiles;
+	users
+	NATURAL JOIN profiles;
 
 -- Subselect in FROM (derived table)
 SELECT

@@ -570,16 +570,23 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			if i > 0 {
 				output.Builder.WriteString(".")
 			}
-			output.writeNode(f)
+			if s := f.GetString_(); s != nil {
+				output.Builder.WriteString(quoteIdentifier(s.Sval))
+			} else {
+				output.writeNode(f)
+			}
 		}
 
 	case *pg_query.Node_CommonTableExpr:
-		output.Builder.WriteString(n.CommonTableExpr.Ctename) // TODO deparseColId
+		output.Builder.WriteString(quoteIdentifier(n.CommonTableExpr.Ctename))
 
 		if len(n.CommonTableExpr.Aliascolnames) > 0 {
 			output.Builder.WriteString("(")
-			for _, f := range n.CommonTableExpr.Aliascolnames {
-				output.writeNode(f)
+			for i, f := range n.CommonTableExpr.Aliascolnames {
+				if i > 0 {
+					output.Builder.WriteString(", ")
+				}
+				output.Builder.WriteString(quoteIdentifier(f.GetString_().GetSval()))
 			}
 			output.Builder.WriteString(")")
 		}
@@ -695,10 +702,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 		if len(n.IndexStmt.Options) > 0 {
-			output.Builder.WriteString(" WITH ")
-			for _, o := range n.IndexStmt.Options {
-				output.writeNode(o)
-			}
+			output.Builder.WriteString(" WITH (")
+			output.writeCommaSeparatedList(n.IndexStmt.Options)
+			output.Builder.WriteString(")")
 		}
 
 		if n.IndexStmt.TableSpace != "" {
@@ -822,30 +828,37 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 	case *pg_query.Node_JoinExpr:
+		// A join with its own alias is a parenthesized join: (a JOIN b) AS x.
+		// Without the parens the alias would bind to the right-hand table.
+		if n.JoinExpr.Alias != nil {
+			output.Builder.WriteString("(")
+		}
 		output.writeNode(n.JoinExpr.Larg)
+		natural := ""
+		if n.JoinExpr.IsNatural {
+			natural = "NATURAL "
+		}
 		switch n.JoinExpr.Jointype {
 		case pg_query.JoinType_JOIN_INNER:
-			if n.JoinExpr.IsNatural {
-				output.Builder.WriteString(" NATURAL JOIN ")
-			} else if n.JoinExpr.Quals != nil {
-				output.writeNewlineIndent()
-				output.Builder.WriteString("\tJOIN ")
-			} else {
+			if !n.JoinExpr.IsNatural && n.JoinExpr.Quals == nil && len(n.JoinExpr.UsingClause) == 0 {
 				output.writeNewlineIndent()
 				output.Builder.WriteString("\tCROSS JOIN ")
+			} else {
+				output.writeNewlineIndent()
+				output.Builder.WriteString("\t" + natural + "JOIN ")
 			}
 		case pg_query.JoinType_JOIN_LEFT:
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\tLEFT JOIN ")
+			output.Builder.WriteString("\t" + natural + "LEFT JOIN ")
 		case pg_query.JoinType_JOIN_FULL:
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\tFULL JOIN ")
+			output.Builder.WriteString("\t" + natural + "FULL JOIN ")
 		case pg_query.JoinType_JOIN_RIGHT:
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\tRIGHT JOIN ")
+			output.Builder.WriteString("\t" + natural + "RIGHT JOIN ")
 		default:
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\tJOIN ")
+			output.Builder.WriteString("\t" + natural + "JOIN ")
 		}
 		output.writeNode(n.JoinExpr.Rarg)
 		if n.JoinExpr.Quals != nil {
@@ -856,9 +869,13 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(" USING (")
 			output.writeCommaSeparatedList(n.JoinExpr.UsingClause)
 			output.Builder.WriteString(")")
+			if n.JoinExpr.JoinUsingAlias != nil {
+				output.Builder.WriteString(" AS ")
+				output.writeAlias(n.JoinExpr.JoinUsingAlias)
+			}
 		}
 		if n.JoinExpr.Alias != nil {
-			output.Builder.WriteString(" AS ")
+			output.Builder.WriteString(") AS ")
 			output.writeAlias(n.JoinExpr.Alias)
 		}
 
@@ -866,7 +883,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.writeNode(n.ResTarget.Val)
 		if n.ResTarget.Name != "" {
 			output.Builder.WriteString(" AS ")
-			output.Builder.WriteString(n.ResTarget.Name)
+			output.Builder.WriteString(quoteIdentifier(n.ResTarget.Name))
 		}
 
 	case *pg_query.Node_BoolExpr:
@@ -1580,57 +1597,27 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString(")")
 
 	case *pg_query.Node_DropStmt:
-		output.Builder.WriteString("DROP ")
-		switch n.DropStmt.RemoveType {
-		case pg_query.ObjectType_OBJECT_TABLE:
-			output.Builder.WriteString("TABLE ")
-		case pg_query.ObjectType_OBJECT_INDEX:
-			output.Builder.WriteString("INDEX ")
-		case pg_query.ObjectType_OBJECT_SEQUENCE:
-			output.Builder.WriteString("SEQUENCE ")
-		case pg_query.ObjectType_OBJECT_VIEW:
-			output.Builder.WriteString("VIEW ")
-		case pg_query.ObjectType_OBJECT_MATVIEW:
-			output.Builder.WriteString("MATERIALIZED VIEW ")
-		case pg_query.ObjectType_OBJECT_TYPE:
-			output.Builder.WriteString("TYPE ")
-		case pg_query.ObjectType_OBJECT_SCHEMA:
-			output.Builder.WriteString("SCHEMA ")
-		case pg_query.ObjectType_OBJECT_FUNCTION:
-			output.Builder.WriteString("FUNCTION ")
-		case pg_query.ObjectType_OBJECT_PROCEDURE:
-			output.Builder.WriteString("PROCEDURE ")
-		case pg_query.ObjectType_OBJECT_TRIGGER:
-			output.Builder.WriteString("TRIGGER ")
-		case pg_query.ObjectType_OBJECT_EXTENSION:
-			output.Builder.WriteString("EXTENSION ")
-		case pg_query.ObjectType_OBJECT_DOMAIN:
-			output.Builder.WriteString("DOMAIN ")
-		default:
+		kw, ok := objectTypeKeyword(n.DropStmt.RemoveType)
+		if !ok {
 			warn("unsupported drop type: %s", n.DropStmt.RemoveType.String())
+			if output.tryStatementFallback() {
+				return
+			}
 		}
+		output.Builder.WriteString("DROP ")
+		output.Builder.WriteString(kw)
+		if n.DropStmt.Concurrent {
+			output.Builder.WriteString(" CONCURRENTLY")
+		}
+		output.Builder.WriteString(" ")
 		if n.DropStmt.MissingOk {
 			output.Builder.WriteString("IF EXISTS ")
 		}
-		isTrigger := n.DropStmt.RemoveType == pg_query.ObjectType_OBJECT_TRIGGER
 		for i, obj := range n.DropStmt.Objects {
-			if tn := obj.GetTypeName(); tn != nil {
-				output.writeListWithSeparator(tn.Names, ".")
-			} else if l := obj.GetList(); l != nil {
-				if isTrigger && len(l.Items) >= 2 {
-					// DROP TRIGGER: list is [schema?, table, trigger] → "trigger ON schema.table"
-					output.writeNode(l.Items[len(l.Items)-1])
-					output.Builder.WriteString(" ON ")
-					output.writeListWithSeparator(l.Items[:len(l.Items)-1], ".")
-				} else {
-					output.writeListWithSeparator(l.Items, ".")
-				}
-			} else {
-				output.writeNode(obj)
-			}
-			if i != len(n.DropStmt.Objects)-1 {
+			if i > 0 {
 				output.Builder.WriteString(", ")
 			}
+			output.writeObjectRef(n.DropStmt.RemoveType, obj)
 		}
 		switch n.DropStmt.Behavior {
 		case pg_query.DropBehavior_DROP_CASCADE:
@@ -2122,50 +2109,25 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 	case *pg_query.Node_CommentStmt:
-		output.Builder.WriteString("COMMENT ON ")
-		switch n.CommentStmt.Objtype {
-		case pg_query.ObjectType_OBJECT_TABLE:
-			output.Builder.WriteString("TABLE ")
-		case pg_query.ObjectType_OBJECT_COLUMN:
-			output.Builder.WriteString("COLUMN ")
-		case pg_query.ObjectType_OBJECT_INDEX:
-			output.Builder.WriteString("INDEX ")
-		case pg_query.ObjectType_OBJECT_FUNCTION:
-			output.Builder.WriteString("FUNCTION ")
-		case pg_query.ObjectType_OBJECT_SCHEMA:
-			output.Builder.WriteString("SCHEMA ")
-		case pg_query.ObjectType_OBJECT_SEQUENCE:
-			output.Builder.WriteString("SEQUENCE ")
-		case pg_query.ObjectType_OBJECT_VIEW:
-			output.Builder.WriteString("VIEW ")
-		case pg_query.ObjectType_OBJECT_TYPE:
-			output.Builder.WriteString("TYPE ")
-		case pg_query.ObjectType_OBJECT_DOMAIN:
-			output.Builder.WriteString("DOMAIN ")
-		case pg_query.ObjectType_OBJECT_TRIGGER:
-			output.Builder.WriteString("TRIGGER ")
-		case pg_query.ObjectType_OBJECT_EXTENSION:
-			output.Builder.WriteString("EXTENSION ")
-		case pg_query.ObjectType_OBJECT_TABCONSTRAINT:
-			output.Builder.WriteString("CONSTRAINT ")
-		default:
+		kw, ok := objectTypeKeyword(n.CommentStmt.Objtype)
+		if !ok {
 			warn("unsupported comment object type: %s", n.CommentStmt.Objtype.String())
-		}
-		if n.CommentStmt.Objtype == pg_query.ObjectType_OBJECT_TABCONSTRAINT {
-			// COMMENT ON CONSTRAINT constraint_name ON table_name
-			if l := n.CommentStmt.Object.GetList(); l != nil && len(l.Items) == 2 {
-				output.writeNode(l.Items[1]) // constraint name
-				output.Builder.WriteString(" ON ")
-				output.writeNode(l.Items[0]) // table name
+			if output.tryStatementFallback() {
+				return
 			}
-		} else if l := n.CommentStmt.Object.GetList(); l != nil {
-			output.writeListWithSeparator(l.Items, ".")
-		} else {
-			output.writeNode(n.CommentStmt.Object)
 		}
-		output.Builder.WriteString(" IS '")
-		output.Builder.WriteString(strings.ReplaceAll(n.CommentStmt.Comment, "'", "''"))
-		output.Builder.WriteString("'")
+		output.Builder.WriteString("COMMENT ON ")
+		output.Builder.WriteString(kw)
+		output.Builder.WriteString(" ")
+		output.writeObjectRef(n.CommentStmt.Objtype, n.CommentStmt.Object)
+		if n.CommentStmt.Comment == "" {
+			// An empty comment means removal; deparse emits NULL as well.
+			output.Builder.WriteString(" IS NULL")
+		} else {
+			output.Builder.WriteString(" IS '")
+			output.Builder.WriteString(strings.ReplaceAll(n.CommentStmt.Comment, "'", "''"))
+			output.Builder.WriteString("'")
+		}
 
 	case *pg_query.Node_TruncateStmt:
 		output.Builder.WriteString("TRUNCATE TABLE ")
@@ -2852,6 +2814,149 @@ func (output *Printer) writeIndexConstraintTail(c *pg_query.Constraint) {
 	if c.Initdeferred {
 		output.Builder.WriteString(" INITIALLY DEFERRED")
 	}
+}
+
+// objectTypeKeyword maps an ObjectType to its DDL keyword (as used in DROP
+// and COMMENT ON). The second return value is false for object types the
+// printer cannot reference yet.
+func objectTypeKeyword(t pg_query.ObjectType) (string, bool) {
+	switch t {
+	case pg_query.ObjectType_OBJECT_TABLE:
+		return "TABLE", true
+	case pg_query.ObjectType_OBJECT_COLUMN:
+		return "COLUMN", true
+	case pg_query.ObjectType_OBJECT_INDEX:
+		return "INDEX", true
+	case pg_query.ObjectType_OBJECT_SEQUENCE:
+		return "SEQUENCE", true
+	case pg_query.ObjectType_OBJECT_VIEW:
+		return "VIEW", true
+	case pg_query.ObjectType_OBJECT_MATVIEW:
+		return "MATERIALIZED VIEW", true
+	case pg_query.ObjectType_OBJECT_FOREIGN_TABLE:
+		return "FOREIGN TABLE", true
+	case pg_query.ObjectType_OBJECT_TYPE:
+		return "TYPE", true
+	case pg_query.ObjectType_OBJECT_DOMAIN:
+		return "DOMAIN", true
+	case pg_query.ObjectType_OBJECT_SCHEMA:
+		return "SCHEMA", true
+	case pg_query.ObjectType_OBJECT_FUNCTION:
+		return "FUNCTION", true
+	case pg_query.ObjectType_OBJECT_PROCEDURE:
+		return "PROCEDURE", true
+	case pg_query.ObjectType_OBJECT_ROUTINE:
+		return "ROUTINE", true
+	case pg_query.ObjectType_OBJECT_AGGREGATE:
+		return "AGGREGATE", true
+	case pg_query.ObjectType_OBJECT_TRIGGER:
+		return "TRIGGER", true
+	case pg_query.ObjectType_OBJECT_RULE:
+		return "RULE", true
+	case pg_query.ObjectType_OBJECT_POLICY:
+		return "POLICY", true
+	case pg_query.ObjectType_OBJECT_EVENT_TRIGGER:
+		return "EVENT TRIGGER", true
+	case pg_query.ObjectType_OBJECT_EXTENSION:
+		return "EXTENSION", true
+	case pg_query.ObjectType_OBJECT_TABCONSTRAINT, pg_query.ObjectType_OBJECT_DOMCONSTRAINT:
+		return "CONSTRAINT", true
+	case pg_query.ObjectType_OBJECT_COLLATION:
+		return "COLLATION", true
+	case pg_query.ObjectType_OBJECT_CONVERSION:
+		return "CONVERSION", true
+	case pg_query.ObjectType_OBJECT_LANGUAGE:
+		return "LANGUAGE", true
+	case pg_query.ObjectType_OBJECT_LARGEOBJECT:
+		return "LARGE OBJECT", true
+	case pg_query.ObjectType_OBJECT_ROLE:
+		return "ROLE", true
+	case pg_query.ObjectType_OBJECT_DATABASE:
+		return "DATABASE", true
+	case pg_query.ObjectType_OBJECT_TABLESPACE:
+		return "TABLESPACE", true
+	case pg_query.ObjectType_OBJECT_STATISTIC_EXT:
+		return "STATISTICS", true
+	case pg_query.ObjectType_OBJECT_OPCLASS:
+		return "OPERATOR CLASS", true
+	case pg_query.ObjectType_OBJECT_OPFAMILY:
+		return "OPERATOR FAMILY", true
+	case pg_query.ObjectType_OBJECT_FDW:
+		return "FOREIGN DATA WRAPPER", true
+	case pg_query.ObjectType_OBJECT_FOREIGN_SERVER:
+		return "SERVER", true
+	case pg_query.ObjectType_OBJECT_PUBLICATION:
+		return "PUBLICATION", true
+	case pg_query.ObjectType_OBJECT_ACCESS_METHOD:
+		return "ACCESS METHOD", true
+	case pg_query.ObjectType_OBJECT_TSCONFIGURATION:
+		return "TEXT SEARCH CONFIGURATION", true
+	case pg_query.ObjectType_OBJECT_TSDICTIONARY:
+		return "TEXT SEARCH DICTIONARY", true
+	case pg_query.ObjectType_OBJECT_TSPARSER:
+		return "TEXT SEARCH PARSER", true
+	case pg_query.ObjectType_OBJECT_TSTEMPLATE:
+		return "TEXT SEARCH TEMPLATE", true
+	case pg_query.ObjectType_OBJECT_CAST:
+		return "CAST", true
+	}
+	return "", false
+}
+
+// writeObjectRef emits the object reference of a DROP or COMMENT ON
+// statement, handling the sub-object syntaxes (name ON table, USING method,
+// CAST (a AS b)).
+func (output *Printer) writeObjectRef(t pg_query.ObjectType, obj *pg_query.Node) {
+	switch t {
+	case pg_query.ObjectType_OBJECT_TRIGGER,
+		pg_query.ObjectType_OBJECT_RULE,
+		pg_query.ObjectType_OBJECT_POLICY,
+		pg_query.ObjectType_OBJECT_TABCONSTRAINT:
+		// [schema?, table, name] → "name ON schema.table"
+		if l := obj.GetList(); l != nil && len(l.Items) >= 2 {
+			items := l.Items
+			output.Builder.WriteString(quoteIdentifier(items[len(items)-1].GetString_().GetSval()))
+			output.Builder.WriteString(" ON ")
+			output.writeListWithSeparator(items[:len(items)-1], ".")
+			return
+		}
+	case pg_query.ObjectType_OBJECT_DOMCONSTRAINT:
+		// [domain TypeName, name] → "name ON DOMAIN domain"
+		if l := obj.GetList(); l != nil && len(l.Items) == 2 {
+			output.Builder.WriteString(quoteIdentifier(l.Items[1].GetString_().GetSval()))
+			output.Builder.WriteString(" ON DOMAIN ")
+			output.writeNode(l.Items[0])
+			return
+		}
+	case pg_query.ObjectType_OBJECT_OPCLASS,
+		pg_query.ObjectType_OBJECT_OPFAMILY:
+		// [method, name...] → "name USING method"
+		if l := obj.GetList(); l != nil && len(l.Items) >= 2 {
+			output.writeListWithSeparator(l.Items[1:], ".")
+			output.Builder.WriteString(" USING ")
+			output.writeNode(l.Items[0])
+			return
+		}
+	case pg_query.ObjectType_OBJECT_CAST:
+		// [source TypeName, target TypeName] → "(source AS target)"
+		if l := obj.GetList(); l != nil && len(l.Items) == 2 {
+			output.Builder.WriteString("(")
+			output.writeNode(l.Items[0])
+			output.Builder.WriteString(" AS ")
+			output.writeNode(l.Items[1])
+			output.Builder.WriteString(")")
+			return
+		}
+	}
+	if tn := obj.GetTypeName(); tn != nil {
+		output.writeListWithSeparator(tn.Names, ".")
+		return
+	}
+	if l := obj.GetList(); l != nil {
+		output.writeListWithSeparator(l.Items, ".")
+		return
+	}
+	output.writeNode(obj)
 }
 
 // writeRoleSpec emits a role reference (owner, grantee, ...).

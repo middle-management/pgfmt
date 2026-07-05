@@ -86,14 +86,14 @@ func (output *Printer) writeFkAction(prefix string, action string, setCols []*pg
 
 func (output *Printer) writeRangeVar(stmt *pg_query.RangeVar) {
 	if stmt.Catalogname != "" {
-		output.Builder.WriteString(stmt.Catalogname)
+		output.Builder.WriteString(quoteIdentifier(stmt.Catalogname))
 		output.Builder.WriteString(".")
 	}
 	if stmt.Schemaname != "" {
-		output.Builder.WriteString(stmt.Schemaname)
+		output.Builder.WriteString(quoteIdentifier(stmt.Schemaname))
 		output.Builder.WriteString(".")
 	}
-	output.Builder.WriteString(stmt.Relname)
+	output.Builder.WriteString(quoteIdentifier(stmt.Relname))
 	if stmt.Alias != nil {
 		output.Builder.WriteString(" AS ")
 		output.writeAlias(stmt.Alias)
@@ -101,11 +101,14 @@ func (output *Printer) writeRangeVar(stmt *pg_query.RangeVar) {
 }
 
 func (output *Printer) writeAlias(a *pg_query.Alias) {
-	output.Builder.WriteString(a.Aliasname)
+	output.Builder.WriteString(quoteIdentifier(a.Aliasname))
 	if len(a.Colnames) > 0 {
 		output.Builder.WriteString("(")
-		for _, c := range a.Colnames {
-			output.writeNode(c)
+		for i, c := range a.Colnames {
+			if i > 0 {
+				output.Builder.WriteString(", ")
+			}
+			output.Builder.WriteString(quoteIdentifier(c.GetString_().GetSval()))
 		}
 		output.Builder.WriteString(")")
 	}
