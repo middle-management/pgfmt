@@ -334,6 +334,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.NullTestType_IS_NULL:
 			output.Builder.WriteString(" IS NULL")
 		}
+	case *pg_query.Node_CollateClause:
+		output.writeExprWithParensIfNeeded(n.CollateClause.Arg)
+		output.Builder.WriteString(" COLLATE ")
+		output.writeQuotedQualifiedName(n.CollateClause.Collname)
 	case *pg_query.Node_BooleanTest:
 		// AND/OR and comparison arguments need parens: IS binds tighter
 		// than AND/OR, so "a AND b IS TRUE" would change meaning.
@@ -651,9 +655,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 		if len(n.IndexElem.Collation) > 0 {
 			output.Builder.WriteString(" COLLATE ")
-			for _, o := range n.IndexElem.Collation {
-				output.writeNode(o)
-			}
+			output.writeQuotedQualifiedName(n.IndexElem.Collation)
 		}
 
 		if len(n.IndexElem.Opclass) > 0 {
@@ -1130,6 +1132,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if n.ColumnDef.TypeName != nil {
 			output.Builder.WriteString(" ")
 			output.writeTypeName(n.ColumnDef.TypeName)
+		}
+		if n.ColumnDef.CollClause != nil {
+			output.Builder.WriteString(" COLLATE ")
+			output.writeQuotedQualifiedName(n.ColumnDef.CollClause.Collname)
 		}
 		for _, c := range n.ColumnDef.Constraints {
 			output.Builder.WriteString(" ")
