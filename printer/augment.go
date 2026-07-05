@@ -206,12 +206,15 @@ func preParseBodies(rawStmt *pg_query.RawStmt) map[string]map[string]string {
 			}
 		}
 	case "plpgsql":
+		// Must build the exact same wrapper strings as formatPLpgSQLBody so
+		// the WASI printer's cache lookups hit.
+		tag := dollarQuote(body)
 		wrappers := []string{
-			"CREATE FUNCTION _plpgsql_fmt_() RETURNS void AS $$",
-			"CREATE FUNCTION _plpgsql_fmt_() RETURNS SETOF record AS $$",
+			"CREATE FUNCTION _plpgsql_fmt_() RETURNS void AS " + tag,
+			"CREATE FUNCTION _plpgsql_fmt_() RETURNS SETOF record AS " + tag,
 		}
 		for _, prefix := range wrappers {
-			wrapped := prefix + body + "\n$$ LANGUAGE plpgsql;"
+			wrapped := prefix + body + "\n" + tag + " LANGUAGE plpgsql;"
 			jsonResult, err := pgParsePlPgSqlToJSON(wrapped)
 			if err == nil {
 				bodies["plpgsql"][wrapped] = jsonResult

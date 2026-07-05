@@ -1,6 +1,7 @@
 package printer
 
 import (
+	"fmt"
 	"strings"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
@@ -41,6 +42,48 @@ func (output *Printer) writeQuotedQualifiedName(names []*pg_query.Node) {
 			output.Builder.WriteString(".")
 		}
 		output.Builder.WriteString(quoteIdentifier(n.GetString_().GetSval()))
+	}
+}
+
+// writeQuotedIdentifierList writes a comma-separated list of String nodes as
+// quoted identifiers (column name lists in constraints, COPY, VACUUM, ...).
+func (output *Printer) writeQuotedIdentifierList(l []*pg_query.Node) {
+	for i, n := range l {
+		if i > 0 {
+			output.Builder.WriteString(", ")
+		}
+		if s := n.GetString_(); s != nil {
+			output.Builder.WriteString(quoteIdentifier(s.Sval))
+		} else {
+			output.writeNode(n)
+		}
+	}
+}
+
+// writeGUCName writes a configuration parameter name, quoting each dotted
+// part as needed (SET custom."bad-guc" = ...).
+func (output *Printer) writeGUCName(name string) {
+	for i, part := range strings.Split(name, ".") {
+		if i > 0 {
+			output.Builder.WriteString(".")
+		}
+		output.Builder.WriteString(quoteIdentifier(part))
+	}
+}
+
+// dollarQuote returns a dollar-quote delimiter that does not collide with the
+// body text, preferring plain $$.
+func dollarQuote(body string) string {
+	for _, tag := range []string{"$$", "$function$", "$body$", "$pgfmt$"} {
+		if !strings.Contains(body, tag) {
+			return tag
+		}
+	}
+	for i := 1; ; i++ {
+		tag := fmt.Sprintf("$pgfmt%d$", i)
+		if !strings.Contains(body, tag) {
+			return tag
+		}
 	}
 }
 
@@ -118,4 +161,87 @@ func quoteIdentifier(name string) string {
 		return `"` + strings.Replace(name, `"`, `""`, -1) + `"`
 	}
 	return name
+}
+
+// writeDollarQuotedBody renders a function/DO body via render, then wraps it
+// in a dollar-quote delimiter that does not collide with the rendered text
+// (bodies can themselves contain $$-quoted strings or nested DO blocks).
+func (output *Printer) writeDollarQuotedBody(prefix string, render func(p *Printer)) {
+	b := &strings.Builder{}
+	tmp := &Printer{Builder: b, bodyCache: output.bodyCache, indent: output.indent}
+	render(tmp)
+	body := b.String()
+	tag := dollarQuote(body)
+	output.Builder.WriteString(prefix)
+	output.Builder.WriteString(tag)
+	output.Builder.WriteString(body)
+	output.Builder.WriteString("\n")
+	output.Builder.WriteString(tag)
+}
+
+// writeBExpr writes an expression in a context restricted to the grammar's
+// b_expr (column DEFAULT, ...): AND/OR and IN/LIKE/BETWEEN-style operators
+// are not allowed there without parentheses.
+func (output *Printer) writeBExpr(node *pg_query.Node) {
+	needsParens := false
+	switch e := node.GetNode().(type) {
+	case *pg_query.Node_BoolExpr:
+		needsParens = true
+	case *pg_query.Node_AExpr:
+		switch e.AExpr.Kind {
+		case pg_query.A_Expr_Kind_AEXPR_IN,
+			pg_query.A_Expr_Kind_AEXPR_LIKE,
+			pg_query.A_Expr_Kind_AEXPR_ILIKE,
+			pg_query.A_Expr_Kind_AEXPR_SIMILAR,
+			pg_query.A_Expr_Kind_AEXPR_BETWEEN,
+			pg_query.A_Expr_Kind_AEXPR_NOT_BETWEEN,
+			pg_query.A_Expr_Kind_AEXPR_BETWEEN_SYM,
+			pg_query.A_Expr_Kind_AEXPR_NOT_BETWEEN_SYM:
+			needsParens = true
+		}
+	}
+	if needsParens {
+		output.Builder.WriteString("(")
+		output.writeNode(node)
+		output.Builder.WriteString(")")
+	} else {
+		output.writeNode(node)
+	}
+}
+
+// isBareWord reports whether s can appear unquoted as an option value
+// (lowercase letters, digits, underscores).
+func isBareWord(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '.') {
+			return false
+		}
+	}
+	return true
+}
+
+// funcNameKeywords are unreserved keywords whose plain function-call syntax
+// is special-cased by the grammar, so calling an ordinary function with one
+// of these names requires quoting: "normalize"('a', 'b').
+var funcNameKeywords = map[string]bool{
+	"normalize": true,
+	"xmlexists": true,
+	"position":  true,
+	"extract":   true,
+	"treat":     true,
+}
+
+// writeFuncName writes a (possibly qualified) function name with quoting.
+func (output *Printer) writeFuncName(names []*pg_query.Node) {
+	if len(names) == 1 {
+		name := names[0].GetString_().GetSval()
+		if funcNameKeywords[name] {
+			output.Builder.WriteString(`"` + name + `"`)
+			return
+		}
+	}
+	output.writeQuotedQualifiedName(names)
 }
