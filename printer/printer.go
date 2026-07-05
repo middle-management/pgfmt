@@ -1197,11 +1197,11 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			if tn := obj.GetTypeName(); tn != nil {
 				output.writeListWithSeparator(tn.Names, ".")
 			} else if l := obj.GetList(); l != nil {
-				if isTrigger && len(l.Items) == 2 {
-					// DROP TRIGGER: list is [table, trigger] → "trigger ON table"
-					output.writeNode(l.Items[1])
+				if isTrigger && len(l.Items) >= 2 {
+					// DROP TRIGGER: list is [schema?, table, trigger] → "trigger ON schema.table"
+					output.writeNode(l.Items[len(l.Items)-1])
 					output.Builder.WriteString(" ON ")
-					output.writeNode(l.Items[0])
+					output.writeListWithSeparator(l.Items[:len(l.Items)-1], ".")
 				} else {
 					output.writeListWithSeparator(l.Items, ".")
 				}

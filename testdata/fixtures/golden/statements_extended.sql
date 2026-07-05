@@ -13,6 +13,9 @@ DROP TYPE IF EXISTS mood;
 -- DROP TRIGGER
 DROP TRIGGER IF EXISTS trg_audit ON users;
 
+-- DROP TRIGGER on schema-qualified table
+DROP TRIGGER IF EXISTS trigger_apply_resource_event ON studio.resource_event;
+
 -- Operator subquery: > ALL
 SELECT
 	name
