@@ -82,6 +82,6 @@ jobs:
           - \`zed-pgfmt/src/lib.rs\` — VERSION constant
 
           ### What happens on merge
-          A GitHub release \`v${{ inputs.version }}\` will be created automatically, which triggers the release build workflow to compile and upload binaries.
+          A GitHub release \`v${{ inputs.version }}\` will be created automatically, which triggers the release build workflow to compile and upload binaries. A version-bump PR is also opened against \`zed-industries/extensions\` to publish the new Zed extension version.
           EOF
           )"

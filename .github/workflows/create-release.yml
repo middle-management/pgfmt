@@ -32,6 +32,70 @@ jobs:
             --title "${{ steps.version.outputs.tag }}" \
             --generate-notes
 
+  # Opens a version-bump PR against zed-industries/extensions so the Zed
+  # extension registry picks up the new release. This must live in this
+  # workflow (rather than a tag- or release-triggered one) because the tag
+  # is created with the default GITHUB_TOKEN, which never triggers other
+  # workflows.
+  # The registry lists the extension as [pgfmt-lsp] in extensions.toml,
+  # with a submodule pointing at this repo (path = "zed-pgfmt"). Releasing
+  # means bumping that version and advancing the submodule gitlink to the
+  # tagged commit — no clone of this repo or the submodule is needed.
+  # Setup: fork zed-industries/extensions to middle-management/extensions,
+  # create a classic PAT with the "repo" scope on an account with push
+  # access to that fork, and add it as a repo secret named
+  # ZED_COMMITTER_TOKEN.
+  bump-zed-extension:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open version-bump PR against zed-industries/extensions
+        env:
+          GH_TOKEN: ${{ secrets.ZED_COMMITTER_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+          FORK: middle-management/extensions
+          UPSTREAM: zed-industries/extensions
+        run: |
+          VERSION="${TAG#v}"
+          BRANCH="pgfmt-lsp-v${VERSION}"
+
+          # Resolve the tag to its commit, peeling if annotated
+          SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')
+          TYPE=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.type')
+          if [ "${TYPE}" = "tag" ]; then
+            SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${SHA}" --jq '.object.sha')
+          fi
+
+          gh repo sync "${FORK}" --source "${UPSTREAM}" --branch main
+
+          gh auth setup-git
+          git clone --depth 1 "https://github.com/${FORK}.git" extensions-fork
+          cd extensions-fork
+          git checkout -b "${BRANCH}"
+
+          # Bump the version line within the [pgfmt-lsp] section only
+          sed -i "/^\[pgfmt-lsp\]$/,/^\[/ s/^version = \".*\"/version = \"${VERSION}\"/" extensions.toml
+          grep -A4 '^\[pgfmt-lsp\]$' extensions.toml | grep -q "version = \"${VERSION}\"" || {
+            echo "::error::Failed to bump pgfmt-lsp version in extensions.toml"
+            exit 1
+          }
+
+          # Point the submodule gitlink (mode 160000) at the tagged commit;
+          # the submodule itself never needs to be initialized for this
+          git update-index --add --cacheinfo "160000,${SHA},extensions/pgfmt-lsp"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add extensions.toml
+          git commit -m "Update pgfmt-lsp to v${VERSION}"
+          git push --force -u origin "${BRANCH}"
+
+          gh pr create \
+            --repo "${UPSTREAM}" \
+            --head "middle-management:${BRANCH}" \
+            --title "Update pgfmt-lsp to v${VERSION}" \
+            --body "Bumps pgfmt-lsp to v${VERSION}. Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+
   build:
     needs: create-release
     strategy:
