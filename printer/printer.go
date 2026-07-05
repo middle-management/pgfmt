@@ -334,6 +334,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.NullTestType_IS_NULL:
 			output.Builder.WriteString(" IS NULL")
 		}
+	case *pg_query.Node_CollateClause:
+		output.writeExprWithParensIfNeeded(n.CollateClause.Arg)
+		output.Builder.WriteString(" COLLATE ")
+		output.writeQuotedQualifiedName(n.CollateClause.Collname)
 	case *pg_query.Node_Integer:
 		output.Builder.WriteString(strconv.Itoa(int(n.Integer.Ival)))
 	case *pg_query.Node_ParamRef:
@@ -631,9 +635,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 		if len(n.IndexElem.Collation) > 0 {
 			output.Builder.WriteString(" COLLATE ")
-			for _, o := range n.IndexElem.Collation {
-				output.writeNode(o)
-			}
+			output.writeQuotedQualifiedName(n.IndexElem.Collation)
 		}
 
 		if len(n.IndexElem.Opclass) > 0 {
@@ -995,6 +997,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString(quoteIdentifier(n.ColumnDef.Colname))
 		output.Builder.WriteString(" ")
 		output.writeTypeName(n.ColumnDef.TypeName)
+		if n.ColumnDef.CollClause != nil {
+			output.Builder.WriteString(" COLLATE ")
+			output.writeQuotedQualifiedName(n.ColumnDef.CollClause.Collname)
+		}
 		for _, c := range n.ColumnDef.Constraints {
 			output.Builder.WriteString(" ")
 			output.writeNode(c)
