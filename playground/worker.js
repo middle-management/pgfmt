@@ -70,6 +70,115 @@ function splitStatements(sql) {
   return stmts;
 }
 
+// Split input into SQL text and psql meta-command lines (e.g. \restrict,
+// \unrestrict and \connect in pg_dump output). Mirrors Go's splitMetaCommands:
+// a line whose first non-blank character is a backslash is a meta-command,
+// but only outside strings, quoted identifiers, comments and dollar quotes.
+function splitMetaCommands(sql) {
+  if (sql.indexOf("\\") === -1) return [{ text: sql }];
+
+  const isIdentStart = (c) => /[a-zA-Z_\u0080-\uffff]/.test(c);
+  const isIdent = (c) => /[a-zA-Z0-9_\u0080-\uffff]/.test(c);
+
+  const segs = [];
+  let state = "normal";
+  let depth = 0; // block comment nesting
+  let tag = ""; // dollar-quote delimiter, including both $
+  let escapes = false; // current string is E'...' (backslash escapes)
+  let segStart = 0;
+  let atLineStart = true;
+
+  let i = 0;
+  while (i < sql.length) {
+    const c = sql[i];
+    if (state === "normal") {
+      if (c === "\\" && atLineStart) {
+        const nl = sql.indexOf("\n", i);
+        const lineEnd = nl === -1 ? sql.length : nl + 1;
+        if (segStart < i) segs.push({ text: sql.substring(segStart, i) });
+        segs.push({ meta: true, text: sql.substring(i, lineEnd) });
+        segStart = lineEnd;
+        i = lineEnd;
+        atLineStart = true;
+        continue;
+      } else if (c === "'") {
+        state = "string";
+        escapes =
+          i > 0 &&
+          (sql[i - 1] === "E" || sql[i - 1] === "e") &&
+          (i < 2 || !isIdent(sql[i - 2]));
+      } else if (c === '"') {
+        state = "ident";
+      } else if (c === "-" && sql[i + 1] === "-") {
+        state = "lineComment";
+        i++;
+      } else if (c === "/" && sql[i + 1] === "*") {
+        state = "blockComment";
+        depth = 1;
+        i++;
+      } else if (c === "$") {
+        let j = i + 1;
+        if (j < sql.length && isIdentStart(sql[j])) {
+          while (j < sql.length && isIdent(sql[j])) j++;
+        }
+        if (j < sql.length && sql[j] === "$") {
+          state = "dollar";
+          tag = sql.substring(i, j + 1);
+          i = j + 1;
+          atLineStart = false;
+          continue;
+        }
+      }
+    } else if (state === "string") {
+      if (escapes && c === "\\") {
+        i += 2;
+        continue;
+      }
+      if (c === "'") {
+        if (sql[i + 1] === "'") {
+          i += 2;
+          continue;
+        }
+        state = "normal";
+      }
+    } else if (state === "ident") {
+      if (c === '"') {
+        if (sql[i + 1] === '"') {
+          i += 2;
+          continue;
+        }
+        state = "normal";
+      }
+    } else if (state === "lineComment") {
+      if (c === "\n") state = "normal";
+    } else if (state === "blockComment") {
+      if (c === "/" && sql[i + 1] === "*") {
+        depth++;
+        i++;
+      } else if (c === "*" && sql[i + 1] === "/") {
+        depth--;
+        i++;
+        if (depth === 0) state = "normal";
+      }
+    } else if (state === "dollar") {
+      if (sql.startsWith(tag, i)) {
+        i += tag.length;
+        state = "normal";
+        atLineStart = false;
+        continue;
+      }
+    }
+
+    if (c === "\n") atLineStart = true;
+    else if (c !== " " && c !== "\t" && c !== "\r") atLineStart = false;
+    i++;
+  }
+
+  if (segStart < sql.length) segs.push({ text: sql.substring(segStart) });
+  if (segs.length === 0) segs.push({ text: sql });
+  return segs;
+}
+
 // Pure JS scanner — finds comments and semicolons.
 function scanTokens(sql) {
   const tokens = [];
@@ -400,9 +509,18 @@ onmessage = (e) => {
   const { id, sql } = e.data;
   parseCallCount = 0; // Reset per format request.
   try {
-    const stmts = splitStatements(sql);
+    // Split out psql meta-command lines first (they are not SQL and cannot
+    // be parsed), then split the SQL between them into statements.
+    const stmts = [];
+    for (const seg of splitMetaCommands(sql)) {
+      if (seg.meta) {
+        stmts.push({ meta: true, text: seg.text.trim() });
+      } else if (seg.text.trim()) {
+        for (const s of splitStatements(seg.text)) stmts.push({ text: s });
+      }
+    }
 
-    if (stmts.length <= 1) {
+    if (stmts.length <= 1 && !stmts.some((s) => s.meta)) {
       const result = formatOne(sql);
       if (result !== null) {
         postMessage({ type: "result", id, result });
@@ -418,12 +536,17 @@ onmessage = (e) => {
     function formatBatch(start) {
       const end = Math.min(start + batchSize, stmts.length);
       for (let i = start; i < end; i++) {
-        const result = formatOne(stmts[i]);
+        if (stmts[i].meta) {
+          // psql meta-command: pass through verbatim.
+          parts.push(stmts[i].text + "\n\n");
+          continue;
+        }
+        const result = formatOne(stmts[i].text);
         if (result !== null) {
           parts.push(result);
         } else {
           // Fallback: raw text.
-          parts.push(stmts[i].trim() + "\n\n");
+          parts.push(stmts[i].text.trim() + "\n\n");
         }
       }
       if (end < stmts.length) {
