@@ -270,6 +270,11 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 
 		if stmt.LimitCount.GetAConst().GetIsnull() {
 			output.Builder.WriteString("ALL")
+		} else if stmt.LimitOption == pg_query.LimitOption_LIMIT_OPTION_WITH_TIES && stmt.LimitCount.GetAConst() == nil {
+			// FETCH FIRST only allows a literal or a parenthesized expression.
+			output.Builder.WriteString("(")
+			output.writeNode(stmt.LimitCount)
+			output.Builder.WriteString(")")
 		} else {
 			output.writeNode(stmt.LimitCount)
 		}

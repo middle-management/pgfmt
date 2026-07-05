@@ -25,6 +25,7 @@ var Keywords = []string{
 	"current_catalog",
 	"current_date",
 	"current_role",
+	"current_schema",
 	"current_time",
 	"current_timestamp",
 	"current_user",

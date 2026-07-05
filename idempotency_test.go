@@ -15,13 +15,35 @@ import (
 // because pgfmt reformats body whitespace and pg_query.Deparse may emit option
 // keywords in a different order than the formatter.
 var (
-	dollarBodyRe  = regexp.MustCompile(`\$[A-Za-z_]*\$[\s\S]*?\$[A-Za-z_]*\$`)
+	dollarTagRe   = regexp.MustCompile(`\$[A-Za-z_]*\$`)
 	funcOptionsRe = regexp.MustCompile(`\s+(LANGUAGE \w+|VOLATILE|STABLE|IMMUTABLE|STRICT|CALLED ON NULL INPUT|RETURNS NULL ON NULL INPUT|SECURITY DEFINER|SECURITY INVOKER|PARALLEL \w+)`)
 	multiSpaceRe  = regexp.MustCompile(`\s+`)
 )
 
+// stripDollarBodies removes dollar-quoted bodies with proper tag matching:
+// $tag$ ... $tag$ (bodies may contain other dollar quotes with different
+// tags, which a plain regex would pair up incorrectly).
+func stripDollarBodies(s string) string {
+	var b strings.Builder
+	for {
+		loc := dollarTagRe.FindStringIndex(s)
+		if loc == nil {
+			b.WriteString(s)
+			return b.String()
+		}
+		tag := s[loc[0]:loc[1]]
+		end := strings.Index(s[loc[1]:], tag)
+		if end < 0 {
+			b.WriteString(s)
+			return b.String()
+		}
+		b.WriteString(s[:loc[0]])
+		s = s[loc[1]+end+len(tag):]
+	}
+}
+
 func normalizeForCompare(s string) string {
-	s = dollarBodyRe.ReplaceAllString(s, "")
+	s = stripDollarBodies(s)
 	s = funcOptionsRe.ReplaceAllString(s, "")
 	s = multiSpaceRe.ReplaceAllString(s, " ")
 	// Stripping bodies/options can leave a dangling space before the

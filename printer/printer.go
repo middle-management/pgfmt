@@ -182,8 +182,14 @@ func (output *Printer) emitInlineCommentsUpTo(pos int32) {
 			output.Builder.WriteString(toInsert.String())
 			output.Builder.WriteString(s[nlAbs:])
 		} else {
-			// No newline found; append at the end
+			// No newline found; append at the end. A trailing line comment
+			// would swallow whatever the printer writes next, so terminate
+			// the comment's line.
 			output.Builder.WriteString(toInsert.String())
+			if strings.Contains(toInsert.String(), "--") {
+				output.Builder.WriteString("\n")
+				output.Builder.WriteString(indentStr)
+			}
 		}
 	}
 }
@@ -360,6 +366,14 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 	case *pg_query.Node_Integer:
 		output.Builder.WriteString(strconv.Itoa(int(n.Integer.Ival)))
+	case *pg_query.Node_Float:
+		output.Builder.WriteString(n.Float.Fval)
+	case *pg_query.Node_Boolean:
+		if n.Boolean.Boolval {
+			output.Builder.WriteString("true")
+		} else {
+			output.Builder.WriteString("false")
+		}
 	case *pg_query.Node_ParamRef:
 		output.Builder.WriteString("$")
 		output.Builder.WriteString(strconv.Itoa(int(n.ParamRef.Number)))
@@ -381,7 +395,15 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(strings.ReplaceAll(v.Sval.Sval, "'", "''"))
 			output.Builder.WriteString("'")
 		case *pg_query.A_Const_Bsval:
-			output.Builder.WriteString(v.Bsval.Bsval)
+			// Stored as a radix prefix character followed by the digits,
+			// e.g. "b0101" or "x1F"; the literal syntax is b'0101'.
+			bs := v.Bsval.Bsval
+			if len(bs) > 0 {
+				output.Builder.WriteString(bs[:1])
+				output.Builder.WriteString("'")
+				output.Builder.WriteString(bs[1:])
+				output.Builder.WriteString("'")
+			}
 		case nil:
 			if n.AConst.Isnull {
 				output.Builder.WriteString("NULL")
@@ -501,7 +523,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 	case *pg_query.Node_FuncCall:
-		output.writeListWithSeparator(n.FuncCall.Funcname, ".")
+		output.writeFuncName(n.FuncCall.Funcname)
 		output.Builder.WriteString("(")
 		if n.FuncCall.AggDistinct {
 			output.Builder.WriteString("DISTINCT ")
@@ -641,7 +663,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 	case *pg_query.Node_IndexElem:
 		if n.IndexElem.Name != "" {
-			output.Builder.WriteString(n.IndexElem.Name)
+			output.Builder.WriteString(quoteIdentifier(n.IndexElem.Name))
 		} else if n.IndexElem.Expr != nil {
 			switch n.IndexElem.Expr.GetNode().(type) {
 			case *pg_query.Node_FuncCall,
@@ -847,16 +869,30 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if n.RangeFunction.Lateral {
 			output.Builder.WriteString("LATERAL ")
 		}
+		if n.RangeFunction.IsRowsfrom {
+			output.Builder.WriteString("ROWS FROM (")
+		}
 		// Functions is a list of lists; each inner list is [funcexpr, coldeflist]
 		for i, fn := range n.RangeFunction.Functions {
+			if i > 0 {
+				output.Builder.WriteString(", ")
+			}
 			if l := fn.GetList(); l != nil && len(l.Items) > 0 {
 				output.writeNode(l.Items[0])
+				// Per-function column definitions: f() AS (a int, b text)
+				if len(l.Items) > 1 {
+					if defs := l.Items[1].GetList(); defs != nil && len(defs.Items) > 0 {
+						output.Builder.WriteString(" AS (")
+						output.writeCommaSeparatedList(defs.Items)
+						output.Builder.WriteString(")")
+					}
+				}
 			} else {
 				output.writeNode(fn)
 			}
-			if i != len(n.RangeFunction.Functions)-1 {
-				output.Builder.WriteString(", ")
-			}
+		}
+		if n.RangeFunction.IsRowsfrom {
+			output.Builder.WriteString(")")
 		}
 		if n.RangeFunction.Ordinality {
 			output.Builder.WriteString(" WITH ORDINALITY")
@@ -864,6 +900,15 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if n.RangeFunction.Alias != nil {
 			output.Builder.WriteString(" ")
 			output.writeAlias(n.RangeFunction.Alias)
+		}
+		// Range-level column definitions: f() AS [alias] (a int, b text)
+		if len(n.RangeFunction.Coldeflist) > 0 {
+			if n.RangeFunction.Alias == nil {
+				output.Builder.WriteString(" AS")
+			}
+			output.Builder.WriteString(" (")
+			output.writeCommaSeparatedList(n.RangeFunction.Coldeflist)
+			output.Builder.WriteString(")")
 		}
 
 	case *pg_query.Node_JoinExpr:
@@ -1203,7 +1248,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("NOT NULL")
 		case pg_query.ConstrType_CONSTR_DEFAULT:
 			output.Builder.WriteString("DEFAULT ")
-			output.writeNode(n.Constraint.RawExpr)
+			output.writeBExpr(n.Constraint.RawExpr)
 		case pg_query.ConstrType_CONSTR_IDENTITY:
 			output.Builder.WriteString("GENERATED ")
 			switch n.Constraint.GeneratedWhen {
@@ -1220,7 +1265,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.ConstrType_CONSTR_CHECK:
 			if n.Constraint.Conname != "" {
 				output.Builder.WriteString("CONSTRAINT ")
-				output.Builder.WriteString(n.Constraint.Conname)
+				output.Builder.WriteString(quoteIdentifier(n.Constraint.Conname))
 				output.Builder.WriteString(" ")
 			}
 			// Use multiline format for complex boolean expressions
@@ -1246,20 +1291,20 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.ConstrType_CONSTR_PRIMARY:
 			if n.Constraint.Conname != "" {
 				output.Builder.WriteString("CONSTRAINT ")
-				output.Builder.WriteString(n.Constraint.Conname)
+				output.Builder.WriteString(quoteIdentifier(n.Constraint.Conname))
 				output.Builder.WriteString(" ")
 			}
 			output.Builder.WriteString("PRIMARY KEY")
 			if len(n.Constraint.Keys) > 0 {
 				output.Builder.WriteString(" (")
-				output.writeCommaSeparatedList(n.Constraint.Keys)
+				output.writeQuotedIdentifierList(n.Constraint.Keys)
 				output.Builder.WriteString(")")
 			}
 			output.writeIndexConstraintTail(n.Constraint)
 		case pg_query.ConstrType_CONSTR_UNIQUE:
 			if n.Constraint.Conname != "" {
 				output.Builder.WriteString("CONSTRAINT ")
-				output.Builder.WriteString(n.Constraint.Conname)
+				output.Builder.WriteString(quoteIdentifier(n.Constraint.Conname))
 				output.Builder.WriteString(" ")
 			}
 			output.Builder.WriteString("UNIQUE")
@@ -1268,14 +1313,14 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			}
 			if len(n.Constraint.Keys) > 0 {
 				output.Builder.WriteString(" (")
-				output.writeCommaSeparatedList(n.Constraint.Keys)
+				output.writeQuotedIdentifierList(n.Constraint.Keys)
 				output.Builder.WriteString(")")
 			}
 			output.writeIndexConstraintTail(n.Constraint)
 		case pg_query.ConstrType_CONSTR_EXCLUSION:
 			if n.Constraint.Conname != "" {
 				output.Builder.WriteString("CONSTRAINT ")
-				output.Builder.WriteString(n.Constraint.Conname)
+				output.Builder.WriteString(quoteIdentifier(n.Constraint.Conname))
 				output.Builder.WriteString(" ")
 			}
 			output.Builder.WriteString("EXCLUDE")
@@ -1316,19 +1361,19 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.ConstrType_CONSTR_FOREIGN:
 			if n.Constraint.Conname != "" {
 				output.Builder.WriteString("CONSTRAINT ")
-				output.Builder.WriteString(n.Constraint.Conname)
+				output.Builder.WriteString(quoteIdentifier(n.Constraint.Conname))
 				output.Builder.WriteString(" ")
 			}
 			if len(n.Constraint.FkAttrs) > 0 {
 				output.Builder.WriteString("FOREIGN KEY (")
-				output.writeCommaSeparatedList(n.Constraint.FkAttrs)
+				output.writeQuotedIdentifierList(n.Constraint.FkAttrs)
 				output.Builder.WriteString(") ")
 			}
 			output.Builder.WriteString("REFERENCES ")
 			output.writeRangeVar(n.Constraint.Pktable)
 			if len(n.Constraint.PkAttrs) > 0 {
 				output.Builder.WriteString(" (")
-				output.writeCommaSeparatedList(n.Constraint.PkAttrs)
+				output.writeQuotedIdentifierList(n.Constraint.PkAttrs)
 				output.Builder.WriteString(")")
 			}
 			switch n.Constraint.FkMatchtype {
@@ -1410,10 +1455,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			if n.AlterTableCmd.MissingOk {
 				output.Builder.WriteString("IF EXISTS ")
 			}
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_AlterColumnType:
 			output.Builder.WriteString("ALTER COLUMN ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 			output.Builder.WriteString(" TYPE ")
 			if def := n.AlterTableCmd.Def; def != nil {
 				if cd := def.GetColumnDef(); cd != nil {
@@ -1435,7 +1480,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			}
 		case pg_query.AlterTableType_AT_ColumnDefault:
 			output.Builder.WriteString("ALTER COLUMN ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 			if n.AlterTableCmd.Def != nil {
 				output.Builder.WriteString(" SET DEFAULT ")
 				output.writeNode(n.AlterTableCmd.Def)
@@ -1444,11 +1489,11 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			}
 		case pg_query.AlterTableType_AT_SetNotNull:
 			output.Builder.WriteString("ALTER COLUMN ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 			output.Builder.WriteString(" SET NOT NULL")
 		case pg_query.AlterTableType_AT_DropNotNull:
 			output.Builder.WriteString("ALTER COLUMN ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 			output.Builder.WriteString(" DROP NOT NULL")
 		case pg_query.AlterTableType_AT_AddConstraint:
 			output.Builder.WriteString("ADD ")
@@ -1458,7 +1503,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			if n.AlterTableCmd.MissingOk {
 				output.Builder.WriteString("IF EXISTS ")
 			}
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_AddIndex:
 			output.Builder.WriteString("ADD INDEX ")
 			output.writeNode(n.AlterTableCmd.Def)
@@ -1467,7 +1512,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeRoleSpec(n.AlterTableCmd.Newowner)
 		case pg_query.AlterTableType_AT_AddIdentity:
 			output.Builder.WriteString("ALTER COLUMN ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 			output.Builder.WriteString(" ADD ")
 			output.writeNode(n.AlterTableCmd.Def)
 		case pg_query.AlterTableType_AT_EnableRowSecurity:
@@ -1480,7 +1525,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("NO FORCE ROW LEVEL SECURITY")
 		case pg_query.AlterTableType_AT_ValidateConstraint:
 			output.Builder.WriteString("VALIDATE CONSTRAINT ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_AttachPartition:
 			pc := n.AlterTableCmd.Def.GetPartitionCmd()
 			output.Builder.WriteString("ATTACH PARTITION ")
@@ -1507,24 +1552,24 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeNode(n.AlterTableCmd.Def)
 		case pg_query.AlterTableType_AT_SetStorage:
 			output.Builder.WriteString("ALTER COLUMN ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 			output.Builder.WriteString(" SET STORAGE ")
 			output.Builder.WriteString(strings.ToUpper(n.AlterTableCmd.Def.GetString_().GetSval()))
 		case pg_query.AlterTableType_AT_SetCompression:
 			output.Builder.WriteString("ALTER COLUMN ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 			output.Builder.WriteString(" SET COMPRESSION ")
 			output.Builder.WriteString(n.AlterTableCmd.Def.GetString_().GetSval())
 		case pg_query.AlterTableType_AT_DropIdentity:
 			output.Builder.WriteString("ALTER COLUMN ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 			output.Builder.WriteString(" DROP IDENTITY")
 			if n.AlterTableCmd.MissingOk {
 				output.Builder.WriteString(" IF EXISTS")
 			}
 		case pg_query.AlterTableType_AT_DropExpression:
 			output.Builder.WriteString("ALTER COLUMN ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 			output.Builder.WriteString(" DROP EXPRESSION")
 			if n.AlterTableCmd.MissingOk {
 				output.Builder.WriteString(" IF EXISTS")
@@ -1561,7 +1606,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeNode(n.AlterTableCmd.Def)
 		case pg_query.AlterTableType_AT_ClusterOn:
 			output.Builder.WriteString("CLUSTER ON ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_DropCluster:
 			output.Builder.WriteString("SET WITHOUT CLUSTER")
 		case pg_query.AlterTableType_AT_SetTableSpace:
@@ -1576,16 +1621,16 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			}
 		case pg_query.AlterTableType_AT_EnableTrig:
 			output.Builder.WriteString("ENABLE TRIGGER ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_EnableAlwaysTrig:
 			output.Builder.WriteString("ENABLE ALWAYS TRIGGER ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_EnableReplicaTrig:
 			output.Builder.WriteString("ENABLE REPLICA TRIGGER ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_DisableTrig:
 			output.Builder.WriteString("DISABLE TRIGGER ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_EnableTrigAll:
 			output.Builder.WriteString("ENABLE TRIGGER ALL")
 		case pg_query.AlterTableType_AT_DisableTrigAll:
@@ -1596,16 +1641,16 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString("DISABLE TRIGGER USER")
 		case pg_query.AlterTableType_AT_EnableRule:
 			output.Builder.WriteString("ENABLE RULE ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_EnableAlwaysRule:
 			output.Builder.WriteString("ENABLE ALWAYS RULE ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_EnableReplicaRule:
 			output.Builder.WriteString("ENABLE REPLICA RULE ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_DisableRule:
 			output.Builder.WriteString("DISABLE RULE ")
-			output.Builder.WriteString(n.AlterTableCmd.Name)
+			output.Builder.WriteString(quoteIdentifier(n.AlterTableCmd.Name))
 		case pg_query.AlterTableType_AT_ReplicaIdentity:
 			ris := n.AlterTableCmd.Def.GetReplicaIdentityStmt()
 			output.Builder.WriteString("REPLICA IDENTITY ")
@@ -1741,17 +1786,18 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		if asBody != "" {
 			if strings.EqualFold(lang, "plpgsql") || lang == "" {
-				output.Builder.WriteString(" $$")
-				output.formatPLpgSQLBody(asBody, 0)
-				output.Builder.WriteString("\n$$")
+				output.writeDollarQuotedBody(" ", func(p *Printer) {
+					p.formatPLpgSQLBody(asBody, 0)
+				})
 			} else if strings.EqualFold(lang, "sql") {
-				output.Builder.WriteString(" $$")
-				output.formatSQLBody(asBody, 1)
-				output.Builder.WriteString("\n$$")
+				output.writeDollarQuotedBody(" ", func(p *Printer) {
+					p.formatSQLBody(asBody, 1)
+				})
 			} else {
-				output.Builder.WriteString(" $$\n")
-				output.Builder.WriteString(asBody)
-				output.Builder.WriteString("\n$$")
+				output.writeDollarQuotedBody(" ", func(p *Printer) {
+					p.Builder.WriteString("\n")
+					p.Builder.WriteString(asBody)
+				})
 			}
 		}
 
@@ -1771,7 +1817,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		} else {
 			output.Builder.WriteString("FUNCTION ")
 		}
-		output.writeListWithSeparator(n.CreateFunctionStmt.Funcname, ".")
+		output.writeFuncName(n.CreateFunctionStmt.Funcname)
 		output.Builder.WriteString("(")
 		output.writeFunctionParams(n.CreateFunctionStmt.Parameters)
 		output.Builder.WriteString(")")
@@ -1850,17 +1896,18 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		if asBody != "" {
 			if strings.EqualFold(lang, "sql") {
-				output.Builder.WriteString("\nAS $$")
-				output.formatSQLBody(asBody, 1)
-				output.Builder.WriteString("\n$$")
+				output.writeDollarQuotedBody("\nAS ", func(p *Printer) {
+					p.formatSQLBody(asBody, 1)
+				})
 			} else if strings.EqualFold(lang, "plpgsql") {
-				output.Builder.WriteString("\nAS $$")
-				output.formatPLpgSQLBody(asBody, 0)
-				output.Builder.WriteString("\n$$")
+				output.writeDollarQuotedBody("\nAS ", func(p *Printer) {
+					p.formatPLpgSQLBody(asBody, 0)
+				})
 			} else {
-				output.Builder.WriteString("\nAS $$\n")
-				output.Builder.WriteString(asBody)
-				output.Builder.WriteString("\n$$")
+				output.writeDollarQuotedBody("\nAS ", func(p *Printer) {
+					p.Builder.WriteString("\n")
+					p.Builder.WriteString(asBody)
+				})
 			}
 		}
 
@@ -2308,7 +2355,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		if len(n.CopyStmt.Attlist) > 0 {
 			output.Builder.WriteString(" (")
-			output.writeCommaSeparatedList(n.CopyStmt.Attlist)
+			output.writeQuotedIdentifierList(n.CopyStmt.Attlist)
 			output.Builder.WriteString(")")
 		}
 		if n.CopyStmt.IsFrom {
@@ -2346,6 +2393,13 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 						default:
 							output.Builder.WriteString(s.GetSval())
 						}
+					} else if l := de.Arg.GetList(); l != nil {
+						// Column lists: FORCE_QUOTE (a, b), FORCE_NULL (c), ...
+						output.Builder.WriteString("(")
+						output.writeQuotedIdentifierList(l.Items)
+						output.Builder.WriteString(")")
+					} else if de.Arg.GetAStar() != nil {
+						output.Builder.WriteString("*")
 					} else {
 						output.writeNode(de.Arg)
 					}
@@ -2372,26 +2426,30 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 	case *pg_query.Node_UnlistenStmt:
 		output.Builder.WriteString("UNLISTEN ")
-		output.Builder.WriteString(n.UnlistenStmt.Conditionname)
+		if n.UnlistenStmt.Conditionname == "" {
+			output.Builder.WriteString("*")
+		} else {
+			output.Builder.WriteString(quoteIdentifier(n.UnlistenStmt.Conditionname))
+		}
 
 	case *pg_query.Node_VariableSetStmt:
 		switch n.VariableSetStmt.Kind {
 		case pg_query.VariableSetKind_VAR_SET_VALUE:
 			output.Builder.WriteString("SET ")
-			output.Builder.WriteString(n.VariableSetStmt.Name)
+			output.writeGUCName(n.VariableSetStmt.Name)
 			output.Builder.WriteString(" TO ")
 			output.writeCommaSeparatedList(n.VariableSetStmt.Args)
 		case pg_query.VariableSetKind_VAR_SET_DEFAULT:
 			output.Builder.WriteString("SET ")
-			output.Builder.WriteString(n.VariableSetStmt.Name)
+			output.writeGUCName(n.VariableSetStmt.Name)
 			output.Builder.WriteString(" TO DEFAULT")
 		case pg_query.VariableSetKind_VAR_SET_CURRENT:
 			output.Builder.WriteString("SET ")
-			output.Builder.WriteString(n.VariableSetStmt.Name)
+			output.writeGUCName(n.VariableSetStmt.Name)
 			output.Builder.WriteString(" FROM CURRENT")
 		case pg_query.VariableSetKind_VAR_RESET:
 			output.Builder.WriteString("RESET ")
-			output.Builder.WriteString(n.VariableSetStmt.Name)
+			output.writeGUCName(n.VariableSetStmt.Name)
 		case pg_query.VariableSetKind_VAR_RESET_ALL:
 			output.Builder.WriteString("RESET ALL")
 		default:
@@ -2400,7 +2458,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 	case *pg_query.Node_VariableShowStmt:
 		output.Builder.WriteString("SHOW ")
-		output.Builder.WriteString(n.VariableShowStmt.Name)
+		output.writeGUCName(n.VariableShowStmt.Name)
 
 	case *pg_query.Node_PrepareStmt:
 		output.Builder.WriteString("PREPARE ")
@@ -2433,7 +2491,11 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 	case *pg_query.Node_DeallocateStmt:
 		output.Builder.WriteString("DEALLOCATE ")
-		output.Builder.WriteString(n.DeallocateStmt.Name)
+		if n.DeallocateStmt.Name == "" {
+			output.Builder.WriteString("ALL")
+		} else {
+			output.Builder.WriteString(quoteIdentifier(n.DeallocateStmt.Name))
+		}
 
 	case *pg_query.Node_VacuumStmt:
 		if n.VacuumStmt.IsVacuumcmd {
@@ -2455,7 +2517,13 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				if de.Arg != nil {
 					output.Builder.WriteString(" ")
 					if s := de.Arg.GetString_(); s != nil {
-						output.Builder.WriteString(s.GetSval())
+						if isBareWord(s.GetSval()) {
+							output.Builder.WriteString(s.GetSval())
+						} else {
+							output.Builder.WriteString("'")
+							output.Builder.WriteString(strings.ReplaceAll(s.GetSval(), "'", "''"))
+							output.Builder.WriteString("'")
+						}
 					} else {
 						output.writeNode(de.Arg)
 					}
@@ -2477,7 +2545,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		if len(n.VacuumRelation.VaCols) > 0 {
 			output.Builder.WriteString(" (")
-			output.writeCommaSeparatedList(n.VacuumRelation.VaCols)
+			output.writeQuotedIdentifierList(n.VacuumRelation.VaCols)
 			output.Builder.WriteString(")")
 		}
 
@@ -2525,9 +2593,16 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(")")
 		}
 		output.Builder.WriteString("\nEXECUTE FUNCTION ")
-		output.writeListWithSeparator(n.CreateTrigStmt.Funcname, ".")
+		output.writeFuncName(n.CreateTrigStmt.Funcname)
 		output.Builder.WriteString("(")
-		output.writeCommaSeparatedList(n.CreateTrigStmt.Args)
+		for i, a := range n.CreateTrigStmt.Args {
+			if i > 0 {
+				output.Builder.WriteString(", ")
+			}
+			output.Builder.WriteString("'")
+			output.Builder.WriteString(strings.ReplaceAll(a.GetString_().GetSval(), "'", "''"))
+			output.Builder.WriteString("'")
+		}
 		output.Builder.WriteString(")")
 
 	case *pg_query.Node_CreatePolicyStmt:
@@ -2704,7 +2779,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(")")
 		case pg_query.XmlExprOp_IS_XMLELEMENT:
 			output.Builder.WriteString("XMLELEMENT(NAME ")
-			output.Builder.WriteString(n.XmlExpr.Name)
+			output.Builder.WriteString(quoteIdentifier(n.XmlExpr.Name))
 			if len(n.XmlExpr.NamedArgs) > 0 {
 				output.Builder.WriteString(", XMLATTRIBUTES(")
 				output.writeCommaSeparatedList(n.XmlExpr.NamedArgs)
@@ -2739,15 +2814,37 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(")")
 		case pg_query.XmlExprOp_IS_XMLPI:
 			output.Builder.WriteString("XMLPI(NAME ")
-			output.Builder.WriteString(n.XmlExpr.Name)
+			output.Builder.WriteString(quoteIdentifier(n.XmlExpr.Name))
 			if len(n.XmlExpr.Args) > 0 {
 				output.Builder.WriteString(", ")
 				output.writeCommaSeparatedList(n.XmlExpr.Args)
 			}
 			output.Builder.WriteString(")")
 		case pg_query.XmlExprOp_IS_XMLROOT:
+			// Args: [xml, version, standalone-code]. NULL version means
+			// VERSION NO VALUE; the standalone code maps to keywords.
 			output.Builder.WriteString("XMLROOT(")
-			output.writeCommaSeparatedList(n.XmlExpr.Args)
+			if len(n.XmlExpr.Args) > 0 {
+				output.writeNode(n.XmlExpr.Args[0])
+			}
+			if len(n.XmlExpr.Args) > 1 {
+				output.Builder.WriteString(", VERSION ")
+				if c := n.XmlExpr.Args[1].GetAConst(); c != nil && c.Isnull {
+					output.Builder.WriteString("NO VALUE")
+				} else {
+					output.writeNode(n.XmlExpr.Args[1])
+				}
+			}
+			if len(n.XmlExpr.Args) > 2 {
+				switch n.XmlExpr.Args[2].GetAConst().GetIval().GetIval() {
+				case 0:
+					output.Builder.WriteString(", STANDALONE YES")
+				case 1:
+					output.Builder.WriteString(", STANDALONE NO")
+				case 2:
+					output.Builder.WriteString(", STANDALONE NO VALUE")
+				}
+			}
 			output.Builder.WriteString(")")
 		case pg_query.XmlExprOp_IS_XMLSERIALIZE:
 			output.Builder.WriteString("XMLSERIALIZE(")
@@ -2989,7 +3086,7 @@ func alterTableCmdSupported(c *pg_query.AlterTableCmd) bool {
 func (output *Printer) writeIndexConstraintTail(c *pg_query.Constraint) {
 	if len(c.Including) > 0 {
 		output.Builder.WriteString(" INCLUDE (")
-		output.writeCommaSeparatedList(c.Including)
+		output.writeQuotedIdentifierList(c.Including)
 		output.Builder.WriteString(")")
 	}
 	if c.Indexname != "" {
@@ -3159,7 +3256,15 @@ func (output *Printer) writeObjectRef(t pg_query.ObjectType, obj *pg_query.Node)
 			items := l.Items
 			output.Builder.WriteString(quoteIdentifier(items[len(items)-1].GetString_().GetSval()))
 			output.Builder.WriteString(" ON ")
-			output.writeListWithSeparator(items[:len(items)-1], ".")
+			output.writeQuotedQualifiedName(items[:len(items)-1])
+			return
+		}
+	case pg_query.ObjectType_OBJECT_AGGREGATE:
+		// agg() is not valid aggregate syntax; an empty specified arg list
+		// means agg(*).
+		if owa := obj.GetObjectWithArgs(); owa != nil && !owa.ArgsUnspecified && len(owa.Objargs) == 0 {
+			output.writeQuotedQualifiedName(owa.Objname)
+			output.Builder.WriteString("(*)")
 			return
 		}
 	case pg_query.ObjectType_OBJECT_DOMCONSTRAINT:
@@ -3191,11 +3296,15 @@ func (output *Printer) writeObjectRef(t pg_query.ObjectType, obj *pg_query.Node)
 		}
 	}
 	if tn := obj.GetTypeName(); tn != nil {
-		output.writeListWithSeparator(tn.Names, ".")
+		output.writeQuotedQualifiedName(tn.Names)
 		return
 	}
 	if l := obj.GetList(); l != nil {
-		output.writeListWithSeparator(l.Items, ".")
+		output.writeQuotedQualifiedName(l.Items)
+		return
+	}
+	if str := obj.GetString_(); str != nil {
+		output.Builder.WriteString(quoteIdentifier(str.Sval))
 		return
 	}
 	output.writeNode(obj)
@@ -3225,7 +3334,7 @@ func (output *Printer) writeRoleSpec(r *pg_query.RoleSpec) {
 // subcommand: a name, or a column number for ALTER INDEX.
 func (output *Printer) writeAlterColumnRef(c *pg_query.AlterTableCmd) {
 	if c.Name != "" {
-		output.Builder.WriteString(c.Name)
+		output.Builder.WriteString(quoteIdentifier(c.Name))
 	} else {
 		output.Builder.WriteString(strconv.Itoa(int(c.Num)))
 	}

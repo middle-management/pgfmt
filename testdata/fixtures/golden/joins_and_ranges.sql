@@ -94,5 +94,5 @@ FROM
 SELECT
 	*
 FROM
-	json_to_recordset('[{"a":1,"b":"x"},{"a":2,"b":"y"}]') t;
+	json_to_recordset('[{"a":1,"b":"x"},{"a":2,"b":"y"}]') t (a int, b text);
 

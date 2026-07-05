@@ -269,15 +269,16 @@ var raiseLevelName = map[int]string{
 
 // formatPLpgSQLBody parses and formats a PL/pgSQL function body.
 func (output *Printer) formatPLpgSQLBody(body string, indentLevel int) {
+	tag := dollarQuote(body)
 	wrappers := []string{
-		"CREATE FUNCTION _plpgsql_fmt_() RETURNS void AS $$",
-		"CREATE FUNCTION _plpgsql_fmt_() RETURNS SETOF record AS $$",
+		"CREATE FUNCTION _plpgsql_fmt_() RETURNS void AS " + tag,
+		"CREATE FUNCTION _plpgsql_fmt_() RETURNS SETOF record AS " + tag,
 	}
 
 	var jsonResult string
 	var err error
 	for _, prefix := range wrappers {
-		stmt := prefix + body + "\n$$ LANGUAGE plpgsql;"
+		stmt := prefix + body + "\n" + tag + " LANGUAGE plpgsql;"
 		// Check bodyCache first.
 		if cached, ok := output.bodyCache[stmt]; ok {
 			jsonResult = cached
