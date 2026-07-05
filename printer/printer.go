@@ -12,16 +12,16 @@ import (
 
 type Printer struct {
 	Builder        *strings.Builder
-	indent         int       // current indentation level
-	comments       []comment // inline comments for the current statement
-	commentIdx     int       // next inline comment to process
-	lastNodeEndPos int       // output position after last node with a source location
+	indent         int               // current indentation level
+	comments       []comment         // inline comments for the current statement
+	commentIdx     int               // next inline comment to process
+	lastNodeEndPos int               // output position after last node with a source location
 	RawStmt        *pg_query.RawStmt // set by Format to enable deparse fallback
-	OriginalSQL    string             // original SQL input for raw text fallback
-	Deparsed       string             // pre-computed deparsed text for fallback
+	OriginalSQL    string            // original SQL input for raw text fallback
+	Deparsed       string            // pre-computed deparsed text for fallback
 	// bodyCache maps body text → parse result JSON for pre-parsed function bodies.
 	// Used by FormatAugmented to avoid calling pgParse/pgParsePlPgSqlToJSON.
-	bodyCache      map[string]string
+	bodyCache map[string]string
 }
 
 func (output *Printer) Print(node *pg_query.Node) {
@@ -296,12 +296,12 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_EXPR_SUBLINK:
 			output.Builder.WriteString("(")
-			output.indent += 2
+			output.indent++
 			output.writeNewlineIndent()
 			output.writeNode(n.SubLink.Subselect)
-			output.indent -= 2
+			output.indent--
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\t)")
+			output.Builder.WriteString(")")
 		case pg_query.SubLinkType_CTE_SUBLINK:
 			output.Builder.WriteString("/* UNSUPPORTED: CTE sublink */")
 		default:
@@ -466,14 +466,34 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if n.FuncCall.AggStar {
 			output.Builder.WriteString("*")
 		}
-		for i, a := range n.FuncCall.Args {
-			if n.FuncCall.FuncVariadic && i == len(n.FuncCall.Args)-1 {
-				output.Builder.WriteString("VARIADIC ")
+		if isKeyValuePairCall(n.FuncCall) {
+			output.writeKeyValuePairArgs(n.FuncCall.Args)
+		} else if breaksArgsForKeyValuePair(n.FuncCall) {
+			// One argument per line when an argument is a multi-line
+			// key/value call, so nesting stays readable.
+			output.indent++
+			for i, a := range n.FuncCall.Args {
+				output.writeNewlineIndent()
+				if n.FuncCall.FuncVariadic && i == len(n.FuncCall.Args)-1 {
+					output.Builder.WriteString("VARIADIC ")
+				}
+				output.writeNode(a)
+				if i != len(n.FuncCall.Args)-1 {
+					output.Builder.WriteString(",")
+				}
 			}
-			output.writeNode(a)
+			output.indent--
+			output.writeNewlineIndent()
+		} else {
+			for i, a := range n.FuncCall.Args {
+				if n.FuncCall.FuncVariadic && i == len(n.FuncCall.Args)-1 {
+					output.Builder.WriteString("VARIADIC ")
+				}
+				output.writeNode(a)
 
-			if i != len(n.FuncCall.Args)-1 {
-				output.Builder.WriteString(", ")
+				if i != len(n.FuncCall.Args)-1 {
+					output.Builder.WriteString(", ")
+				}
 			}
 		}
 		if len(n.FuncCall.AggOrder) > 0 {
@@ -841,9 +861,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if len(n.InsertStmt.ReturningList) > 0 {
 			output.writeNewlineIndent()
 			output.Builder.WriteString("RETURNING")
+			output.indent++
 			output.writeNewlineIndent()
-			output.Builder.WriteString("\t")
 			output.writeCommaSeparatedList(n.InsertStmt.ReturningList)
+			output.indent--
 		}
 
 	case *pg_query.Node_AStar:
@@ -874,6 +895,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString("UPDATE ")
 		output.writeRangeVar(n.UpdateStmt.Relation)
 		output.Builder.WriteString("\nSET\n\t")
+		output.indent++
 		for i, t := range n.UpdateStmt.TargetList {
 			rt := t.GetResTarget()
 			output.Builder.WriteString(rt.Name)
@@ -884,6 +906,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.Builder.WriteString(",\n\t")
 			}
 		}
+		output.indent--
 		if len(n.UpdateStmt.FromClause) > 0 {
 			output.Builder.WriteString("\nFROM\n\t")
 			output.writeCommaSeparatedList(n.UpdateStmt.FromClause)
@@ -894,7 +917,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		if len(n.UpdateStmt.ReturningList) > 0 {
 			output.Builder.WriteString("\nRETURNING\n\t")
+			output.indent++
 			output.writeCommaSeparatedList(n.UpdateStmt.ReturningList)
+			output.indent--
 		}
 
 	case *pg_query.Node_DeleteStmt:
@@ -913,7 +938,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 		if len(n.DeleteStmt.ReturningList) > 0 {
 			output.Builder.WriteString("\nRETURNING\n\t")
+			output.indent++
 			output.writeCommaSeparatedList(n.DeleteStmt.ReturningList)
+			output.indent--
 		}
 
 	case *pg_query.Node_CreateStmt:
@@ -2426,4 +2453,3 @@ const (
 	MILLISECOND
 	MICROSECOND
 )
-

@@ -30,6 +30,88 @@ func (output *Printer) writeExprWithParensIfNeeded(node *pg_query.Node) {
 	}
 }
 
+// keyValuePairFuncs are functions taking alternating key/value arguments.
+// Calls with two or more pairs are formatted with one pair per line.
+var keyValuePairFuncs = map[string]bool{
+	"json_build_object":  true,
+	"jsonb_build_object": true,
+}
+
+// isKeyValuePairCall reports whether the function call should be formatted
+// with one key/value pair per line.
+func isKeyValuePairCall(fc *pg_query.FuncCall) bool {
+	if len(fc.Args) < 4 || fc.AggStar || fc.AggDistinct || fc.FuncVariadic || len(fc.AggOrder) > 0 {
+		return false
+	}
+	if len(fc.Funcname) == 0 {
+		return false
+	}
+	name := fc.Funcname[len(fc.Funcname)-1].GetString_().GetSval()
+	return keyValuePairFuncs[name]
+}
+
+// containsKeyValuePairCall reports whether the expression renders as a
+// multi-line key/value call, possibly wrapped in casts, named arguments or
+// other function calls.
+func containsKeyValuePairCall(node *pg_query.Node) bool {
+	switch n := node.GetNode().(type) {
+	case *pg_query.Node_FuncCall:
+		if isKeyValuePairCall(n.FuncCall) {
+			return true
+		}
+		for _, a := range n.FuncCall.Args {
+			if containsKeyValuePairCall(a) {
+				return true
+			}
+		}
+	case *pg_query.Node_NamedArgExpr:
+		return containsKeyValuePairCall(n.NamedArgExpr.Arg)
+	case *pg_query.Node_TypeCast:
+		return containsKeyValuePairCall(n.TypeCast.Arg)
+	case *pg_query.Node_CoalesceExpr:
+		for _, a := range n.CoalesceExpr.Args {
+			if containsKeyValuePairCall(a) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// breaksArgsForKeyValuePair reports whether the function call should place
+// each argument on its own line because one of them is a multi-line
+// key/value call.
+func breaksArgsForKeyValuePair(fc *pg_query.FuncCall) bool {
+	if len(fc.AggOrder) > 0 || fc.AggWithinGroup {
+		return false
+	}
+	for _, a := range fc.Args {
+		if containsKeyValuePairCall(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// writeKeyValuePairArgs writes alternating key/value arguments with one pair
+// per line and the closing parenthesis (written by the caller) on its own line.
+func (output *Printer) writeKeyValuePairArgs(args []*pg_query.Node) {
+	output.indent++
+	for i := 0; i < len(args); i += 2 {
+		output.writeNewlineIndent()
+		output.writeNode(args[i])
+		if i+1 < len(args) {
+			output.Builder.WriteString(", ")
+			output.writeNode(args[i+1])
+		}
+		if i+2 < len(args) {
+			output.Builder.WriteString(",")
+		}
+	}
+	output.indent--
+	output.writeNewlineIndent()
+}
+
 func (output *Printer) writeQualOp(n []*pg_query.Node) {
 	if len(n) == 1 {
 		output.writeNode(n[0])

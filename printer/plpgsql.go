@@ -201,7 +201,12 @@ func formatSQL(query string) string {
 
 // compactSQL collapses a formatted SQL string to a single line.
 func compactSQL(formatted string) string {
-	return strings.Join(strings.Fields(formatted), " ")
+	s := strings.Join(strings.Fields(formatted), " ")
+	// Multi-line key/value calls put newlines directly inside parentheses;
+	// drop the space they leave behind when collapsed.
+	s = strings.ReplaceAll(s, "( ", "(")
+	s = strings.ReplaceAll(s, " )", ")")
+	return s
 }
 
 // hasLineComment reports whether s contains a SQL line comment (--).
@@ -715,10 +720,29 @@ func (ctx *plContext) writePerform(node *plStmtPerform, ind int) {
 
 	swapSelectToPerform := func(s string) string {
 		s = strings.TrimSpace(s)
-		if strings.HasPrefix(strings.ToUpper(s), "SELECT") {
-			return "PERFORM" + s[6:]
+		if !strings.HasPrefix(strings.ToUpper(s), "SELECT") {
+			return "PERFORM " + s
 		}
-		return "PERFORM " + s
+		// When the statement is just a target list (no FROM/WHERE/... at the
+		// top level), keep the expression on the PERFORM line and dedent the
+		// continuation lines one level.
+		if rest, ok := strings.CutPrefix(s, "SELECT\n"); ok {
+			lines := strings.Split(rest, "\n")
+			targetsOnly := true
+			for _, line := range lines {
+				if !strings.HasPrefix(line, "\t") {
+					targetsOnly = false
+					break
+				}
+			}
+			if targetsOnly {
+				for i, line := range lines {
+					lines[i] = strings.TrimPrefix(line, "\t")
+				}
+				return "PERFORM " + strings.Join(lines, "\n")
+			}
+		}
+		return "PERFORM" + s[6:]
 	}
 
 	ctx.newlineIndent(ind)
