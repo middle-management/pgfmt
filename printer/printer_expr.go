@@ -1,6 +1,8 @@
 package printer
 
 import (
+	"strings"
+
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
 
@@ -74,8 +76,29 @@ func containsKeyValuePairCall(node *pg_query.Node) bool {
 				return true
 			}
 		}
+	case *pg_query.Node_JsonObjectConstructor:
+		return len(n.JsonObjectConstructor.Exprs) >= 2
 	}
 	return false
+}
+
+// deparseExprFallback renders an arbitrary expression node by deparsing a
+// synthetic single-target SELECT and stripping the keyword. Used for
+// expression nodes the printer does not handle explicitly.
+func deparseExprFallback(node *pg_query.Node) (string, bool) {
+	deparsed, err := pgDeparse(&pg_query.ParseResult{
+		Stmts: []*pg_query.RawStmt{{
+			Stmt: &pg_query.Node{Node: &pg_query.Node_SelectStmt{SelectStmt: &pg_query.SelectStmt{
+				TargetList: []*pg_query.Node{{
+					Node: &pg_query.Node_ResTarget{ResTarget: &pg_query.ResTarget{Val: node}},
+				}},
+			}}},
+		}},
+	})
+	if err != nil {
+		return "", false
+	}
+	return strings.CutPrefix(deparsed, "SELECT ")
 }
 
 // breaksArgsForKeyValuePair reports whether the function call should place

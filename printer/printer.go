@@ -16,6 +16,7 @@ type Printer struct {
 	comments       []comment         // inline comments for the current statement
 	commentIdx     int               // next inline comment to process
 	lastNodeEndPos int               // output position after last node with a source location
+	nodeDepth      int               // writeNode recursion depth, distinguishes statement vs expression fallback
 	RawStmt        *pg_query.RawStmt // set by Format to enable deparse fallback
 	OriginalSQL    string            // original SQL input for raw text fallback
 	Deparsed       string            // pre-computed deparsed text for fallback
@@ -103,6 +104,22 @@ func nodeLocation(node *pg_query.Node) int32 {
 		return n.AArrayExpr.GetLocation()
 	case *pg_query.Node_RowExpr:
 		return n.RowExpr.GetLocation()
+	case *pg_query.Node_JsonObjectConstructor:
+		return n.JsonObjectConstructor.GetLocation()
+	case *pg_query.Node_JsonArrayConstructor:
+		return n.JsonArrayConstructor.GetLocation()
+	case *pg_query.Node_JsonArrayQueryConstructor:
+		return n.JsonArrayQueryConstructor.GetLocation()
+	case *pg_query.Node_JsonParseExpr:
+		return n.JsonParseExpr.GetLocation()
+	case *pg_query.Node_JsonScalarExpr:
+		return n.JsonScalarExpr.GetLocation()
+	case *pg_query.Node_JsonSerializeExpr:
+		return n.JsonSerializeExpr.GetLocation()
+	case *pg_query.Node_JsonIsPredicate:
+		return n.JsonIsPredicate.GetLocation()
+	case *pg_query.Node_JsonFuncExpr:
+		return n.JsonFuncExpr.GetLocation()
 	default:
 		return -1
 	}
@@ -211,7 +228,9 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 	if loc > 0 && len(output.comments) > 0 {
 		output.emitInlineCommentsUpTo(loc)
 	}
+	output.nodeDepth++
 	defer func() {
+		output.nodeDepth--
 		if loc > 0 {
 			output.lastNodeEndPos = output.Builder.Len()
 		}
@@ -2269,6 +2288,42 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.writeCommaSeparatedList(n.RowExpr.Args)
 		output.Builder.WriteString(")")
 
+	case *pg_query.Node_JsonObjectConstructor:
+		output.writeJsonObjectConstructor(n.JsonObjectConstructor)
+
+	case *pg_query.Node_JsonArrayConstructor:
+		output.writeJsonArrayConstructor(n.JsonArrayConstructor)
+
+	case *pg_query.Node_JsonArrayQueryConstructor:
+		output.writeJsonArrayQueryConstructor(n.JsonArrayQueryConstructor)
+
+	case *pg_query.Node_JsonObjectAgg:
+		output.writeJsonObjectAgg(n.JsonObjectAgg)
+
+	case *pg_query.Node_JsonArrayAgg:
+		output.writeJsonArrayAgg(n.JsonArrayAgg)
+
+	case *pg_query.Node_JsonKeyValue:
+		output.writeJsonKeyValue(n.JsonKeyValue)
+
+	case *pg_query.Node_JsonValueExpr:
+		output.writeJsonValueExpr(n.JsonValueExpr)
+
+	case *pg_query.Node_JsonParseExpr:
+		output.writeJsonParseExpr(n.JsonParseExpr)
+
+	case *pg_query.Node_JsonScalarExpr:
+		output.writeJsonScalarExpr(n.JsonScalarExpr)
+
+	case *pg_query.Node_JsonSerializeExpr:
+		output.writeJsonSerializeExpr(n.JsonSerializeExpr)
+
+	case *pg_query.Node_JsonIsPredicate:
+		output.writeJsonIsPredicate(n.JsonIsPredicate)
+
+	case *pg_query.Node_JsonFuncExpr:
+		output.writeJsonFuncExpr(n.JsonFuncExpr)
+
 	case *pg_query.Node_ConstraintsSetStmt:
 		output.Builder.WriteString("SET CONSTRAINTS ")
 		if len(n.ConstraintsSetStmt.Constraints) == 0 {
@@ -2286,6 +2341,16 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		// nothing
 
 	default:
+		// Unhandled expression inside a handled statement: deparse just this
+		// expression. The statement-level fallbacks below would paste the
+		// entire statement here, producing invalid SQL.
+		if output.nodeDepth > 1 {
+			if s, ok := deparseExprFallback(node); ok {
+				warn("unsupported expression node %T, using deparse", n)
+				output.Builder.WriteString(s)
+				return
+			}
+		}
 		// Fallback 1: use pre-computed deparsed text (from augmented AST)
 		if output.Deparsed != "" {
 			output.Builder.WriteString(output.Deparsed)
