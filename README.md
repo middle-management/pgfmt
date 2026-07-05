@@ -2,9 +2,27 @@
 
 A PostgreSQL SQL formatter. Reads SQL from stdin, outputs formatted SQL to stdout.
 
-Uses [libpg_query](https://github.com/pganalyze/pg_query_go) to parse SQL with the actual PostgreSQL parser.
+Uses [libpg_query](https://github.com/pganalyze/pg_query_go) to parse SQL with the actual PostgreSQL parser, so it handles everything the real parser handles — including PL/pgSQL function bodies.
+
+Try it in the browser: **[pgfmt playground](https://middle-management.github.io/pgfmt/)**.
+
+## Robustness
+
+pgfmt is designed to never lose or corrupt SQL:
+
+- Statements and expressions the formatter doesn't explicitly support fall back to libpg_query's deparser, which emits valid (if plainly formatted) SQL rather than dropping anything.
+- PL/pgSQL statements the formatter doesn't recognize keep their original body text verbatim.
+- The test suite sweeps the **entire PostgreSQL 17 regression corpus** (~44,000 statements) and verifies that every formatted statement still parses, preserves its AST, and formats idempotently. The handful of known deviations (currently 48, all benign deparse artifacts of legacy syntaxes) are pinned in a baseline that CI enforces.
 
 ## Install
+
+**Homebrew** (installs both `pgfmt` and `pgfmt-lsp`):
+
+```bash
+brew install middle-management/tap/pgfmt
+```
+
+**Go**:
 
 ```bash
 go install github.com/middle-management/pgfmt@latest
@@ -25,6 +43,8 @@ pgfmt < query.sql
 pgfmt includes an LSP server that provides formatting and diagnostics for SQL files.
 
 ### Install
+
+Already included with the Homebrew formula above, or install separately with Go:
 
 ```bash
 go install github.com/middle-management/pgfmt/cmd/pgfmt-lsp@latest
@@ -81,3 +101,5 @@ cd pgfmt
 go build -o pgfmt .
 go build -o pgfmt-lsp ./cmd/pgfmt-lsp
 ```
+
+Prebuilt binaries for Linux and macOS (amd64 and arm64) are attached to each [release](https://github.com/middle-management/pgfmt/releases).

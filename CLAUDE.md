@@ -18,9 +18,21 @@ There is no Makefile; use `go` commands directly.
 ## Project Structure
 
 - `main.go` — CLI entry point, reads stdin and prints formatted SQL
-- `printer/` — Core formatting logic (`printer.go`, `printer_test.go`)
+- `printer/` — Core formatting logic, split by area:
+  - `printer.go` — main `writeNode` switch on protobuf node types
+  - `printer_ddl.go`, `printer_dml.go`, `printer_expr.go`, `printer_json.go` — DDL / DML / expression / JSON constructs
+  - `printer_util.go` — shared helpers (identifier quoting, dollar quoting, type names, ...)
+  - `plpgsql.go`, `plpgsql_ast.go` — PL/pgSQL function-body formatting (own JSON AST from `ParsePlPgSqlToJSON`)
+  - `keywords.go` — reserved-keyword list driving `quoteIdentifier`
+  - `augment.go`, `augmented.go` — precomputed deparse cache for the WASI build (no native deparse there)
+  - `parser_cgo.go` / `parser_wasi.go` — build-tagged parse/deparse backends
+- `cmd/pgfmt-lsp/` — LSP server binary; `lsp/` — its implementation
+- `cmd/pgfmt-print/` — WASI printer binary for the playground
+- `playground/` — browser playground (GitHub Pages), Playwright tests
+- `zed-pgfmt/` — Zed editor extension (Rust)
 - `testdata/fixtures/` — Input SQL fixture files for integration tests
 - `testdata/fixtures/golden/` — Expected output (golden files) for fixture tests
+- `testdata/corpus_baseline.txt` — pinned deviations for the corpus test
 
 ## Testing
 
@@ -29,19 +41,54 @@ There is no Makefile; use `go` commands directly.
 - CI verifies golden files are up to date via `git diff --exit-code testdata/fixtures/golden/`
 - When adding new SQL formatting support, prefer golden fixture coverage over custom unit tests
 - Only use unit tests when a fixture can't adequately cover the case
+- **Idempotency/AST tests** in `idempotency_test.go` assert over all fixtures
+  that `Format(Format(x)) == Format(x)` and that formatting preserves the AST
+  (parse → deparse comparison, normalizing function bodies and option order)
 - **Corpus test** in `corpus_test.go` sweeps the PostgreSQL regression suite
   (pinned to the release matching `pg_query_go`) and classifies every statement
   (panic / format-error / output-invalid / roundtrip-diff / not-idempotent)
   against `testdata/corpus_baseline.txt`. Run with
   `PGFMT_CORPUS=1 go test -run TestPostgresRegressionCorpus .`; after fixing
   formatter gaps, refresh the baseline with `PGFMT_UPDATE_BASELINE=1`
-  (shrinking numbers are the goal — never grow an entry to make a change pass)
+  (shrinking numbers are the goal — never grow an entry to make a change pass).
+  The suite downloads once into gitignored `testdata/corpus/`; CI caches it
+  and runs the test as a separate `corpus` job
+- **WASI test** in `wasi_test.go` checks the WASI build of the printer
+  produces output equivalent to the native build for the fixtures (the WASI
+  build has no native deparse, so deparse-dependent constructs are the usual
+  source of divergence — see Deparse Fallback below)
 
 ## Deparse Fallback
 
-Any SQL statement type not explicitly handled by the printer falls back to
-`pg_query.Deparse`, which emits valid (but unformatted/canonical) SQL. This
-ensures pgfmt never produces empty output for valid SQL.
+The printer must never drop or corrupt SQL. Unhandled constructs fall back to
+`pg_query.Deparse` at the narrowest scope that works:
+
+- **Expression** — `deparseExprFallback` renders a single expression via a
+  synthetic one-target SELECT
+- **FROM item** — `deparseRangeFallback` renders a range node (JSON_TABLE,
+  XMLTABLE, ...) via a synthetic `SELECT * FROM` wrapper
+- **Whole statement** — `tryStatementFallback` deparses the entire statement;
+  used when a sub-clause can't be rendered safely in isolation (e.g. an
+  unsupported ALTER TABLE subcommand)
+- **PL/pgSQL** — unknown statement types make the body formatter return an
+  error, and the whole function body is kept verbatim
+  (`writeRawPLpgSQLBody`), newline-normalized so output stays idempotent
+
+The result is valid (if unformatted/canonical) SQL, never empty output.
+
+The corpus test enforces this: any change that makes output invalid, changes
+the AST, or breaks idempotency on the PostgreSQL regression suite fails CI
+against `testdata/corpus_baseline.txt`.
+
+The WASI build (`parser_wasi.go`) has **no parser or deparser at all** — it
+consumes an "augmented AST" JSON (parse tree plus per-statement precomputed
+`deparsed` text and PL/pgSQL body cache) via `FormatAugmented`. The augmented
+AST is built by `printer/augment.go` on native builds and by
+`playground/worker.js` in the browser (using pg-query-emscripten). The
+precomputed text covers whole-statement fallback, but expression- and
+range-level deparse fallbacks cannot run on WASI, so those constructs render
+differently in the playground; keep such SQL out of fixtures checked by
+`wasi_test.go`.
 
 ## Playground
 
@@ -93,6 +140,36 @@ cd playground
 npm ci && npx playwright install --with-deps chromium  # first time
 npx playwright test
 ```
+
+## Releases
+
+Releases are fully automated via GitHub Actions:
+
+1. Dispatch **`prepare-release.yml`** with the version (e.g. `0.4.0`). It
+   bumps version strings (`lsp/server.go`, `zed-pgfmt/extension.toml`,
+   `zed-pgfmt/Cargo.toml`, `zed-pgfmt/src/lib.rs`) and opens a
+   `release/vX.Y.Z` PR (authored via the `RELEASE_TOKEN` PAT so CI runs)
+2. Merge the release PR when CI is green
+3. **`create-release.yml`** fires on the merged PR: creates the tag and
+   GitHub release with generated notes, builds `pgfmt` + `pgfmt-lsp` binaries
+   for linux/darwin × amd64/arm64, and calls `zed-extension-bump.yml`
+
+**`zed-extension-bump.yml`** opens (or refreshes) a version-bump PR against
+`zed-industries/extensions` from the fork `middle-management/extensions`.
+Important details:
+
+- The commit is authored as the owner of the `ZED_COMMITTER_TOKEN` PAT, not
+  `github-actions[bot]` — Zed's CLA bot checks commit **authors**, and bots
+  cannot sign the CLA. The PAT owner must have signed https://zed.dev/cla
+- The branch (`pgfmt-lsp-vX.Y.Z`) is force-pushed, so re-running refreshes an
+  open registry PR in place; the run is idempotent and safe to retry via
+  manual `workflow_dispatch` with the tag as input
+- If the CLA bot still blocks the registry PR, comment `@cla-bot check` on it
+  after the CLA is signed
+
+The Homebrew tap (`middle-management/homebrew-tap`, `Formula/pgfmt.rb`) pins
+the release version and per-binary sha256 sums. It is **not** bumped by the
+release automation — update the formula separately after each release.
 
 ## Code Conventions
 
