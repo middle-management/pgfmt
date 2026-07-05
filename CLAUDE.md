@@ -168,8 +168,9 @@ Important details:
   after the CLA is signed
 
 The Homebrew tap (`middle-management/homebrew-tap`, `Formula/pgfmt.rb`) pins
-the release version and per-binary sha256 sums. It is **not** bumped by the
-release automation — update the formula separately after each release.
+the release version and per-binary sha256 sums. It updates itself nightly
+from the latest release — no action needed here; expect up to a day's lag
+between a release and `brew install` picking it up.
 
 ## Code Conventions
 
