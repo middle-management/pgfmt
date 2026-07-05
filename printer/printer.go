@@ -414,13 +414,13 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		switch n.AExpr.Kind {
 		case pg_query.A_Expr_Kind_AEXPR_OP:
 			if n.AExpr.Lexpr != nil {
-				output.writeExprWithParensIfNeeded(n.AExpr.Lexpr)
+				output.writeAExprOperand(n.AExpr.Lexpr)
 				output.Builder.WriteString(" ")
 			}
 			output.writeQualOp(n.AExpr.Name)
 			if n.AExpr.Rexpr != nil {
 				output.Builder.WriteString(" ")
-				output.writeExprWithParensIfNeeded(n.AExpr.Rexpr)
+				output.writeAExprOperand(n.AExpr.Rexpr)
 			}
 		case pg_query.A_Expr_Kind_AEXPR_OP_ANY:
 			output.writeNode(n.AExpr.Lexpr)
@@ -437,13 +437,13 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeNode(n.AExpr.Rexpr)
 			output.Builder.WriteString(")")
 		case pg_query.A_Expr_Kind_AEXPR_DISTINCT:
-			output.writeNode(n.AExpr.Lexpr)
+			output.writeAExprOperand(n.AExpr.Lexpr)
 			output.Builder.WriteString(" IS DISTINCT FROM ")
-			output.writeNode(n.AExpr.Rexpr)
+			output.writeAExprOperand(n.AExpr.Rexpr)
 		case pg_query.A_Expr_Kind_AEXPR_NOT_DISTINCT:
-			output.writeNode(n.AExpr.Lexpr)
+			output.writeAExprOperand(n.AExpr.Lexpr)
 			output.Builder.WriteString(" IS NOT DISTINCT FROM ")
-			output.writeNode(n.AExpr.Rexpr)
+			output.writeAExprOperand(n.AExpr.Rexpr)
 		case pg_query.A_Expr_Kind_AEXPR_NULLIF:
 			output.Builder.WriteString("NULLIF(")
 			output.writeNode(n.AExpr.Lexpr)
@@ -487,7 +487,19 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			} else {
 				output.Builder.WriteString(" SIMILAR TO ")
 			}
-			output.writeNode(n.AExpr.Rexpr)
+			// The parser wraps the pattern in pg_catalog.similar_to_escape();
+			// printing that call verbatim would wrap again on re-parse.
+			if fc := n.AExpr.Rexpr.GetFuncCall(); fc != nil && len(fc.Funcname) == 2 &&
+				fc.Funcname[1].GetString_().GetSval() == "similar_to_escape" &&
+				len(fc.Args) >= 1 && len(fc.Args) <= 2 {
+				output.writeNode(fc.Args[0])
+				if len(fc.Args) == 2 {
+					output.Builder.WriteString(" ESCAPE ")
+					output.writeNode(fc.Args[1])
+				}
+			} else {
+				output.writeNode(n.AExpr.Rexpr)
+			}
 		case pg_query.A_Expr_Kind_AEXPR_BETWEEN:
 			output.writeNode(n.AExpr.Lexpr)
 			output.Builder.WriteString(" BETWEEN ")
@@ -1066,7 +1078,17 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeTypeName(n.TypeCast.TypeName)
 			output.Builder.WriteString(")")
 		case *pg_query.Node_AConst:
+			// A negative numeric literal must keep its parens: -1::int8
+			// re-parses as -(1::int8), a different tree.
+			c := n.TypeCast.Arg.GetAConst()
+			negative := c.GetIval().GetIval() < 0 || strings.HasPrefix(c.GetFval().GetFval(), "-")
+			if negative {
+				output.Builder.WriteString("(")
+			}
 			output.writeNode(n.TypeCast.Arg)
+			if negative {
+				output.Builder.WriteString(")")
+			}
 			output.Builder.WriteString("::")
 			output.writeTypeName(n.TypeCast.TypeName)
 		default:
@@ -1737,21 +1759,46 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		switch n.TransactionStmt.Kind {
 		case pg_query.TransactionStmtKind_TRANS_STMT_BEGIN:
 			output.Builder.WriteString("BEGIN")
+			output.writeTransactionModes(n.TransactionStmt.Options)
+		case pg_query.TransactionStmtKind_TRANS_STMT_START:
+			output.Builder.WriteString("START TRANSACTION")
+			output.writeTransactionModes(n.TransactionStmt.Options)
 		case pg_query.TransactionStmtKind_TRANS_STMT_COMMIT:
 			output.Builder.WriteString("COMMIT")
+			if n.TransactionStmt.Chain {
+				output.Builder.WriteString(" AND CHAIN")
+			}
 		case pg_query.TransactionStmtKind_TRANS_STMT_ROLLBACK:
 			output.Builder.WriteString("ROLLBACK")
+			if n.TransactionStmt.Chain {
+				output.Builder.WriteString(" AND CHAIN")
+			}
 		case pg_query.TransactionStmtKind_TRANS_STMT_SAVEPOINT:
 			output.Builder.WriteString("SAVEPOINT ")
-			output.Builder.WriteString(n.TransactionStmt.SavepointName)
+			output.Builder.WriteString(quoteIdentifier(n.TransactionStmt.SavepointName))
 		case pg_query.TransactionStmtKind_TRANS_STMT_RELEASE:
 			output.Builder.WriteString("RELEASE SAVEPOINT ")
-			output.Builder.WriteString(n.TransactionStmt.SavepointName)
+			output.Builder.WriteString(quoteIdentifier(n.TransactionStmt.SavepointName))
 		case pg_query.TransactionStmtKind_TRANS_STMT_ROLLBACK_TO:
 			output.Builder.WriteString("ROLLBACK TO SAVEPOINT ")
-			output.Builder.WriteString(n.TransactionStmt.SavepointName)
+			output.Builder.WriteString(quoteIdentifier(n.TransactionStmt.SavepointName))
+		case pg_query.TransactionStmtKind_TRANS_STMT_PREPARE:
+			output.Builder.WriteString("PREPARE TRANSACTION '")
+			output.Builder.WriteString(strings.ReplaceAll(n.TransactionStmt.Gid, "'", "''"))
+			output.Builder.WriteString("'")
+		case pg_query.TransactionStmtKind_TRANS_STMT_COMMIT_PREPARED:
+			output.Builder.WriteString("COMMIT PREPARED '")
+			output.Builder.WriteString(strings.ReplaceAll(n.TransactionStmt.Gid, "'", "''"))
+			output.Builder.WriteString("'")
+		case pg_query.TransactionStmtKind_TRANS_STMT_ROLLBACK_PREPARED:
+			output.Builder.WriteString("ROLLBACK PREPARED '")
+			output.Builder.WriteString(strings.ReplaceAll(n.TransactionStmt.Gid, "'", "''"))
+			output.Builder.WriteString("'")
 		default:
 			warn("unsupported transaction kind: %s", n.TransactionStmt.Kind.String())
+			if output.tryStatementFallback() {
+				return
+			}
 		}
 
 	case *pg_query.Node_DefElem:
@@ -1796,7 +1843,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			} else {
 				output.writeDollarQuotedBody(" ", func(p *Printer) {
 					p.Builder.WriteString("\n")
-					p.Builder.WriteString(asBody)
+					p.Builder.WriteString(strings.Trim(asBody, "\n"))
 				})
 			}
 		}
@@ -1906,7 +1953,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			} else {
 				output.writeDollarQuotedBody("\nAS ", func(p *Printer) {
 					p.Builder.WriteString("\n")
-					p.Builder.WriteString(asBody)
+					p.Builder.WriteString(strings.Trim(asBody, "\n"))
 				})
 			}
 		}
@@ -2452,8 +2499,31 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.writeGUCName(n.VariableSetStmt.Name)
 		case pg_query.VariableSetKind_VAR_RESET_ALL:
 			output.Builder.WriteString("RESET ALL")
+		case pg_query.VariableSetKind_VAR_SET_MULTI:
+			// SET TRANSACTION ... / SET SESSION CHARACTERISTICS AS TRANSACTION ...
+			switch n.VariableSetStmt.Name {
+			case "TRANSACTION":
+				output.Builder.WriteString("SET TRANSACTION")
+				output.writeTransactionModes(n.VariableSetStmt.Args)
+			case "SESSION CHARACTERISTICS":
+				output.Builder.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION")
+				output.writeTransactionModes(n.VariableSetStmt.Args)
+			case "TRANSACTION SNAPSHOT":
+				output.Builder.WriteString("SET TRANSACTION SNAPSHOT ")
+				if len(n.VariableSetStmt.Args) > 0 {
+					output.writeNode(n.VariableSetStmt.Args[0])
+				}
+			default:
+				warn("unsupported SET MULTI name: %s", n.VariableSetStmt.Name)
+				if output.tryStatementFallback() {
+					return
+				}
+			}
 		default:
 			warn("unsupported variable set kind: %s", n.VariableSetStmt.Kind.String())
+			if output.tryStatementFallback() {
+				return
+			}
 		}
 
 	case *pg_query.Node_VariableShowStmt:
@@ -3348,7 +3418,17 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 	if len(stmt.Names) == 2 && stmt.Names[0].GetString_().GetSval() == "pg_catalog" {
 		switch stmt.Names[1].GetString_().GetSval() {
 		case "bpchar":
-			output.Builder.WriteString("char")
+			// Typmod-less bpchar is its own type; bare "char" re-parses
+			// with an implicit (1) typmod.
+			if len(stmt.Typmods) == 0 {
+				output.Builder.WriteString("bpchar")
+			} else {
+				output.Builder.WriteString("char")
+			}
+		case "char":
+			// The internal single-byte type must stay quoted; bare char
+			// means bpchar(1).
+			output.Builder.WriteString(`"char"`)
 		case "bool":
 			output.Builder.WriteString("boolean")
 		case "int2":
@@ -3422,7 +3502,14 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 		}
 	} else {
 		for i, n := range stmt.Names {
-			output.Builder.WriteString(quoteIdentifier(n.GetString_().GetSval()))
+			sval := n.GetString_().GetSval()
+			if sval == "char" {
+				// The internal single-byte type must stay quoted; bare
+				// char means bpchar(1).
+				output.Builder.WriteString(`"char"`)
+			} else {
+				output.Builder.WriteString(quoteIdentifier(sval))
+			}
 			if i != len(stmt.Names)-1 {
 				output.Builder.WriteString(".")
 			}
