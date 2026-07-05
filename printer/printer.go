@@ -809,6 +809,23 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 	case *pg_query.Node_RangeVar:
 		output.writeRangeVar(n.RangeVar)
 
+	case *pg_query.Node_RangeTableSample:
+		output.writeNode(n.RangeTableSample.Relation)
+		output.Builder.WriteString(" TABLESAMPLE ")
+		output.writeListWithSeparator(n.RangeTableSample.Method, ".")
+		output.Builder.WriteString(" (")
+		output.writeCommaSeparatedList(n.RangeTableSample.Args)
+		output.Builder.WriteString(")")
+		if n.RangeTableSample.Repeatable != nil {
+			output.Builder.WriteString(" REPEATABLE (")
+			output.writeNode(n.RangeTableSample.Repeatable)
+			output.Builder.WriteString(")")
+		}
+
+	case *pg_query.Node_CurrentOfExpr:
+		output.Builder.WriteString("CURRENT OF ")
+		output.Builder.WriteString(quoteIdentifier(n.CurrentOfExpr.CursorName))
+
 	case *pg_query.Node_RangeSubselect:
 		if n.RangeSubselect.Lateral {
 			output.Builder.WriteString("LATERAL ")
@@ -952,7 +969,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if len(n.InsertStmt.Cols) > 0 {
 			output.Builder.WriteString(" (")
 			for i, c := range n.InsertStmt.Cols {
-				output.Builder.WriteString(c.GetResTarget().Name)
+				output.Builder.WriteString(quoteIdentifier(c.GetResTarget().Name))
 				output.writeOptIndirection(c.GetResTarget().Indirection)
 				if i != len(n.InsertStmt.Cols)-1 {
 					output.Builder.WriteString(", ")
@@ -1021,15 +1038,34 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.writeRangeVar(n.UpdateStmt.Relation)
 		output.Builder.WriteString("\nSET\n\t")
 		output.indent++
-		for i, t := range n.UpdateStmt.TargetList {
-			rt := t.GetResTarget()
-			output.Builder.WriteString(rt.Name)
+		for i := 0; i < len(n.UpdateStmt.TargetList); {
+			if i > 0 {
+				output.Builder.WriteString(",\n\t")
+			}
+			rt := n.UpdateStmt.TargetList[i].GetResTarget()
+			// A multi-assignment (SET (a, b) = source) arrives as one target
+			// per column, each holding a MultiAssignRef to the shared source.
+			if mar := rt.Val.GetMultiAssignRef(); mar != nil {
+				output.Builder.WriteString("(")
+				count := int(mar.Ncolumns)
+				for j := 0; j < count && i+j < len(n.UpdateStmt.TargetList); j++ {
+					if j > 0 {
+						output.Builder.WriteString(", ")
+					}
+					crt := n.UpdateStmt.TargetList[i+j].GetResTarget()
+					output.Builder.WriteString(quoteIdentifier(crt.Name))
+					output.writeOptIndirection(crt.Indirection)
+				}
+				output.Builder.WriteString(") = ")
+				output.writeNode(mar.Source)
+				i += count
+				continue
+			}
+			output.Builder.WriteString(quoteIdentifier(rt.Name))
 			output.writeOptIndirection(rt.Indirection)
 			output.Builder.WriteString(" = ")
 			output.writeNode(rt.Val)
-			if i != len(n.UpdateStmt.TargetList)-1 {
-				output.Builder.WriteString(",\n\t")
-			}
+			i++
 		}
 		output.indent--
 		if len(n.UpdateStmt.FromClause) > 0 {
@@ -1720,6 +1756,12 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		}
 
 	case *pg_query.Node_CreateFunctionStmt:
+		// SQL-standard bodies (BEGIN ATOMIC ... END / RETURN expr) are not
+		// supported by the printer yet; emitting the function without its
+		// body would be invalid.
+		if n.CreateFunctionStmt.SqlBody != nil && output.tryStatementFallback() {
+			return
+		}
 		output.Builder.WriteString("CREATE ")
 		if n.CreateFunctionStmt.Replace {
 			output.Builder.WriteString("OR REPLACE ")
@@ -1820,10 +1862,6 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				output.Builder.WriteString(asBody)
 				output.Builder.WriteString("\n$$")
 			}
-		}
-		if n.CreateFunctionStmt.SqlBody != nil {
-			output.Builder.WriteString("\n")
-			output.writeNode(n.CreateFunctionStmt.SqlBody)
 		}
 
 	case *pg_query.Node_FunctionParameter:
@@ -2032,10 +2070,29 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if n.CreateSchemaStmt.IfNotExists {
 			output.Builder.WriteString("IF NOT EXISTS ")
 		}
-		output.Builder.WriteString(n.CreateSchemaStmt.Schemaname)
+		if n.CreateSchemaStmt.Schemaname != "" {
+			output.Builder.WriteString(quoteIdentifier(n.CreateSchemaStmt.Schemaname))
+		}
+		if n.CreateSchemaStmt.Authrole != nil {
+			if n.CreateSchemaStmt.Schemaname != "" {
+				output.Builder.WriteString(" ")
+			}
+			output.Builder.WriteString("AUTHORIZATION ")
+			output.writeRoleSpec(n.CreateSchemaStmt.Authrole)
+		}
+		// Schema elements (CREATE TABLE/VIEW/... nested in CREATE SCHEMA).
+		for _, elt := range n.CreateSchemaStmt.SchemaElts {
+			output.indent++
+			output.writeNewlineIndent()
+			output.writeNode(elt)
+			output.indent--
+		}
 
 	case *pg_query.Node_CreateSeqStmt:
 		output.Builder.WriteString("CREATE SEQUENCE ")
+		if n.CreateSeqStmt.IfNotExists {
+			output.Builder.WriteString("IF NOT EXISTS ")
+		}
 		output.writeRangeVar(n.CreateSeqStmt.Sequence)
 		for _, opt := range n.CreateSeqStmt.Options {
 			de := opt.GetDefElem()
@@ -2043,6 +2100,20 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				continue
 			}
 			switch de.Defname {
+			case "as":
+				output.Builder.WriteString(" AS ")
+				if tn := de.Arg.GetTypeName(); tn != nil {
+					output.writeTypeName(tn)
+				} else {
+					output.writeNode(de.Arg)
+				}
+			case "owned_by":
+				output.Builder.WriteString(" OWNED BY ")
+				if l := de.Arg.GetList(); l != nil {
+					output.writeListWithSeparator(l.Items, ".")
+				} else {
+					output.writeNode(de.Arg)
+				}
 			case "start":
 				output.Builder.WriteString(" START WITH ")
 				output.writeNode(de.Arg)
@@ -2083,30 +2154,52 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString(n.CreateExtensionStmt.Extname)
 
 	case *pg_query.Node_GrantStmt:
+		objKw, objOk := grantObjectKeyword(n.GrantStmt.Targtype, n.GrantStmt.Objtype)
+		if !objOk {
+			warn("unsupported grant object type: %s", n.GrantStmt.Objtype.String())
+			if output.tryStatementFallback() {
+				return
+			}
+		}
 		if n.GrantStmt.IsGrant {
 			output.Builder.WriteString("GRANT ")
 		} else {
 			output.Builder.WriteString("REVOKE ")
+			if n.GrantStmt.GrantOption {
+				output.Builder.WriteString("GRANT OPTION FOR ")
+			}
 		}
 		if len(n.GrantStmt.Privileges) == 0 {
 			output.Builder.WriteString("ALL")
 		} else {
 			for i, p := range n.GrantStmt.Privileges {
+				if i > 0 {
+					output.Builder.WriteString(", ")
+				}
 				ap := p.GetAccessPriv()
-				if ap != nil {
+				if ap == nil {
+					continue
+				}
+				// An empty priv_name means ALL (used with column lists).
+				if ap.PrivName == "" {
+					output.Builder.WriteString("ALL")
+				} else {
 					output.Builder.WriteString(strings.ToUpper(ap.PrivName))
 				}
-				if i != len(n.GrantStmt.Privileges)-1 {
-					output.Builder.WriteString(", ")
+				if len(ap.Cols) > 0 {
+					output.Builder.WriteString(" (")
+					output.writeCommaSeparatedList(ap.Cols)
+					output.Builder.WriteString(")")
 				}
 			}
 		}
 		output.Builder.WriteString(" ON ")
+		output.Builder.WriteString(objKw)
 		for i, obj := range n.GrantStmt.Objects {
-			output.writeNode(obj)
-			if i != len(n.GrantStmt.Objects)-1 {
+			if i > 0 {
 				output.Builder.WriteString(", ")
 			}
+			output.writeNode(obj)
 		}
 		if n.GrantStmt.IsGrant {
 			output.Builder.WriteString(" TO ")
@@ -2114,24 +2207,16 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(" FROM ")
 		}
 		for i, g := range n.GrantStmt.Grantees {
-			rs := g.GetRoleSpec()
-			if rs != nil {
-				switch rs.Roletype {
-				case pg_query.RoleSpecType_ROLESPEC_PUBLIC:
-					output.Builder.WriteString("PUBLIC")
-				case pg_query.RoleSpecType_ROLESPEC_CURRENT_USER:
-					output.Builder.WriteString("CURRENT_USER")
-				case pg_query.RoleSpecType_ROLESPEC_SESSION_USER:
-					output.Builder.WriteString("SESSION_USER")
-				case pg_query.RoleSpecType_ROLESPEC_CURRENT_ROLE:
-					output.Builder.WriteString("CURRENT_ROLE")
-				default:
-					output.Builder.WriteString(rs.Rolename)
-				}
-			}
-			if i != len(n.GrantStmt.Grantees)-1 {
+			if i > 0 {
 				output.Builder.WriteString(", ")
 			}
+			output.writeRoleSpec(g.GetRoleSpec())
+		}
+		if n.GrantStmt.IsGrant && n.GrantStmt.GrantOption {
+			output.Builder.WriteString(" WITH GRANT OPTION")
+		}
+		if !n.GrantStmt.IsGrant && n.GrantStmt.Behavior == pg_query.DropBehavior_DROP_CASCADE {
+			output.Builder.WriteString(" CASCADE")
 		}
 
 	case *pg_query.Node_CommentStmt:
@@ -2215,6 +2300,11 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString("COPY ")
 		if n.CopyStmt.Relation != nil {
 			output.writeRangeVar(n.CopyStmt.Relation)
+		} else if n.CopyStmt.Query != nil {
+			// COPY (select/insert/update/delete/merge ... ) TO ...
+			output.Builder.WriteString("(")
+			output.writeNode(n.CopyStmt.Query)
+			output.Builder.WriteString(")")
 		}
 		if len(n.CopyStmt.Attlist) > 0 {
 			output.Builder.WriteString(" (")
@@ -2246,7 +2336,16 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				if de.Arg != nil {
 					output.Builder.WriteString(" ")
 					if s := de.Arg.GetString_(); s != nil {
-						output.Builder.WriteString(s.GetSval())
+						// These options take string literals; the rest take
+						// identifiers or booleans stored as strings.
+						switch de.Defname {
+						case "delimiter", "null", "quote", "escape", "encoding", "default":
+							output.Builder.WriteString("'")
+							output.Builder.WriteString(strings.ReplaceAll(s.GetSval(), "'", "''"))
+							output.Builder.WriteString("'")
+						default:
+							output.Builder.WriteString(s.GetSval())
+						}
 					} else {
 						output.writeNode(de.Arg)
 					}
@@ -2342,36 +2441,44 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		} else {
 			output.Builder.WriteString("ANALYZE")
 		}
-		// Check for ANALYZE option on VACUUM
-		if n.VacuumStmt.IsVacuumcmd {
-			hasOpts := false
-			for _, opt := range n.VacuumStmt.Options {
+		if len(n.VacuumStmt.Options) > 0 {
+			output.Builder.WriteString(" (")
+			for i, opt := range n.VacuumStmt.Options {
 				de := opt.GetDefElem()
-				if de != nil && (de.Defname == "analyze" || de.Defname == "verbose") {
-					if !hasOpts {
-						output.Builder.WriteString(" (")
-						hasOpts = true
+				if de == nil {
+					continue
+				}
+				if i > 0 {
+					output.Builder.WriteString(", ")
+				}
+				output.Builder.WriteString(strings.ToUpper(de.Defname))
+				if de.Arg != nil {
+					output.Builder.WriteString(" ")
+					if s := de.Arg.GetString_(); s != nil {
+						output.Builder.WriteString(s.GetSval())
 					} else {
-						output.Builder.WriteString(", ")
+						output.writeNode(de.Arg)
 					}
-					output.Builder.WriteString(strings.ToUpper(de.Defname))
 				}
 			}
-			if hasOpts {
-				output.Builder.WriteString(")")
-			}
+			output.Builder.WriteString(")")
 		}
-		for _, rel := range n.VacuumStmt.Rels {
-			vr := rel.GetVacuumRelation()
-			if vr != nil && vr.Relation != nil {
-				output.Builder.WriteString(" ")
-				output.writeRangeVar(vr.Relation)
+		for i, rel := range n.VacuumStmt.Rels {
+			if i > 0 {
+				output.Builder.WriteString(",")
 			}
+			output.Builder.WriteString(" ")
+			output.writeNode(rel)
 		}
 
 	case *pg_query.Node_VacuumRelation:
 		if n.VacuumRelation.Relation != nil {
 			output.writeRangeVar(n.VacuumRelation.Relation)
+		}
+		if len(n.VacuumRelation.VaCols) > 0 {
+			output.Builder.WriteString(" (")
+			output.writeCommaSeparatedList(n.VacuumRelation.VaCols)
+			output.Builder.WriteString(")")
 		}
 
 	case *pg_query.Node_CreateTrigStmt:
@@ -2491,6 +2598,13 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 				continue
 			}
 			switch de.Defname {
+			case "as":
+				output.Builder.WriteString(" AS ")
+				if tn := de.Arg.GetTypeName(); tn != nil {
+					output.writeTypeName(tn)
+				} else {
+					output.writeNode(de.Arg)
+				}
 			case "restart":
 				output.Builder.WriteString(" RESTART")
 				if de.Arg != nil {
@@ -2612,7 +2726,16 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			} else {
 				output.Builder.WriteString("CONTENT ")
 			}
-			output.writeCommaSeparatedList(n.XmlExpr.Args)
+			// The second arg is the internal preserve_whitespace flag, not
+			// part of the XMLPARSE(...) argument syntax.
+			if len(n.XmlExpr.Args) > 0 {
+				output.writeNode(n.XmlExpr.Args[0])
+			}
+			if len(n.XmlExpr.Args) > 1 {
+				if b := n.XmlExpr.Args[1].GetAConst(); b != nil && b.GetBoolval().GetBoolval() {
+					output.Builder.WriteString(" PRESERVE WHITESPACE")
+				}
+			}
 			output.Builder.WriteString(")")
 		case pg_query.XmlExprOp_IS_XMLPI:
 			output.Builder.WriteString("XMLPI(NAME ")
@@ -2650,11 +2773,19 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		output.Builder.WriteString("]")
 
 	case *pg_query.Node_AIndirection:
-		// Parentheses are needed around the arg when the first indirection
-		// element is a field access (String_), to distinguish from
-		// schema-qualified column references. Array subscripts don't need them.
-		needsParens := false
-		if len(n.AIndirection.Indirection) > 0 && n.AIndirection.Indirection[0].GetString_() != nil {
+		// Simple references (columns, params, chained indirection) only need
+		// parens when followed by a field access or .*, to distinguish from
+		// schema-qualified names. Any other expression (function call, cast,
+		// row, sublink, ...) always needs them: f(x).* and '{}'::jsonb['a']
+		// do not parse.
+		var needsParens bool
+		switch n.AIndirection.Arg.GetNode().(type) {
+		case *pg_query.Node_ColumnRef, *pg_query.Node_ParamRef, *pg_query.Node_AIndirection:
+			if len(n.AIndirection.Indirection) > 0 &&
+				(n.AIndirection.Indirection[0].GetString_() != nil || n.AIndirection.Indirection[0].GetAStar() != nil) {
+				needsParens = true
+			}
+		default:
 			needsParens = true
 		}
 		if needsParens {
@@ -2735,6 +2866,21 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			if s, ok := deparseExprFallback(node); ok {
 				warn("unsupported expression node %T, using deparse", n)
 				output.Builder.WriteString(s)
+				return
+			}
+			if s, ok := deparseRangeFallback(node); ok {
+				warn("unsupported range node %T, using deparse", n)
+				output.Builder.WriteString(s)
+				return
+			}
+			// A statement nested in a utility wrapper (EXPLAIN, COPY (...)):
+			// deparse just that statement rather than pasting the whole
+			// enclosing statement into the middle of itself.
+			if deparsed, err := pgDeparse(&pg_query.ParseResult{
+				Stmts: []*pg_query.RawStmt{{Stmt: node}},
+			}); err == nil {
+				warn("unsupported statement node %T, using deparse", n)
+				output.Builder.WriteString(strings.TrimRight(deparsed, ";"))
 				return
 			}
 		}
@@ -2856,6 +3002,60 @@ func (output *Printer) writeIndexConstraintTail(c *pg_query.Constraint) {
 	if c.Initdeferred {
 		output.Builder.WriteString(" INITIALLY DEFERRED")
 	}
+}
+
+// grantObjectKeyword returns the object-class prefix for GRANT/REVOKE ... ON,
+// including the trailing space ("" for plain tables). The second return value
+// is false for unsupported combinations.
+func grantObjectKeyword(target pg_query.GrantTargetType, obj pg_query.ObjectType) (string, bool) {
+	if target == pg_query.GrantTargetType_ACL_TARGET_ALL_IN_SCHEMA {
+		switch obj {
+		case pg_query.ObjectType_OBJECT_TABLE:
+			return "ALL TABLES IN SCHEMA ", true
+		case pg_query.ObjectType_OBJECT_SEQUENCE:
+			return "ALL SEQUENCES IN SCHEMA ", true
+		case pg_query.ObjectType_OBJECT_FUNCTION:
+			return "ALL FUNCTIONS IN SCHEMA ", true
+		case pg_query.ObjectType_OBJECT_PROCEDURE:
+			return "ALL PROCEDURES IN SCHEMA ", true
+		case pg_query.ObjectType_OBJECT_ROUTINE:
+			return "ALL ROUTINES IN SCHEMA ", true
+		}
+		return "", false
+	}
+	switch obj {
+	case pg_query.ObjectType_OBJECT_TABLE, pg_query.ObjectType_OBJECT_COLUMN:
+		return "", true // TABLE keyword is optional; deparse omits it too
+	case pg_query.ObjectType_OBJECT_SEQUENCE:
+		return "SEQUENCE ", true
+	case pg_query.ObjectType_OBJECT_DATABASE:
+		return "DATABASE ", true
+	case pg_query.ObjectType_OBJECT_DOMAIN:
+		return "DOMAIN ", true
+	case pg_query.ObjectType_OBJECT_FDW:
+		return "FOREIGN DATA WRAPPER ", true
+	case pg_query.ObjectType_OBJECT_FOREIGN_SERVER:
+		return "FOREIGN SERVER ", true
+	case pg_query.ObjectType_OBJECT_FUNCTION:
+		return "FUNCTION ", true
+	case pg_query.ObjectType_OBJECT_PROCEDURE:
+		return "PROCEDURE ", true
+	case pg_query.ObjectType_OBJECT_ROUTINE:
+		return "ROUTINE ", true
+	case pg_query.ObjectType_OBJECT_LANGUAGE:
+		return "LANGUAGE ", true
+	case pg_query.ObjectType_OBJECT_LARGEOBJECT:
+		return "LARGE OBJECT ", true
+	case pg_query.ObjectType_OBJECT_SCHEMA:
+		return "SCHEMA ", true
+	case pg_query.ObjectType_OBJECT_TABLESPACE:
+		return "TABLESPACE ", true
+	case pg_query.ObjectType_OBJECT_TYPE:
+		return "TYPE ", true
+	case pg_query.ObjectType_OBJECT_PARAMETER_ACL:
+		return "PARAMETER ", true
+	}
+	return "", false
 }
 
 // objectTypeKeyword maps an ObjectType to its DDL keyword (as used in DROP
@@ -3063,9 +3263,9 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 			}
 			skipTypmods = true
 		case "interval":
-			if len(stmt.Typmods) == 0 {
-				output.Builder.WriteString("interval")
-			} else {
+			output.Builder.WriteString("interval")
+			if len(stmt.Typmods) > 0 {
+				skipTypmods = true
 				fields := stmt.Typmods[0].GetAConst().GetIval().GetIval()
 				switch fields {
 				case 1 << YEAR:
@@ -3100,7 +3300,7 @@ func (output *Printer) writeTypeName(stmt *pg_query.TypeName) {
 				}
 
 				if len(stmt.Typmods) == 2 {
-					precision := stmt.Typmods[0].GetAConst().GetIval().GetIval()
+					precision := stmt.Typmods[1].GetAConst().GetIval().GetIval()
 					if precision != 0xFFFF { // INTERVAL_FULL_PRECISION
 						output.Builder.WriteString(fmt.Sprintf("(%d)", precision))
 					}

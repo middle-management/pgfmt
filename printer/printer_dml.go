@@ -27,17 +27,36 @@ func (output *Printer) writeOnConflictClause(clause *pg_query.OnConflictClause) 
 	case pg_query.OnConflictAction_ONCONFLICT_UPDATE:
 		output.writeNewlineIndent()
 		output.Builder.WriteString("DO UPDATE SET")
-		for i, t := range clause.TargetList {
-			rt := t.GetResTarget()
+		for i := 0; i < len(clause.TargetList); {
+			if i > 0 {
+				output.Builder.WriteString(",")
+			}
+			rt := clause.TargetList[i].GetResTarget()
 			output.writeNewlineIndent()
 			output.Builder.WriteString("\t")
-			output.Builder.WriteString(rt.Name)
+			// A multi-assignment (SET (a, b) = source) arrives as one target
+			// per column, each holding a MultiAssignRef to the shared source.
+			if mar := rt.Val.GetMultiAssignRef(); mar != nil {
+				output.Builder.WriteString("(")
+				count := int(mar.Ncolumns)
+				for j := 0; j < count && i+j < len(clause.TargetList); j++ {
+					if j > 0 {
+						output.Builder.WriteString(", ")
+					}
+					crt := clause.TargetList[i+j].GetResTarget()
+					output.Builder.WriteString(quoteIdentifier(crt.Name))
+					output.writeOptIndirection(crt.Indirection)
+				}
+				output.Builder.WriteString(") = ")
+				output.writeNode(mar.Source)
+				i += count
+				continue
+			}
+			output.Builder.WriteString(quoteIdentifier(rt.Name))
 			output.writeOptIndirection(rt.Indirection)
 			output.Builder.WriteString(" = ")
 			output.writeNode(rt.Val)
-			if i != len(clause.TargetList)-1 {
-				output.Builder.WriteString(",")
-			}
+			i++
 		}
 		if clause.WhereClause != nil {
 			output.writeNewlineIndent()
@@ -210,8 +229,15 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 				output.writeSetOpKeyword(branch.op, branch.all)
 				output.writeNewlineIndent()
 			}
-			// Wrap in parens only if this branch is itself a different set operation
-			if branch.stmt.Op != pg_query.SetOperation_SETOP_NONE {
+			// Wrap in parens if this branch is itself a different set operation,
+			// or carries its own WITH / ORDER BY / LIMIT, which would otherwise
+			// attach to the whole set operation (or not parse at all).
+			needsParens := branch.stmt.Op != pg_query.SetOperation_SETOP_NONE ||
+				branch.stmt.WithClause != nil ||
+				len(branch.stmt.SortClause) > 0 ||
+				branch.stmt.LimitCount != nil ||
+				branch.stmt.LimitOffset != nil
+			if needsParens {
 				output.Builder.WriteString("(")
 				output.indent++
 				output.writeNewlineIndent()
