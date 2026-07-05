@@ -1,10 +1,12 @@
 // Web Worker: pg-query-emscripten parses SQL, Go WASI WASM prints it.
+// The WASI shim is vendored (see vendor/browser_wasi_shim/) so the playground
+// has no runtime dependency on a third-party CDN.
 import {
   File,
   OpenFile,
   WASI,
   WASIProcExit,
-} from "https://esm.sh/@bjorn3/browser_wasi_shim@0.4.2";
+} from "./vendor/browser_wasi_shim/index.js";
 import pgQueryInit from "./pg_query.js";
 
 let pgQuery;
@@ -470,10 +472,15 @@ function runWASI(stdinData) {
   return decoder.decode(new Uint8Array(stdoutFile.data));
 }
 
+// Last per-statement failure reason, surfaced to the UI so fallbacks to raw
+// text are visible rather than silent.
+let lastFormatError = null;
+
 // Format a single SQL string via the augmented AST pipeline.
 function formatOne(sql) {
   const augmented = buildAugmentedAST(sql);
   if (!augmented) {
+    lastFormatError = "parse failed";
     console.warn("[pgfmt] parse failed:", sql);
     return null;
   }
@@ -486,6 +493,7 @@ function formatOne(sql) {
     }
     return result;
   } catch (err) {
+    lastFormatError = String(err);
     console.warn("[pgfmt] WASI failed:", err, "sql:", sql);
     return null;
   }
@@ -494,8 +502,10 @@ function formatOne(sql) {
 // Initialize pg-query-emscripten.
 pgQuery = await pgQueryInit();
 
-// Load and compile the WASI WASM module.
-const wasmResponse = await fetch("pgfmt-print.wasm");
+// Load and compile the WASI WASM module. cache: "no-cache" forces
+// revalidation so a cached wasm from an older deploy can never pair with a
+// newer worker.js (mismatches make every format call fail).
+const wasmResponse = await fetch("pgfmt-print.wasm", { cache: "no-cache" });
 wasmModule = await WebAssembly.compile(await wasmResponse.arrayBuffer());
 
 // Signal ready.
@@ -525,7 +535,11 @@ onmessage = (e) => {
       if (result !== null) {
         postMessage({ type: "result", id, result });
       } else {
-        postMessage({ type: "result", id, error: "format failed" });
+        postMessage({
+          type: "result",
+          id,
+          error: "format failed: " + (lastFormatError || "unknown error"),
+        });
       }
       return;
     }
@@ -533,6 +547,7 @@ onmessage = (e) => {
     // Large inputs: format each statement separately with progress.
     const parts = [];
     const batchSize = 20;
+    let failed = 0;
     function formatBatch(start) {
       const end = Math.min(start + batchSize, stmts.length);
       for (let i = start; i < end; i++) {
@@ -546,6 +561,7 @@ onmessage = (e) => {
           parts.push(result);
         } else {
           // Fallback: raw text.
+          failed++;
           parts.push(stmts[i].text.trim() + "\n\n");
         }
       }
@@ -553,7 +569,13 @@ onmessage = (e) => {
         postMessage({ type: "progress", current: end, total: stmts.length });
         setTimeout(() => formatBatch(end), 0);
       } else {
-        postMessage({ type: "result", id, result: parts.join("") });
+        postMessage({
+          type: "result",
+          id,
+          result: parts.join(""),
+          failed,
+          failReason: failed > 0 ? lastFormatError : undefined,
+        });
       }
     }
     formatBatch(0);

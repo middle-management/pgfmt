@@ -96,6 +96,10 @@ The browser playground uses two WASM modules:
 - **pg-query-emscripten** — Emscripten build of libpg_query for SQL parsing/deparsing
 - **pgfmt-print.wasm** — Go WASI build of the printer
 
+JS dependencies (the browser WASI shim and speed-highlight) are vendored
+under `playground/vendor/` — the playground must not fetch anything from
+third-party CDNs at runtime.
+
 ### Building pg-query-emscripten
 
 The Emscripten build lives in `third_party/pg-query-emscripten` (git submodule). It must match the libpg_query version used by `pg_query_go` in `go.mod`. To check versions:
