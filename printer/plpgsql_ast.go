@@ -2,6 +2,7 @@ package printer
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -57,6 +58,9 @@ type plVar struct {
 	NotNull    bool        `json:"notnull"`
 	DataType   *plDataType `json:"datatype"`
 	DefaultVal *plExprW    `json:"default_val"`
+	// Bound cursor declarations (name CURSOR [(args)] FOR query).
+	CursorExplicitExpr *plExprW `json:"cursor_explicit_expr"`
+	CursorArgRow       int      `json:"cursor_explicit_argrow"`
 }
 
 type plRec struct {
@@ -149,11 +153,11 @@ type plStmtAssign struct {
 }
 
 type plStmtIf struct {
-	LineNo    int          `json:"lineno"`
-	Cond      plExprW      `json:"cond"`
-	ThenBody  []plStmt     `json:"then_body"`
-	ElsIfList []plElsIfW   `json:"elsif_list"`
-	ElseBody  []plStmt     `json:"else_body"`
+	LineNo    int        `json:"lineno"`
+	Cond      plExprW    `json:"cond"`
+	ThenBody  []plStmt   `json:"then_body"`
+	ElsIfList []plElsIfW `json:"elsif_list"`
+	ElseBody  []plStmt   `json:"else_body"`
 }
 
 type plElsIfW struct {
@@ -167,12 +171,12 @@ type plElsIf struct {
 }
 
 type plStmtCase struct {
-	LineNo       int            `json:"lineno"`
-	TExpr        *plExprW       `json:"t_expr"`
-	TVarNo       int            `json:"t_varno"`
-	CaseWhenList []plCaseWhenW  `json:"case_when_list"`
-	HaveElse     bool           `json:"have_else"`
-	ElseStmts    []plStmt       `json:"else_stmts"`
+	LineNo       int           `json:"lineno"`
+	TExpr        *plExprW      `json:"t_expr"`
+	TVarNo       int           `json:"t_varno"`
+	CaseWhenList []plCaseWhenW `json:"case_when_list"`
+	HaveElse     bool          `json:"have_else"`
+	ElseStmts    []plStmt      `json:"else_stmts"`
 }
 
 type plCaseWhenW struct {
@@ -193,12 +197,14 @@ type plStmtLoop struct {
 
 type plStmtWhile struct {
 	LineNo int      `json:"lineno"`
+	Label  string   `json:"label"`
 	Cond   plExprW  `json:"cond"`
 	Body   []plStmt `json:"body"`
 }
 
 type plStmtForI struct {
 	LineNo  int      `json:"lineno"`
+	Label   string   `json:"label"`
 	Var     plDatum  `json:"var"`
 	Lower   plExprW  `json:"lower"`
 	Upper   plExprW  `json:"upper"`
@@ -209,6 +215,7 @@ type plStmtForI struct {
 
 type plStmtForS struct {
 	LineNo int      `json:"lineno"`
+	Label  string   `json:"label"`
 	Var    plDatum  `json:"var"`
 	Query  plExprW  `json:"query"`
 	Body   []plStmt `json:"body"`
@@ -216,9 +223,33 @@ type plStmtForS struct {
 
 type plStmtForEachA struct {
 	LineNo int      `json:"lineno"`
+	Label  string   `json:"label"`
 	VarNo  int      `json:"varno"`
+	Slice  int      `json:"slice"`
 	Expr   plExprW  `json:"expr"`
 	Body   []plStmt `json:"body"`
+}
+
+// plStmtForC is a FOR loop over a bound cursor:
+// FOR var IN curname [(args)] LOOP ... END LOOP;
+type plStmtForC struct {
+	LineNo   int      `json:"lineno"`
+	Label    string   `json:"label"`
+	Var      plDatum  `json:"var"`
+	CurVar   int      `json:"curvar"`
+	ArgQuery *plExprW `json:"argquery"`
+	Body     []plStmt `json:"body"`
+}
+
+// plStmtDynForS is a FOR loop over a dynamic query:
+// FOR var IN EXECUTE query [USING params] LOOP ... END LOOP;
+type plStmtDynForS struct {
+	LineNo int       `json:"lineno"`
+	Label  string    `json:"label"`
+	Var    plDatum   `json:"var"`
+	Query  plExprW   `json:"query"`
+	Params []plExprW `json:"params"`
+	Body   []plStmt  `json:"body"`
 }
 
 type plStmtExit struct {
@@ -239,16 +270,41 @@ type plStmtReturnNext struct {
 }
 
 type plStmtReturnQuery struct {
-	LineNo   int      `json:"lineno"`
-	Query    *plExprW `json:"query"`
-	DynQuery *plExprW `json:"dynquery"`
+	LineNo   int       `json:"lineno"`
+	Query    *plExprW  `json:"query"`
+	DynQuery *plExprW  `json:"dynquery"`
+	Params   []plExprW `json:"params"`
 }
 
 type plStmtRaise struct {
-	LineNo    int       `json:"lineno"`
-	ElogLevel int       `json:"elog_level"`
-	Message   string    `json:"message"`
-	Params    []plExprW `json:"params"`
+	LineNo    int              `json:"lineno"`
+	ElogLevel int              `json:"elog_level"`
+	CondName  string           `json:"condname"`
+	Message   string           `json:"message"`
+	Params    []plExprW        `json:"params"`
+	Options   []plRaiseOptionW `json:"options"`
+}
+
+type plRaiseOptionW struct {
+	O plRaiseOption `json:"PLpgSQL_raise_option"`
+}
+
+type plRaiseOption struct {
+	OptType int     `json:"opt_type"`
+	Expr    plExprW `json:"expr"`
+}
+
+// raiseOptionName maps PLpgSQL_raise_option_type values to keywords.
+var raiseOptionName = map[int]string{
+	0: "ERRCODE",
+	1: "MESSAGE",
+	2: "DETAIL",
+	3: "HINT",
+	4: "COLUMN",
+	5: "CONSTRAINT",
+	6: "DATATYPE",
+	7: "TABLE",
+	8: "SCHEMA",
 }
 
 type plStmtExecSQL struct {
@@ -271,6 +327,74 @@ type plStmtDynExecute struct {
 	Strict bool      `json:"strict"`
 	Target *plDatum  `json:"target"`
 	Params []plExprW `json:"params"`
+}
+
+type plStmtCall struct {
+	LineNo int     `json:"lineno"`
+	Expr   plExprW `json:"expr"`
+}
+
+type plStmtCommit struct {
+	LineNo int  `json:"lineno"`
+	Chain  bool `json:"chain"`
+}
+
+type plStmtRollback struct {
+	LineNo int  `json:"lineno"`
+	Chain  bool `json:"chain"`
+}
+
+type plStmtGetDiag struct {
+	LineNo    int           `json:"lineno"`
+	IsStacked bool          `json:"is_stacked"`
+	DiagItems []plDiagItemW `json:"diag_items"`
+}
+
+type plDiagItemW struct {
+	I plDiagItem `json:"PLpgSQL_diag_item"`
+}
+
+type plDiagItem struct {
+	Kind   string `json:"kind"`
+	Target int    `json:"target"`
+}
+
+type plStmtAssert struct {
+	LineNo  int      `json:"lineno"`
+	Cond    plExprW  `json:"cond"`
+	Message *plExprW `json:"message"`
+}
+
+type plStmtOpen struct {
+	LineNo   int       `json:"lineno"`
+	CurVar   int       `json:"curvar"`
+	ArgQuery *plExprW  `json:"argquery"`
+	Query    *plExprW  `json:"query"`
+	DynQuery *plExprW  `json:"dynquery"`
+	Params   []plExprW `json:"params"`
+}
+
+// Fetch directions (PostgreSQL FetchDirection enum).
+const (
+	plFetchForward  = 0
+	plFetchBackward = 1
+	plFetchAbsolute = 2
+	plFetchRelative = 3
+)
+
+type plStmtFetch struct {
+	LineNo    int      `json:"lineno"`
+	Target    *plDatum `json:"target"`
+	CurVar    int      `json:"curvar"`
+	Direction int      `json:"direction"`
+	HowMany   int      `json:"how_many"`
+	Expr      *plExprW `json:"expr"`
+	IsMove    bool     `json:"is_move"`
+}
+
+type plStmtClose struct {
+	LineNo int `json:"lineno"`
+	CurVar int `json:"curvar"`
 }
 
 // Exception handling
@@ -309,6 +433,8 @@ type plStmt struct {
 	While       *plStmtWhile
 	ForI        *plStmtForI
 	ForS        *plStmtForS
+	ForC        *plStmtForC
+	DynForS     *plStmtDynForS
 	ForEachA    *plStmtForEachA
 	Exit        *plStmtExit
 	Return      *plStmtReturn
@@ -319,6 +445,14 @@ type plStmt struct {
 	Perform     *plStmtPerform
 	DynExecute  *plStmtDynExecute
 	Block       *plStmtBlock
+	Call        *plStmtCall
+	Commit      *plStmtCommit
+	Rollback    *plStmtRollback
+	GetDiag     *plStmtGetDiag
+	Assert      *plStmtAssert
+	Open        *plStmtOpen
+	Fetch       *plStmtFetch
+	Close       *plStmtClose
 }
 
 func (s *plStmt) lineNo() int {
@@ -337,6 +471,10 @@ func (s *plStmt) lineNo() int {
 		return s.ForI.LineNo
 	case s.ForS != nil:
 		return s.ForS.LineNo
+	case s.ForC != nil:
+		return s.ForC.LineNo
+	case s.DynForS != nil:
+		return s.DynForS.LineNo
 	case s.ForEachA != nil:
 		return s.ForEachA.LineNo
 	case s.Exit != nil:
@@ -357,6 +495,22 @@ func (s *plStmt) lineNo() int {
 		return s.DynExecute.LineNo
 	case s.Block != nil:
 		return s.Block.LineNo
+	case s.Call != nil:
+		return s.Call.LineNo
+	case s.Commit != nil:
+		return s.Commit.LineNo
+	case s.Rollback != nil:
+		return s.Rollback.LineNo
+	case s.GetDiag != nil:
+		return s.GetDiag.LineNo
+	case s.Assert != nil:
+		return s.Assert.LineNo
+	case s.Open != nil:
+		return s.Open.LineNo
+	case s.Fetch != nil:
+		return s.Fetch.LineNo
+	case s.Close != nil:
+		return s.Close.LineNo
 	}
 	return 0
 }
@@ -389,6 +543,12 @@ func (s *plStmt) UnmarshalJSON(data []byte) error {
 		case "PLpgSQL_stmt_fors":
 			s.ForS = &plStmtForS{}
 			return json.Unmarshal(val, s.ForS)
+		case "PLpgSQL_stmt_forc":
+			s.ForC = &plStmtForC{}
+			return json.Unmarshal(val, s.ForC)
+		case "PLpgSQL_stmt_dynfors":
+			s.DynForS = &plStmtDynForS{}
+			return json.Unmarshal(val, s.DynForS)
 		case "PLpgSQL_stmt_foreach_a":
 			s.ForEachA = &plStmtForEachA{}
 			return json.Unmarshal(val, s.ForEachA)
@@ -400,7 +560,18 @@ func (s *plStmt) UnmarshalJSON(data []byte) error {
 			return json.Unmarshal(val, s.Return)
 		case "PLpgSQL_stmt_return_next":
 			s.ReturnNext = &plStmtReturnNext{}
-			return json.Unmarshal(val, s.ReturnNext)
+			if err := json.Unmarshal(val, s.ReturnNext); err != nil {
+				return err
+			}
+			if s.ReturnNext.Expr == nil {
+				// RETURN NEXT <variable> is compiled to a datum reference
+				// (retvarno) that libpg_query's JSON output does not include,
+				// so the statement cannot be reconstructed. Fail the parse to
+				// trigger the raw-body fallback rather than emitting a bare
+				// RETURN NEXT; (which is invalid and drops the variable).
+				return fmt.Errorf("RETURN NEXT with variable target is not representable")
+			}
+			return nil
 		case "PLpgSQL_stmt_return_query":
 			s.ReturnQuery = &plStmtReturnQuery{}
 			return json.Unmarshal(val, s.ReturnQuery)
@@ -419,6 +590,37 @@ func (s *plStmt) UnmarshalJSON(data []byte) error {
 		case "PLpgSQL_stmt_block":
 			s.Block = &plStmtBlock{}
 			return json.Unmarshal(val, s.Block)
+		case "PLpgSQL_stmt_call":
+			s.Call = &plStmtCall{}
+			return json.Unmarshal(val, s.Call)
+		case "PLpgSQL_stmt_commit":
+			s.Commit = &plStmtCommit{}
+			return json.Unmarshal(val, s.Commit)
+		case "PLpgSQL_stmt_rollback":
+			s.Rollback = &plStmtRollback{}
+			return json.Unmarshal(val, s.Rollback)
+		case "PLpgSQL_stmt_getdiag":
+			s.GetDiag = &plStmtGetDiag{}
+			return json.Unmarshal(val, s.GetDiag)
+		case "PLpgSQL_stmt_assert":
+			s.Assert = &plStmtAssert{}
+			return json.Unmarshal(val, s.Assert)
+		case "PLpgSQL_stmt_open":
+			s.Open = &plStmtOpen{}
+			return json.Unmarshal(val, s.Open)
+		case "PLpgSQL_stmt_fetch":
+			s.Fetch = &plStmtFetch{}
+			return json.Unmarshal(val, s.Fetch)
+		case "PLpgSQL_stmt_close":
+			s.Close = &plStmtClose{}
+			return json.Unmarshal(val, s.Close)
+		default:
+			// An unrecognized statement type MUST fail the parse: silently
+			// ignoring it would drop the statement from the formatted output,
+			// corrupting the function body. The error propagates up to
+			// formatPLpgSQLBody, which falls back to emitting the original
+			// body verbatim.
+			return fmt.Errorf("unsupported PL/pgSQL statement type: %s", key)
 		}
 	}
 	return nil

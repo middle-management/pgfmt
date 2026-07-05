@@ -2,6 +2,7 @@ package printer
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
@@ -159,7 +160,7 @@ func formatSQL(query string) string {
 	scanResult, scanErr := pgScan(query)
 	if scanErr != nil {
 		b := &strings.Builder{}
-		p := &Printer{Builder: b}
+		p := &Printer{Builder: b, RawStmt: result.Stmts[0], OriginalSQL: query}
 		p.Print(result.Stmts[0].Stmt)
 		return b.String()
 	}
@@ -186,7 +187,7 @@ func formatSQL(query string) string {
 		ci++
 	}
 
-	p := &Printer{Builder: b, comments: inlineComments}
+	p := &Printer{Builder: b, comments: inlineComments, RawStmt: stmt, OriginalSQL: query}
 	p.Print(stmt.Stmt)
 
 	// Emit trailing comments (after the statement).
@@ -236,7 +237,7 @@ func (ctx *plContext) formatSQLCached(query string) string {
 		result := &pg_query.ParseResult{}
 		if err := protojson.Unmarshal([]byte(cached), result); err == nil && len(result.Stmts) > 0 {
 			b := &strings.Builder{}
-			p := &Printer{Builder: b, bodyCache: cache}
+			p := &Printer{Builder: b, bodyCache: cache, RawStmt: result.Stmts[0], OriginalSQL: query}
 			p.Print(result.Stmts[0].Stmt)
 			return b.String()
 		}
@@ -290,16 +291,14 @@ func (output *Printer) formatPLpgSQLBody(body string, indentLevel int) {
 	}
 	if err != nil {
 		warn("failed to parse PL/pgSQL body: %v", err)
-		output.Builder.WriteString("\n")
-		output.Builder.WriteString(body)
+		output.writeRawPLpgSQLBody(body)
 		return
 	}
 
 	var parsed []plFunctionW
 	if err := json.Unmarshal([]byte(jsonResult), &parsed); err != nil || len(parsed) == 0 {
-		warn("failed to unmarshal PL/pgSQL JSON")
-		output.Builder.WriteString("\n")
-		output.Builder.WriteString(body)
+		warn("failed to unmarshal PL/pgSQL JSON: %v", err)
+		output.writeRawPLpgSQLBody(body)
 		return
 	}
 
@@ -314,16 +313,49 @@ func (output *Printer) formatPLpgSQLBody(body string, indentLevel int) {
 	ctx.writeBlock(&fn.Action.B, indentLevel, true)
 }
 
+// writeRawPLpgSQLBody emits a body that could not be formatted, verbatim.
+// Surrounding newlines are normalized so repeated formatting is idempotent
+// (the fallback itself adds one leading newline each time).
+func (output *Printer) writeRawPLpgSQLBody(body string) {
+	output.Builder.WriteString("\n")
+	output.Builder.WriteString(strings.Trim(body, "\n"))
+}
+
 // writeDeclare emits the DECLARE section for user-declared variables.
 func (ctx *plContext) writeDeclare(ind int) {
 	type declInfo struct {
 		text   string
 		lineNo int
 	}
-	var decls []declInfo
+
+	// Variables that exist only as bound-cursor arguments are re-emitted
+	// inside the cursor's argument list, not as standalone declarations.
+	cursorArgs := map[int]bool{}
 	for i := range ctx.datums {
+		v := ctx.datums[i].Var
+		if v == nil || v.CursorExplicitExpr == nil || v.CursorArgRow <= 0 || v.CursorArgRow >= len(ctx.datums) {
+			continue
+		}
+		if row := ctx.datums[v.CursorArgRow].Row; row != nil {
+			cursorArgs[v.CursorArgRow] = true
+			for _, f := range row.Fields {
+				cursorArgs[f.VarNo] = true
+			}
+		}
+	}
+
+	var decls []declInfo
+	seen := map[string]bool{} // dedupe implicit loop records that shadow declared ones
+	for i := range ctx.datums {
+		if cursorArgs[i] {
+			continue
+		}
 		d := &ctx.datums[i]
 		switch {
+		case d.Var != nil && d.Var.CursorExplicitExpr != nil:
+			if decl := ctx.cursorDecl(d.Var); decl != "" {
+				decls = append(decls, declInfo{text: decl, lineNo: d.Var.LineNo})
+			}
 		case d.Var != nil:
 			if decl := varDecl(d.Var); decl != "" {
 				decls = append(decls, declInfo{text: decl, lineNo: d.Var.LineNo})
@@ -341,11 +373,40 @@ func (ctx *plContext) writeDeclare(ind int) {
 		ctx.newlineIndent(ind)
 		ctx.w("DECLARE")
 		for _, d := range decls {
+			if seen[d.text] {
+				continue
+			}
+			seen[d.text] = true
 			ctx.emitCommentsBeforeLine(d.lineNo, ind+1)
 			ctx.newlineIndent(ind + 1)
 			ctx.w(d.text + ";")
 		}
 	}
+}
+
+// cursorDecl builds a DECLARE line for a bound cursor:
+// name CURSOR [(arg type, ...)] FOR query
+func (ctx *plContext) cursorDecl(v *plVar) string {
+	if v.RefName == "" || v.LineNo == 0 {
+		return ""
+	}
+	decl := v.RefName + " CURSOR"
+	if v.CursorArgRow > 0 && v.CursorArgRow < len(ctx.datums) {
+		if row := ctx.datums[v.CursorArgRow].Row; row != nil {
+			var args []string
+			for _, f := range row.Fields {
+				arg := f.Name
+				if f.VarNo >= 0 && f.VarNo < len(ctx.datums) {
+					if av := ctx.datums[f.VarNo].Var; av != nil && av.DataType != nil {
+						arg += " " + strings.TrimSpace(av.DataType.T.TypeName)
+					}
+				}
+				args = append(args, arg)
+			}
+			decl += " (" + strings.Join(args, ", ") + ")"
+		}
+	}
+	return decl + " FOR " + compactSQL(ctx.formatSQLCached(v.CursorExplicitExpr.E.Query))
 }
 
 // varDecl builds a DECLARE line for a PLpgSQL_var, or returns "" to skip it.
@@ -420,10 +481,7 @@ func (ctx *plContext) writeBlock(block *plStmtBlock, ind int, topLevel bool) {
 	}
 
 	ctx.newlineIndent(ind)
-	if block.Label != "" {
-		ctx.w("<<" + block.Label + ">>\n")
-		ctx.indent(ind)
-	}
+	ctx.writeLabel(block.Label, ind)
 
 	ctx.w("BEGIN")
 	ctx.writeBody(body, ind+1)
@@ -491,6 +549,7 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 		ctx.writeLoop(s.Loop, ind)
 	case s.While != nil:
 		ctx.newlineIndent(ind)
+		ctx.writeLabel(s.While.Label, ind)
 		ctx.w("WHILE " + s.While.Cond.E.Query + " LOOP")
 		ctx.writeBody(s.While.Body, ind+1)
 		ctx.newlineIndent(ind)
@@ -499,6 +558,7 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 		ctx.writeForI(s.ForI, ind)
 	case s.ForS != nil:
 		ctx.newlineIndent(ind)
+		ctx.writeLabel(s.ForS.Label, ind)
 		ctx.w("FOR " + s.ForS.Var.name() + " IN ")
 		ctx.writeSQL(s.ForS.Query.E.Query, ind)
 		ctx.skipSQLComments(s.ForS.LineNo, s.ForS.Query.E.Query)
@@ -506,10 +566,19 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 		ctx.writeBody(s.ForS.Body, ind+1)
 		ctx.newlineIndent(ind)
 		ctx.w("END LOOP;")
+	case s.ForC != nil:
+		ctx.writeForC(s.ForC, ind)
+	case s.DynForS != nil:
+		ctx.writeDynForS(s.DynForS, ind)
 	case s.ForEachA != nil:
 		ctx.newlineIndent(ind)
+		ctx.writeLabel(s.ForEachA.Label, ind)
 		varName := ctx.getDatumName(s.ForEachA.VarNo)
-		ctx.w("FOREACH " + varName + " IN ARRAY " + s.ForEachA.Expr.E.Query + " LOOP")
+		ctx.w("FOREACH " + varName)
+		if s.ForEachA.Slice > 0 {
+			ctx.w(fmt.Sprintf(" SLICE %d", s.ForEachA.Slice))
+		}
+		ctx.w(" IN ARRAY " + s.ForEachA.Expr.E.Query + " LOOP")
 		ctx.writeBody(s.ForEachA.Body, ind+1)
 		ctx.newlineIndent(ind)
 		ctx.w("END LOOP;")
@@ -535,6 +604,12 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 		}
 	case s.ReturnQuery != nil:
 		ctx.newlineIndent(ind)
+		if s.ReturnQuery.DynQuery != nil {
+			ctx.w("RETURN QUERY EXECUTE " + s.ReturnQuery.DynQuery.E.Query)
+			ctx.writeUsingParams(s.ReturnQuery.Params)
+			ctx.w(";")
+			return
+		}
 		ctx.w("RETURN QUERY ")
 		ctx.writeSQL(s.ReturnQuery.Query.query(), ind)
 		ctx.skipSQLComments(s.ReturnQuery.LineNo, s.ReturnQuery.Query.query())
@@ -551,7 +626,167 @@ func (ctx *plContext) writeStmt(s *plStmt, ind int) {
 		ctx.writeDynExecute(s.DynExecute, ind)
 	case s.Block != nil:
 		ctx.writeBlock(s.Block, ind, false)
+	case s.Call != nil:
+		// expr.query holds the full CALL/DO statement text. Emit it verbatim:
+		// running it through the SQL formatter could rewrite an inner DO body
+		// with $$ delimiters, which would break the enclosing body's own
+		// dollar quoting.
+		ctx.newlineIndent(ind)
+		ctx.w(s.Call.Expr.E.Query + ";")
+		ctx.skipSQLComments(s.Call.LineNo, s.Call.Expr.E.Query)
+	case s.Commit != nil:
+		ctx.newlineIndent(ind)
+		ctx.w("COMMIT")
+		if s.Commit.Chain {
+			ctx.w(" AND CHAIN")
+		}
+		ctx.w(";")
+	case s.Rollback != nil:
+		ctx.newlineIndent(ind)
+		ctx.w("ROLLBACK")
+		if s.Rollback.Chain {
+			ctx.w(" AND CHAIN")
+		}
+		ctx.w(";")
+	case s.GetDiag != nil:
+		ctx.newlineIndent(ind)
+		ctx.w("GET ")
+		if s.GetDiag.IsStacked {
+			ctx.w("STACKED ")
+		}
+		ctx.w("DIAGNOSTICS ")
+		for i, item := range s.GetDiag.DiagItems {
+			if i > 0 {
+				ctx.w(", ")
+			}
+			ctx.w(ctx.getDatumName(item.I.Target) + " = " + item.I.Kind)
+		}
+		ctx.w(";")
+	case s.Assert != nil:
+		ctx.newlineIndent(ind)
+		ctx.w("ASSERT " + s.Assert.Cond.E.Query)
+		if s.Assert.Message != nil {
+			ctx.w(", " + s.Assert.Message.E.Query)
+		}
+		ctx.w(";")
+	case s.Open != nil:
+		ctx.writeOpen(s.Open, ind)
+	case s.Fetch != nil:
+		ctx.writeFetch(s.Fetch, ind)
+	case s.Close != nil:
+		ctx.newlineIndent(ind)
+		ctx.w("CLOSE " + ctx.getDatumName(s.Close.CurVar) + ";")
 	}
+}
+
+// writeLabel emits a <<label>> line before a loop or block keyword.
+func (ctx *plContext) writeLabel(label string, ind int) {
+	if label != "" {
+		ctx.w("<<" + label + ">>\n")
+		ctx.indent(ind)
+	}
+}
+
+// writeUsingParams emits a " USING p1, p2" suffix for dynamic SQL statements.
+func (ctx *plContext) writeUsingParams(params []plExprW) {
+	for i, p := range params {
+		if i == 0 {
+			ctx.w(" USING ")
+		} else {
+			ctx.w(", ")
+		}
+		ctx.w(p.E.Query)
+	}
+}
+
+func (ctx *plContext) writeOpen(node *plStmtOpen, ind int) {
+	ctx.newlineIndent(ind)
+	ctx.w("OPEN " + ctx.getDatumName(node.CurVar))
+	switch {
+	case node.Query != nil:
+		ctx.w(" FOR ")
+		ctx.writeSQL(node.Query.E.Query, ind)
+		ctx.skipSQLComments(node.LineNo, node.Query.E.Query)
+	case node.DynQuery != nil:
+		ctx.w(" FOR EXECUTE " + node.DynQuery.E.Query)
+		ctx.writeUsingParams(node.Params)
+	case node.ArgQuery != nil:
+		ctx.w("(" + node.ArgQuery.E.Query + ")")
+	}
+	ctx.w(";")
+}
+
+func (ctx *plContext) writeFetch(node *plStmtFetch, ind int) {
+	ctx.newlineIndent(ind)
+	if node.IsMove {
+		ctx.w("MOVE ")
+	} else {
+		ctx.w("FETCH ")
+	}
+
+	// Reconstruct the direction clause. The exact source keyword (NEXT vs
+	// FORWARD, LAST vs ABSOLUTE -1) is not preserved by the parser, so emit
+	// a canonical equivalent.
+	switch node.Direction {
+	case plFetchForward:
+		if node.Expr != nil {
+			ctx.w("FORWARD " + node.Expr.E.Query + " FROM ")
+		} else if node.HowMany == -1 {
+			ctx.w("ALL FROM ")
+		} else if node.HowMany != 1 {
+			ctx.w(fmt.Sprintf("FORWARD %d FROM ", node.HowMany))
+		}
+	case plFetchBackward:
+		if node.Expr != nil {
+			ctx.w("BACKWARD " + node.Expr.E.Query + " FROM ")
+		} else if node.HowMany == -1 {
+			ctx.w("BACKWARD ALL FROM ")
+		} else {
+			ctx.w("BACKWARD FROM ")
+		}
+	case plFetchAbsolute:
+		if node.Expr != nil {
+			ctx.w("ABSOLUTE " + node.Expr.E.Query + " FROM ")
+		} else if node.HowMany == -1 {
+			ctx.w("LAST FROM ")
+		} else {
+			ctx.w("FIRST FROM ")
+		}
+	case plFetchRelative:
+		if node.Expr != nil {
+			ctx.w("RELATIVE " + node.Expr.E.Query + " FROM ")
+		}
+	}
+
+	ctx.w(ctx.getDatumName(node.CurVar))
+	if !node.IsMove && node.Target != nil {
+		ctx.w(" INTO " + node.Target.fieldNames())
+	}
+	ctx.w(";")
+}
+
+func (ctx *plContext) writeForC(node *plStmtForC, ind int) {
+	ctx.newlineIndent(ind)
+	ctx.writeLabel(node.Label, ind)
+	ctx.w("FOR " + node.Var.name() + " IN " + ctx.getDatumName(node.CurVar))
+	if node.ArgQuery != nil {
+		ctx.w("(" + node.ArgQuery.E.Query + ")")
+	}
+	ctx.w(" LOOP")
+	ctx.writeBody(node.Body, ind+1)
+	ctx.newlineIndent(ind)
+	ctx.w("END LOOP;")
+}
+
+func (ctx *plContext) writeDynForS(node *plStmtDynForS, ind int) {
+	ctx.newlineIndent(ind)
+	ctx.writeLabel(node.Label, ind)
+	ctx.w("FOR " + node.Var.name() + " IN EXECUTE " + node.Query.E.Query)
+	ctx.writeUsingParams(node.Params)
+	ctx.w(" LOOP")
+	ctx.writeBody(node.Body, ind+1)
+	ctx.newlineIndent(ind)
+	ctx.w("END LOOP;")
 }
 
 func (ctx *plContext) writeIf(node *plStmtIf, ind int) {
@@ -621,10 +856,7 @@ func extractCaseWhenValue(expr string) string {
 
 func (ctx *plContext) writeLoop(node *plStmtLoop, ind int) {
 	ctx.newlineIndent(ind)
-	if node.Label != "" {
-		ctx.w("<<" + node.Label + ">>\n")
-		ctx.indent(ind)
-	}
+	ctx.writeLabel(node.Label, ind)
 	ctx.w("LOOP")
 	ctx.writeBody(node.Body, ind+1)
 	ctx.newlineIndent(ind)
@@ -633,6 +865,7 @@ func (ctx *plContext) writeLoop(node *plStmtLoop, ind int) {
 
 func (ctx *plContext) writeForI(node *plStmtForI, ind int) {
 	ctx.newlineIndent(ind)
+	ctx.writeLabel(node.Label, ind)
 	ctx.w("FOR " + node.Var.name() + " IN ")
 	if node.Reverse {
 		ctx.w("REVERSE ")
@@ -666,7 +899,7 @@ func (ctx *plContext) writeExit(node *plStmtExit, ind int) {
 func (ctx *plContext) writeRaise(node *plStmtRaise, ind int) {
 	ctx.newlineIndent(ind)
 
-	if node.Message == "" && len(node.Params) == 0 {
+	if node.Message == "" && node.CondName == "" && len(node.Params) == 0 && len(node.Options) == 0 {
 		ctx.w("RAISE;")
 		return
 	}
@@ -677,11 +910,26 @@ func (ctx *plContext) writeRaise(node *plStmtRaise, ind int) {
 	}
 
 	ctx.w("RAISE " + levelStr)
+	if node.CondName != "" {
+		ctx.w(" " + node.CondName)
+	}
 	if node.Message != "" {
-		ctx.w(" '" + node.Message + "'")
+		ctx.w(" '" + strings.ReplaceAll(node.Message, "'", "''") + "'")
 	}
 	for _, p := range node.Params {
 		ctx.w(", " + p.E.Query)
+	}
+	for i, ow := range node.Options {
+		if i == 0 {
+			ctx.w(" USING ")
+		} else {
+			ctx.w(", ")
+		}
+		name := raiseOptionName[ow.O.OptType]
+		if name == "" {
+			name = "MESSAGE"
+		}
+		ctx.w(name + " = " + ow.O.Expr.E.Query)
 	}
 	ctx.w(";")
 }

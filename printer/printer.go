@@ -334,6 +334,30 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.NullTestType_IS_NULL:
 			output.Builder.WriteString(" IS NULL")
 		}
+	case *pg_query.Node_CollateClause:
+		output.writeExprWithParensIfNeeded(n.CollateClause.Arg)
+		output.Builder.WriteString(" COLLATE ")
+		output.writeQuotedQualifiedName(n.CollateClause.Collname)
+	case *pg_query.Node_BooleanTest:
+		// AND/OR and comparison arguments need parens: IS binds tighter
+		// than AND/OR, so "a AND b IS TRUE" would change meaning.
+		output.writeExprWithParensIfNeeded(n.BooleanTest.Arg)
+		switch n.BooleanTest.Booltesttype {
+		case pg_query.BoolTestType_IS_TRUE:
+			output.Builder.WriteString(" IS TRUE")
+		case pg_query.BoolTestType_IS_NOT_TRUE:
+			output.Builder.WriteString(" IS NOT TRUE")
+		case pg_query.BoolTestType_IS_FALSE:
+			output.Builder.WriteString(" IS FALSE")
+		case pg_query.BoolTestType_IS_NOT_FALSE:
+			output.Builder.WriteString(" IS NOT FALSE")
+		case pg_query.BoolTestType_IS_UNKNOWN:
+			output.Builder.WriteString(" IS UNKNOWN")
+		case pg_query.BoolTestType_IS_NOT_UNKNOWN:
+			output.Builder.WriteString(" IS NOT UNKNOWN")
+		default:
+			warn("unsupported boolean test type: %s", n.BooleanTest.Booltesttype.String())
+		}
 	case *pg_query.Node_Integer:
 		output.Builder.WriteString(strconv.Itoa(int(n.Integer.Ival)))
 	case *pg_query.Node_ParamRef:
@@ -638,9 +662,7 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 
 		if len(n.IndexElem.Collation) > 0 {
 			output.Builder.WriteString(" COLLATE ")
-			for _, o := range n.IndexElem.Collation {
-				output.writeNode(o)
-			}
+			output.writeQuotedQualifiedName(n.IndexElem.Collation)
 		}
 
 		if len(n.IndexElem.Opclass) > 0 {
@@ -1127,6 +1149,10 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		if n.ColumnDef.TypeName != nil {
 			output.Builder.WriteString(" ")
 			output.writeTypeName(n.ColumnDef.TypeName)
+		}
+		if n.ColumnDef.CollClause != nil {
+			output.Builder.WriteString(" COLLATE ")
+			output.writeQuotedQualifiedName(n.ColumnDef.CollClause.Collname)
 		}
 		for _, c := range n.ColumnDef.Constraints {
 			output.Builder.WriteString(" ")
@@ -2539,6 +2565,22 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 			output.Builder.WriteString(" USING ")
 			output.Builder.WriteString(n.ClusterStmt.Indexname)
 		}
+
+	case *pg_query.Node_XmlSerialize:
+		output.Builder.WriteString("XMLSERIALIZE(")
+		switch n.XmlSerialize.Xmloption {
+		case pg_query.XmlOptionType_XMLOPTION_DOCUMENT:
+			output.Builder.WriteString("DOCUMENT ")
+		case pg_query.XmlOptionType_XMLOPTION_CONTENT:
+			output.Builder.WriteString("CONTENT ")
+		}
+		output.writeNode(n.XmlSerialize.Expr)
+		output.Builder.WriteString(" AS ")
+		output.writeTypeName(n.XmlSerialize.TypeName)
+		if n.XmlSerialize.Indent {
+			output.Builder.WriteString(" INDENT")
+		}
+		output.Builder.WriteString(")")
 
 	case *pg_query.Node_XmlExpr:
 		switch n.XmlExpr.Op {

@@ -33,6 +33,17 @@ func (output *Printer) writeListWithSeparator(l []*pg_query.Node, separator stri
 	}
 }
 
+// writeQuotedQualifiedName writes a dot-separated qualified name (a list of
+// String nodes), quoting each part as needed.
+func (output *Printer) writeQuotedQualifiedName(names []*pg_query.Node) {
+	for i, n := range names {
+		if i > 0 {
+			output.Builder.WriteString(".")
+		}
+		output.Builder.WriteString(quoteIdentifier(n.GetString_().GetSval()))
+	}
+}
+
 func (output *Printer) formatSQLBody(body string, indentLevel int) {
 	var result *pg_query.ParseResult
 	var err error
