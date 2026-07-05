@@ -334,6 +334,26 @@ func (output *Printer) writeNode(node *pg_query.Node, opts ...option) {
 		case pg_query.NullTestType_IS_NULL:
 			output.Builder.WriteString(" IS NULL")
 		}
+	case *pg_query.Node_BooleanTest:
+		// AND/OR and comparison arguments need parens: IS binds tighter
+		// than AND/OR, so "a AND b IS TRUE" would change meaning.
+		output.writeExprWithParensIfNeeded(n.BooleanTest.Arg)
+		switch n.BooleanTest.Booltesttype {
+		case pg_query.BoolTestType_IS_TRUE:
+			output.Builder.WriteString(" IS TRUE")
+		case pg_query.BoolTestType_IS_NOT_TRUE:
+			output.Builder.WriteString(" IS NOT TRUE")
+		case pg_query.BoolTestType_IS_FALSE:
+			output.Builder.WriteString(" IS FALSE")
+		case pg_query.BoolTestType_IS_NOT_FALSE:
+			output.Builder.WriteString(" IS NOT FALSE")
+		case pg_query.BoolTestType_IS_UNKNOWN:
+			output.Builder.WriteString(" IS UNKNOWN")
+		case pg_query.BoolTestType_IS_NOT_UNKNOWN:
+			output.Builder.WriteString(" IS NOT UNKNOWN")
+		default:
+			warn("unsupported boolean test type: %s", n.BooleanTest.Booltesttype.String())
+		}
 	case *pg_query.Node_Integer:
 		output.Builder.WriteString(strconv.Itoa(int(n.Integer.Ival)))
 	case *pg_query.Node_ParamRef:
