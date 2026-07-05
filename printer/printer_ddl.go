@@ -1,10 +1,56 @@
 package printer
 
 import (
+	"fmt"
 	"strings"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
+
+// writePartitionBound emits a partition bound clause for
+// CREATE TABLE ... PARTITION OF / ALTER TABLE ... ATTACH PARTITION:
+// FOR VALUES IN (...) | FOR VALUES FROM (...) TO (...) |
+// FOR VALUES WITH (MODULUS m, REMAINDER r) | DEFAULT
+func (output *Printer) writePartitionBound(b *pg_query.PartitionBoundSpec) {
+	if b.IsDefault {
+		output.Builder.WriteString(" DEFAULT")
+		return
+	}
+	switch b.Strategy {
+	case "l":
+		output.Builder.WriteString(" FOR VALUES IN (")
+		output.writeCommaSeparatedList(b.Listdatums)
+		output.Builder.WriteString(")")
+	case "r":
+		output.Builder.WriteString(" FOR VALUES FROM (")
+		output.writeCommaSeparatedList(b.Lowerdatums)
+		output.Builder.WriteString(") TO (")
+		output.writeCommaSeparatedList(b.Upperdatums)
+		output.Builder.WriteString(")")
+	case "h":
+		fmt.Fprintf(output.Builder, " FOR VALUES WITH (MODULUS %d, REMAINDER %d)", b.Modulus, b.Remainder)
+	default:
+		warn("unsupported partition bound strategy: %q", b.Strategy)
+	}
+}
+
+// writePartitionSpec emits a PARTITION BY clause.
+func (output *Printer) writePartitionSpec(s *pg_query.PartitionSpec) {
+	output.Builder.WriteString(" PARTITION BY ")
+	switch s.Strategy {
+	case pg_query.PartitionStrategy_PARTITION_STRATEGY_RANGE:
+		output.Builder.WriteString("RANGE")
+	case pg_query.PartitionStrategy_PARTITION_STRATEGY_LIST:
+		output.Builder.WriteString("LIST")
+	case pg_query.PartitionStrategy_PARTITION_STRATEGY_HASH:
+		output.Builder.WriteString("HASH")
+	default:
+		warn("unsupported partition strategy: %s", s.Strategy.String())
+	}
+	output.Builder.WriteString(" (")
+	output.writeCommaSeparatedList(s.PartParams)
+	output.Builder.WriteString(")")
+}
 
 func (output *Printer) writeFkAction(prefix string, action string, setCols []*pg_query.Node) {
 	switch action {
