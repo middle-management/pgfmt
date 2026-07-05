@@ -83,7 +83,7 @@ old_users AS (
 	FROM
 		users
 	WHERE
-		last_login < (now() - '1 year'::interval)
+		last_login < (now() - interval '1 year')
 )
 DELETE FROM sessions
 WHERE

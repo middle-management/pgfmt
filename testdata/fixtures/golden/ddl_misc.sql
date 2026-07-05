@@ -91,32 +91,32 @@ COMMENT ON CONSTRAINT my_constraint ON my_table IS 'hello';
 -- SQL-language function
 CREATE FUNCTION add_numbers(a int, b int)
 RETURNS int
-LANGUAGE sql
-STABLE
 AS $$
 	SELECT
 		a + b
-$$;
+$$
+LANGUAGE sql
+STABLE;
 
 -- Function with OUT parameters
 CREATE FUNCTION get_stats(OUT min_val int, OUT max_val int)
-LANGUAGE sql
 AS $$
 	SELECT
 		min(value),
 		max(value)
 	FROM
 		data
-$$;
+$$
+LANGUAGE sql;
 
 -- Function with default parameter
 CREATE FUNCTION greet(name text DEFAULT 'World')
 RETURNS text
-LANGUAGE sql
 AS $$
 	SELECT
 		('Hello, ' || name) || '!'
-$$;
+$$
+LANGUAGE sql;
 
 -- CHECK constraint with complex boolean expression
 CREATE TABLE asset_package (

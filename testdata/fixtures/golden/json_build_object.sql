@@ -49,7 +49,6 @@ SELECT
 -- Inside a plpgsql trigger function with named arguments
 CREATE FUNCTION notify_task()
 RETURNS trigger
-LANGUAGE plpgsql
 AS $$
 BEGIN
 	PERFORM studio_internal.add_job(
@@ -65,17 +64,18 @@ BEGIN
 	);
 	RETURN new;
 END
-$$;
+$$
+LANGUAGE plpgsql;
 
 -- Short enough plpgsql statements stay compact
 CREATE FUNCTION tiny()
 RETURNS void
-LANGUAGE plpgsql
 AS $$
 BEGIN
 	PERFORM log_event(json_build_object('op', 'x', 'id', 1));
 END
-$$;
+$$
+LANGUAGE plpgsql;
 
 -- In WHERE and UPDATE SET
 UPDATE jobs

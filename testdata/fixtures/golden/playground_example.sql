@@ -36,7 +36,7 @@ monthly_revenue AS (
 	FROM
 		orders AS o
 	WHERE
-		o.created_at >= (now() - '12 months'::interval)
+		o.created_at >= (now() - interval '12 months')
 	GROUP BY
 		1
 )

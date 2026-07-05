@@ -184,7 +184,7 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 			output.Builder.WriteString("FROM")
 			output.writeNewlineIndent()
 			output.Builder.WriteString("\t")
-			output.writeListWithSeparator(stmt.FromClause, ", ")
+			output.writeFromList(stmt.FromClause)
 		}
 		if stmt.WhereClause != nil {
 			output.writeNewlineIndent()

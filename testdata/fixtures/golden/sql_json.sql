@@ -85,7 +85,6 @@ SELECT
 
 CREATE FUNCTION notify_task2()
 RETURNS trigger
-LANGUAGE plpgsql
 AS $$
 BEGIN
 	PERFORM studio_internal.add_job(
@@ -100,5 +99,6 @@ BEGIN
 	);
 	RETURN new;
 END
-$$;
+$$
+LANGUAGE plpgsql;
 

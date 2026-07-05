@@ -289,3 +289,120 @@ func (output *Printer) writeFuncName(names []*pg_query.Node) {
 	}
 	output.writeQuotedQualifiedName(names)
 }
+
+// writeFromItem writes a FROM-clause item, restoring the ONLY marker on
+// plain relations (inh is false for ONLY t; DDL contexts have their own
+// writers since inh is also false for plain object references there).
+func (output *Printer) writeFromItem(node *pg_query.Node) {
+	if rv := node.GetRangeVar(); rv != nil && !rv.Inh {
+		output.Builder.WriteString("ONLY ")
+	}
+	output.writeNode(node)
+}
+
+// writeFromList writes a comma-separated FROM-clause item list.
+func (output *Printer) writeFromList(l []*pg_query.Node) {
+	for i, n := range l {
+		if i > 0 {
+			output.Builder.WriteString(", ")
+		}
+		output.writeFromItem(n)
+	}
+}
+
+// writeSequenceOptions emits sequence options (used by CREATE/ALTER SEQUENCE
+// and identity columns), space-separated.
+func (output *Printer) writeSequenceOptions(opts []*pg_query.Node) {
+	first := true
+	sp := func() {
+		if !first {
+			output.Builder.WriteString(" ")
+		}
+		first = false
+	}
+	for _, opt := range opts {
+		de := opt.GetDefElem()
+		if de == nil {
+			continue
+		}
+		switch de.Defname {
+		case "as":
+			sp()
+			output.Builder.WriteString("AS ")
+			if tn := de.Arg.GetTypeName(); tn != nil {
+				output.writeTypeName(tn)
+			} else {
+				output.writeNode(de.Arg)
+			}
+		case "start":
+			sp()
+			output.Builder.WriteString("START WITH ")
+			output.writeNode(de.Arg)
+		case "restart":
+			sp()
+			output.Builder.WriteString("RESTART")
+			if de.Arg != nil {
+				output.Builder.WriteString(" WITH ")
+				output.writeNode(de.Arg)
+			}
+		case "increment":
+			sp()
+			output.Builder.WriteString("INCREMENT BY ")
+			output.writeNode(de.Arg)
+		case "minvalue":
+			sp()
+			if de.Arg != nil {
+				output.Builder.WriteString("MINVALUE ")
+				output.writeNode(de.Arg)
+			} else {
+				output.Builder.WriteString("NO MINVALUE")
+			}
+		case "maxvalue":
+			sp()
+			if de.Arg != nil {
+				output.Builder.WriteString("MAXVALUE ")
+				output.writeNode(de.Arg)
+			} else {
+				output.Builder.WriteString("NO MAXVALUE")
+			}
+		case "cache":
+			sp()
+			output.Builder.WriteString("CACHE ")
+			output.writeNode(de.Arg)
+		case "cycle":
+			sp()
+			if de.Arg != nil && de.Arg.GetBoolean().GetBoolval() {
+				output.Builder.WriteString("CYCLE")
+			} else {
+				output.Builder.WriteString("NO CYCLE")
+			}
+		case "owned_by":
+			sp()
+			output.Builder.WriteString("OWNED BY ")
+			if l := de.Arg.GetList(); l != nil {
+				output.writeListWithSeparator(l.Items, ".")
+			} else {
+				output.writeNode(de.Arg)
+			}
+		case "sequence_name":
+			sp()
+			output.Builder.WriteString("SEQUENCE NAME ")
+			if l := de.Arg.GetList(); l != nil {
+				output.writeQuotedQualifiedName(l.Items)
+			} else {
+				output.writeNode(de.Arg)
+			}
+		default:
+			warn("unsupported sequence option: %s", de.Defname)
+		}
+	}
+}
+
+// alterColumnKeyword returns the member keyword for the enclosing ALTER
+// statement's object class: composite types use ATTRIBUTE, tables COLUMN.
+func (output *Printer) alterColumnKeyword() string {
+	if output.alterObjType == pg_query.ObjectType_OBJECT_TYPE {
+		return "ATTRIBUTE "
+	}
+	return "COLUMN "
+}
