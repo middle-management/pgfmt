@@ -4,7 +4,7 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>pgfmt playground</title>
-        <link rel="stylesheet" href="https://unpkg.com/@speed-highlight/core/dist/themes/atom-dark.css">
+        <link rel="stylesheet" href="vendor/speed-highlight/themes/atom-dark.css">
         <style>
             :root {
                 --bg: #1e1e2e;
@@ -263,6 +263,13 @@
                 font-style: italic;
             }
 
+            .warning-banner {
+                display: block;
+                color: var(--red);
+                font-style: italic;
+                margin-bottom: 12px;
+            }
+
             .hint {
                 padding: 8px 20px;
                 font-size: 12px;
@@ -342,7 +349,9 @@
         </div>
 
         <script type="module">
-            import { highlightText } from 'https://unpkg.com/@speed-highlight/core/dist/index.js';
+            // Vendored (see vendor/speed-highlight/) so the playground has no runtime
+            // dependency on a third-party CDN.
+            import { highlightText } from './vendor/speed-highlight/index.js';
 
             (() => {
                 const input = document.getElementById("input");
@@ -475,6 +484,21 @@ with monthly_revenue as (select date_trunc('month', o.created_at) as month, sum(
                                 "</span>";
                         } else {
                             highlightText(res.result, 'sql', true).then(html => {
+                                if (res.failed > 0) {
+                                    const reason = res.failReason
+                                        ? " (" + res.failReason + ")"
+                                        : "";
+                                    html =
+                                        '<span class="warning-banner">-- ' +
+                                        escapeHtml(
+                                            res.failed +
+                                                " statement(s) could not be formatted and were left unchanged" +
+                                                reason +
+                                                "; see the browser console for details",
+                                        ) +
+                                        "</span>" +
+                                        html;
+                                }
                                 output.innerHTML = html;
                             });
                         }

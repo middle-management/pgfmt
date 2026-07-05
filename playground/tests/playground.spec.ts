@@ -66,6 +66,8 @@ test("formats the full playground example", async ({ page }) => {
   await page.locator("#formatBtn").click();
   await expect(page.locator("#output")).toContainText("GENERATED ALWAYS AS IDENTITY");
   await expect(page.locator("#output")).toContainText("monthly_revenue");
+  // No statement may fall back to raw text (fallbacks show a banner).
+  await expect(page.locator("#output .warning-banner")).not.toBeVisible();
 });
 
 test("passes psql meta-commands through (pg_dump output)", async ({ page }) => {
