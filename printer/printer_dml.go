@@ -5,32 +5,45 @@ import (
 )
 
 func (output *Printer) writeOnConflictClause(clause *pg_query.OnConflictClause) {
-	output.Builder.WriteString("ON CONFLICT ")
+	output.Builder.WriteString("ON CONFLICT")
 	if clause.Infer != nil {
 		if len(clause.Infer.IndexElems) > 0 {
-			output.Builder.WriteString("(")
+			output.Builder.WriteString(" (")
 			output.writeCommaSeparatedList(clause.Infer.IndexElems)
-			output.Builder.WriteString(") ")
+			output.Builder.WriteString(")")
 		}
 		if clause.Infer.Conname != "" {
-			output.Builder.WriteString("ON CONSTRAINT ")
+			output.Builder.WriteString(" ON CONSTRAINT ")
 			output.Builder.WriteString(clause.Infer.Conname)
-			output.Builder.WriteString(" ")
 		}
 		if clause.Infer.WhereClause != nil {
-			output.Builder.WriteString("WHERE ")
+			output.Builder.WriteString(" WHERE ")
 			output.writeNode(clause.Infer.WhereClause)
-			output.Builder.WriteString(" ")
 		}
 	}
 	switch clause.Action {
 	case pg_query.OnConflictAction_ONCONFLICT_NOTHING:
-		output.Builder.WriteString("DO NOTHING")
+		output.Builder.WriteString(" DO NOTHING")
 	case pg_query.OnConflictAction_ONCONFLICT_UPDATE:
-		output.Builder.WriteString("DO UPDATE SET ")
-		output.writeCommaSeparatedList(clause.TargetList)
+		output.writeNewlineIndent()
+		output.Builder.WriteString("DO UPDATE SET")
+		for i, t := range clause.TargetList {
+			rt := t.GetResTarget()
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\t")
+			output.Builder.WriteString(rt.Name)
+			output.writeOptIndirection(rt.Indirection)
+			output.Builder.WriteString(" = ")
+			output.writeNode(rt.Val)
+			if i != len(clause.TargetList)-1 {
+				output.Builder.WriteString(",")
+			}
+		}
 		if clause.WhereClause != nil {
-			output.Builder.WriteString(" WHERE ")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("WHERE")
+			output.writeNewlineIndent()
+			output.Builder.WriteString("\t")
 			output.writeNode(clause.WhereClause)
 		}
 	}
@@ -87,8 +100,16 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 	switch stmt.Op {
 	case pg_query.SetOperation_SETOP_NONE:
 		if stmt.ValuesLists != nil {
-			output.Builder.WriteString("VALUES ")
+			multiRow := len(stmt.ValuesLists) > 1
+			output.Builder.WriteString("VALUES")
+			if !multiRow {
+				output.Builder.WriteString(" ")
+			}
 			for i, v := range stmt.ValuesLists {
+				if multiRow {
+					output.writeNewlineIndent()
+					output.Builder.WriteString("\t")
+				}
 				output.Builder.WriteString("(")
 				if l := v.GetList(); l != nil {
 					output.writeCommaSeparatedList(l.Items)
@@ -97,7 +118,7 @@ func (output *Printer) writeSelectStmt(stmt *pg_query.SelectStmt) {
 				}
 				output.Builder.WriteString(")")
 				if i != len(stmt.ValuesLists)-1 {
-					output.Builder.WriteString(", ")
+					output.Builder.WriteString(",")
 				}
 			}
 			return
