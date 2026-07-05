@@ -13,18 +13,37 @@ import (
 var protoMarshalOpts = protojson.MarshalOptions{EmitUnpopulated: false}
 
 func Augment(sql string) ([]byte, error) {
+	ast := AugmentedAST{}
+	for _, seg := range splitMetaCommands(sql) {
+		if seg.meta {
+			ast.Stmts = append(ast.Stmts, AugmentedStmt{Meta: strings.TrimSpace(seg.text)})
+			continue
+		}
+		if strings.TrimSpace(seg.text) == "" {
+			continue
+		}
+		if err := augmentSQL(&ast, seg.text); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(ast)
+}
+
+// augmentSQL parses a SQL string (containing no psql meta-commands) and
+// appends its statements and comments to ast.
+func augmentSQL(ast *AugmentedAST, sql string) error {
 	parseResult, err := pgParse(sql)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	scanResult, err := pgScan(sql)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	comments := ExtractComments(sql, scanResult)
-	ast := AugmentedAST{Version: int(parseResult.Version)}
+	ast.Version = int(parseResult.Version)
 
 	ci := 0
 	for _, rawStmt := range parseResult.Stmts {
@@ -52,7 +71,7 @@ func Augment(sql string) ([]byte, error) {
 		// Marshal the statement node to JSON.
 		stmtJSON, err := protoMarshalOpts.Marshal(rawStmt.Stmt)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// Embed inline comments in the JSON.
@@ -91,7 +110,7 @@ func Augment(sql string) ([]byte, error) {
 		ci++
 	}
 
-	return json.Marshal(ast)
+	return nil
 }
 
 // embedInlineComments adds a _comments array to the top-level JSON object.

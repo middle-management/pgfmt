@@ -114,6 +114,11 @@ func TestFormatPreservesAST(t *testing.T) {
 		if name == "fallback_deparse.sql" {
 			continue
 		}
+		// psql_meta.sql contains psql meta-commands (\restrict etc.), which
+		// pg_query.Parse cannot parse directly.
+		if name == "psql_meta.sql" {
+			continue
+		}
 		if knownASTDivergence[name] {
 			continue
 		}

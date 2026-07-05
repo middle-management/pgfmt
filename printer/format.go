@@ -14,7 +14,35 @@ type comment struct {
 }
 
 // Format parses and formats a SQL string, preserving inter-statement comments.
+// psql meta-command lines (e.g. \restrict and \connect in pg_dump output) are
+// not SQL and are passed through verbatim.
 func Format(sql string) (string, error) {
+	segments := splitMetaCommands(sql)
+	if len(segments) == 1 && !segments[0].meta {
+		return formatStatements(sql)
+	}
+
+	var out strings.Builder
+	for _, seg := range segments {
+		if seg.meta {
+			out.WriteString(strings.TrimSpace(seg.text))
+			out.WriteString("\n\n")
+			continue
+		}
+		if strings.TrimSpace(seg.text) == "" {
+			continue
+		}
+		result, err := formatStatements(seg.text)
+		if err != nil {
+			return "", err
+		}
+		out.WriteString(result)
+	}
+	return out.String(), nil
+}
+
+// formatStatements formats a SQL string that contains no psql meta-commands.
+func formatStatements(sql string) (string, error) {
 	// Fast path: skip the scanner-based split for single statements.
 	// This avoids a redundant pgScan call when the input was already
 	// split by the caller (e.g. the JS worker).

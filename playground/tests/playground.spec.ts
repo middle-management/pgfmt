@@ -67,3 +67,14 @@ test("formats the full playground example", async ({ page }) => {
   await expect(page.locator("#output")).toContainText("GENERATED ALWAYS AS IDENTITY");
   await expect(page.locator("#output")).toContainText("monthly_revenue");
 });
+
+test("passes psql meta-commands through (pg_dump output)", async ({ page }) => {
+  await page.locator("#input").fill(
+    "--\n-- PostgreSQL database dump\n--\n\n\\restrict K3y6vPqT\n\nselect id from users;\n\n\\unrestrict K3y6vPqT\n"
+  );
+  await page.locator("#formatBtn").click();
+  await expect(page.locator("#output")).toContainText("\\restrict K3y6vPqT");
+  await expect(page.locator("#output")).toContainText("SELECT");
+  await expect(page.locator("#output")).toContainText("\\unrestrict K3y6vPqT");
+  await expect(page.locator("#output .error-text")).not.toBeVisible();
+});

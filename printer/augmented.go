@@ -15,12 +15,14 @@ type AugmentedAST struct {
 	Stmts   []AugmentedStmt `json:"stmts"`
 }
 
-// AugmentedStmt is either a parsed statement or an inter-statement comment.
+// AugmentedStmt is either a parsed statement, an inter-statement comment, or
+// a psql meta-command line (e.g. \restrict in pg_dump output).
 type AugmentedStmt struct {
 	Stmt         json.RawMessage   `json:"stmt,omitempty"`
 	StmtLocation int32             `json:"stmt_location,omitempty"`
 	StmtLen      int32             `json:"stmt_len,omitempty"`
 	Comment      *AugmentedComment `json:"comment,omitempty"`
+	Meta         string            `json:"meta,omitempty"`
 	Deparsed     string            `json:"deparsed,omitempty"`
 }
 
@@ -41,6 +43,11 @@ func FormatAugmented(data []byte) (string, error) {
 
 	var out strings.Builder
 	for _, entry := range ast.Stmts {
+		if entry.Meta != "" {
+			out.WriteString(entry.Meta)
+			out.WriteString("\n\n")
+			continue
+		}
 		if entry.Comment != nil {
 			out.WriteString(entry.Comment.Text)
 			out.WriteString("\n")
