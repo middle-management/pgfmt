@@ -29,6 +29,13 @@ There is no Makefile; use `go` commands directly.
 - CI verifies golden files are up to date via `git diff --exit-code testdata/fixtures/golden/`
 - When adding new SQL formatting support, prefer golden fixture coverage over custom unit tests
 - Only use unit tests when a fixture can't adequately cover the case
+- **Corpus test** in `corpus_test.go` sweeps the PostgreSQL regression suite
+  (pinned to the release matching `pg_query_go`) and classifies every statement
+  (panic / format-error / output-invalid / roundtrip-diff / not-idempotent)
+  against `testdata/corpus_baseline.txt`. Run with
+  `PGFMT_CORPUS=1 go test -run TestPostgresRegressionCorpus .`; after fixing
+  formatter gaps, refresh the baseline with `PGFMT_UPDATE_BASELINE=1`
+  (shrinking numbers are the goal — never grow an entry to make a change pass)
 
 ## Deparse Fallback
 

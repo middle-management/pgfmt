@@ -27,3 +27,23 @@ jobs:
 
       - name: Verify golden files are up to date
         run: git diff --exit-code testdata/fixtures/golden/
+
+  corpus:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+
+      - name: Cache PostgreSQL corpus
+        uses: actions/cache@v4
+        with:
+          path: testdata/corpus
+          key: pg-corpus-17.5
+
+      - name: Run regression corpus test
+        run: go test -run TestPostgresRegressionCorpus -v -timeout 30m .
+        env:
+          PGFMT_CORPUS: "1"
