@@ -32,6 +32,28 @@ jobs:
             --title "${{ steps.version.outputs.tag }}" \
             --generate-notes
 
+  # Opens a version-bump PR against zed-industries/extensions so the Zed
+  # extension registry picks up the new release. This must live in this
+  # workflow (rather than a tag- or release-triggered one) because the tag
+  # is created with the default GITHUB_TOKEN, which never triggers other
+  # workflows.
+  # Setup: fork zed-industries/extensions to middle-management/extensions,
+  # create a classic PAT with "repo" and "workflow" scopes on an account
+  # with push access to that fork, and add it as a repo secret named
+  # ZED_COMMITTER_TOKEN.
+  bump-zed-extension:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bump extension in Zed registry
+        uses: huacnlee/zed-extension-action@v1
+        with:
+          extension-name: pgfmt-lsp
+          push-to: middle-management/extensions
+          tag-name: ${{ needs.create-release.outputs.tag }}
+        env:
+          COMMITTER_TOKEN: ${{ secrets.ZED_COMMITTER_TOKEN }}
+
   build:
     needs: create-release
     strategy:
